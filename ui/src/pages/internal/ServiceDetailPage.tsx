@@ -4,6 +4,7 @@ import { MenuIcon, XIcon } from "lucide-react";
 import { GeneralSection } from "./details_section/GeneralSection";
 import { DomainsSection } from "./details_section/DomainsSection";
 import { ServiceLogsSection } from "./details_section/ServiceLogsSection";
+import { OperationHistorySection } from "./details_section/OperationHistorySection";
 
 export const ServiceDetailPage = () => {
   const { service_id } = useParams<{ service_id: string }>();
@@ -63,6 +64,14 @@ export const ServiceDetailPage = () => {
                 Logs
               </button>
             </li>
+            <li>
+              <button
+                className={menuItemClass("history")}
+                onClick={() => handleSectionChange("history")}
+              >
+                History
+              </button>
+            </li>
             {/* <li>
               <button
                 className={menuItemClass("settings")}
@@ -103,6 +112,15 @@ export const ServiceDetailPage = () => {
             <h3 className="text-lg font-semibold mb-6">Logs</h3>
             <div className="px-4 py-4 bg-base-200 rounded-box">
               <ServiceLogsSection service_id={service_id} />
+            </div>
+          </div>
+        )}
+
+        {activeSection === "history" && (
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold mb-6">History</h3>
+            <div className="px-4 py-4 bg-base-200 rounded-box">
+              <OperationHistorySection service_id={service_id} />
             </div>
           </div>
         )}

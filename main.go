@@ -19,6 +19,7 @@ import (
 	"pb_launcher/internal/certmanager"
 	"pb_launcher/internal/download"
 	"pb_launcher/internal/launcher"
+	"pb_launcher/internal/operationlog"
 	"pb_launcher/internal/proxy"
 	_ "pb_launcher/migrations"
 
@@ -80,6 +81,7 @@ func createRootCommand(app core.App) *cobra.Command {
 				fx.Provide(unzip.NewUnzip),
 				fx.Provide(zip.NewZip),
 				fx.Provide(logstore.NewServiceLogDB),
+				fx.Provide(operationlog.New),
 				fx.Provide(serialexecutor.NewSequentialExecutor),
 				fx.Supply(app),
 				download.Module,

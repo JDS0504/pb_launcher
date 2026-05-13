@@ -14,6 +14,7 @@ import (
 	"pb_launcher/internal/launcher/domain/models"
 	"pb_launcher/internal/launcher/domain/repositories"
 	"pb_launcher/internal/launcher/domain/services"
+	"pb_launcher/internal/operationlog"
 	"pb_launcher/utils/iouitls"
 	"pb_launcher/utils/networktools"
 	"regexp"
@@ -32,6 +33,7 @@ type LauncherManager struct {
 	comandsRepository   repositories.CommandsRepository
 	finder              services.BinaryFinder
 	lstore              *logstore.ServiceLogDB
+	operationLogger     *operationlog.Logger
 	//
 	processList map[string]*process.Process
 	errChan     chan process.ProcessErrorMessage
@@ -43,6 +45,7 @@ func NewLauncherManager(
 	comandsRepository repositories.CommandsRepository,
 	finder services.BinaryFinder,
 	lstore *logstore.ServiceLogDB,
+	operationLogger *operationlog.Logger,
 	c configs.Config,
 ) *LauncherManager {
 	lm := &LauncherManager{
@@ -51,6 +54,7 @@ func NewLauncherManager(
 		comandsRepository:   comandsRepository,
 		finder:              finder,
 		lstore:              lstore,
+		operationLogger:     operationLogger,
 		dataDir:             c.GetDataDir(),
 		ipAddress:           c.GetBindIPAddress(),
 		processList:         make(map[string]*process.Process),
@@ -370,11 +374,13 @@ func (lm *LauncherManager) Run(ctx context.Context) error {
 	}
 	for _, c := range comands {
 		if err := lm.evaluateCommand(ctx, c); err != nil {
+			lm.operationLogger.Error(ctx, c.Service, c.Action.String(), err.Error(), map[string]any{"command_id": c.ID})
 			if markErr := lm.comandsRepository.MarkCommandError(ctx, c.ID, err.Error()); markErr != nil {
 				slog.Error("failed to mark command as error", "commandID", c.ID, "error", markErr)
 			}
 			continue
 		}
+		lm.operationLogger.Success(ctx, c.Service, c.Action.String(), "command executed successfully", map[string]any{"command_id": c.ID})
 		if err := lm.comandsRepository.MarkCommandSuccess(ctx, c.ID); err != nil {
 			slog.Error("failed to mark command as success", "commandID", c.ID, "error", err)
 		}

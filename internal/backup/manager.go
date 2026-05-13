@@ -14,6 +14,7 @@ import (
 	download "pb_launcher/internal/download/domain"
 	"pb_launcher/internal/launcher/domain/models"
 	"pb_launcher/internal/launcher/domain/repositories"
+	"pb_launcher/internal/operationlog"
 	"strings"
 	"time"
 
@@ -52,6 +53,7 @@ type Manager struct {
 	downloader   *download.DownloadUsecase
 	zipper       *ziphelper.Zip
 	unzipper     *unzip.Unzip
+	logger       *operationlog.Logger
 }
 
 func NewManager(
@@ -62,6 +64,7 @@ func NewManager(
 	downloader *download.DownloadUsecase,
 	zipper *ziphelper.Zip,
 	unzipper *unzip.Unzip,
+	logger *operationlog.Logger,
 ) *Manager {
 	return &Manager{
 		app:          app,
@@ -71,6 +74,7 @@ func NewManager(
 		downloader:   downloader,
 		zipper:       zipper,
 		unzipper:     unzipper,
+		logger:       logger,
 	}
 }
 
@@ -108,8 +112,10 @@ func (m *Manager) Create(ctx context.Context, serviceID string) (*BackupFile, er
 
 	backupPath := filepath.Join(os.TempDir(), fmt.Sprintf("pblauncher-%s-%d.zip", service.ID, time.Now().Unix()))
 	if err := m.zipper.CreateFromDir(serviceDir, backupPath, "data", map[string][]byte{"manifest.json": manifestBytes}); err != nil {
+		m.logger.Error(ctx, service.ID, "backup", err.Error(), nil)
 		return nil, err
 	}
+	m.logger.Success(ctx, service.ID, "backup", "backup created successfully", nil)
 
 	return &BackupFile{
 		Path:     backupPath,
@@ -180,8 +186,10 @@ func (m *Manager) Restore(ctx context.Context, backupPath string, name string) (
 		return "", err
 	}
 	if err := m.commandsRepo.PublishStartCommand(ctx, record.Id); err != nil {
+		m.logger.Error(ctx, record.Id, "restore", err.Error(), map[string]any{"source_version": manifest.Service.Version})
 		return "", err
 	}
+	m.logger.Success(ctx, record.Id, "restore", "backup restored successfully", map[string]any{"source_version": manifest.Service.Version})
 
 	return record.Id, nil
 }
@@ -236,8 +244,10 @@ func (m *Manager) Clone(ctx context.Context, sourceServiceID string, name string
 		return "", err
 	}
 	if err := m.commandsRepo.PublishStartCommand(ctx, record.Id); err != nil {
+		m.logger.Error(ctx, record.Id, "clone", err.Error(), map[string]any{"source_service_id": source.ID})
 		return "", err
 	}
+	m.logger.Success(ctx, record.Id, "clone", "service cloned successfully", map[string]any{"source_service_id": source.ID})
 
 	return record.Id, nil
 }

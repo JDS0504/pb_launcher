@@ -53,7 +53,18 @@ export type ServiceLog = {
   timestamp: string; // ISO 8601 format
 };
 
+export type OperationLog = {
+  id: string;
+  service: string;
+  operation: string;
+  status: "success" | "error";
+  message: string;
+  metadata?: Record<string, unknown>;
+  created: string;
+};
+
 export const SERVICES_COLLECTION = "services";
+export const OPERATION_LOGS_COLLECTION = "operation_logs";
 
 export type ServiceDto = Omit<_Service, "expand"> & { domains?: DomainDto[] };
 
@@ -234,5 +245,12 @@ export const serviceService = {
     }
     if (json == null || !Array.isArray(json)) return [];
     return json as ServiceLog[];
+  },
+  fetchOperationLogs: async (service_id: string): Promise<OperationLog[]> => {
+    return pb.collection(OPERATION_LOGS_COLLECTION).getFullList<OperationLog>({
+      filter: `service="${service_id}"`,
+      fields: "id,service,operation,status,message,metadata,created",
+      sort: "-created",
+    });
   },
 };

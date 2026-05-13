@@ -15,3 +15,18 @@ type ServiceCommand struct {
 	Action        CommandAction `json:"action"`
 	TargetRelease string        `json:"target_release"`
 }
+
+func (a CommandAction) String() string {
+	switch a {
+	case ActionStop:
+		return "stop"
+	case ActionStart:
+		return "start"
+	case ActionRestart:
+		return "restart"
+	case ActionUpgrade:
+		return "upgrade"
+	default:
+		return "unknown"
+	}
+}
