@@ -17,6 +17,7 @@
 - Custom PocketBase routes and collection hooks are registered in `internal/hooks`; custom API endpoints use the `/x-api/...` prefix.
 - The React UI lives in `ui/src`, talks to PocketBase through `ui/src/services/client/pb.ts`, and reads `VITE_API_URL` with `/` as fallback.
 - Embedded UI builds use `ui/.env.embed` (`VITE_API_URL=/`) and are served by `ui.go` as a catch-all SPA route from `ui/dist`.
+- For deeper AI/contributor context, read `docs/AI_GUIDE.md`. When handing work to another model, use `docs/AI_HANDOFF_TEMPLATE.md`.
 
 ## Config And Local Runtime
 - `config.yaml.example` is embedded into the binary and is the source for `gen-config`.
