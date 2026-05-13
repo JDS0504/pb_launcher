@@ -1,6 +1,6 @@
 import { useMemo, type PropsWithChildren } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { Server, Waypoints, User, LogOut, Settings } from "lucide-react";
+import { History, Server, Waypoints, User, LogOut, Settings } from "lucide-react";
 import { useConfirmModal } from "../hooks/useConfirmModal";
 import { authService } from "../services/auth";
 import { useViewportHeight } from "../hooks/useViewportHeight";
@@ -16,6 +16,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const selected = useMemo(() => {
     if (pathname === "/" || pathname.startsWith("/services/")) return "service";
     if (pathname === "/proxy" || pathname.startsWith("/proxy/")) return "proxy";
+    if (pathname === "/operations") return "operations";
     if (pathname === "/settings") return "settings";
     return "<none>";
   }, [pathname]);
@@ -78,6 +79,19 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
             >
               <Settings className="w-4 h-4" />
               Settings
+            </NavLink>
+
+            <NavLink
+              to="/operations"
+              className={classNames(
+                "btn btn-sm btn-ghost gap-2 text-base-content transition-colors",
+                {
+                  "bg-base-200 text-primary": selected === "operations",
+                },
+              )}
+            >
+              <History className="w-4 h-4" />
+              Operations
             </NavLink>
           </div>
           <div className="dropdown dropdown-end">

@@ -22,6 +22,7 @@ import (
 	"pb_launcher/internal/launcher"
 	"pb_launcher/internal/operationlog"
 	"pb_launcher/internal/proxy"
+	"pb_launcher/internal/repositorymanager"
 	_ "pb_launcher/migrations"
 
 	_ "embed"
@@ -91,6 +92,7 @@ func createRootCommand(app core.App) *cobra.Command {
 				certmanager.Module,
 				backup.Module,
 				hookmanager.Module,
+				repositorymanager.Module,
 				internal.Module, // hooks
 				fx.Invoke(
 					StartApiServer,

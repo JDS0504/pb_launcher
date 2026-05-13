@@ -11,6 +11,7 @@ import (
 	"pb_launcher/configs"
 	"pb_launcher/helpers/logstore"
 	"pb_launcher/helpers/process"
+	download "pb_launcher/internal/download/domain"
 	"pb_launcher/internal/launcher/domain/models"
 	"pb_launcher/internal/launcher/domain/repositories"
 	"pb_launcher/internal/launcher/domain/services"
@@ -32,6 +33,7 @@ type LauncherManager struct {
 	repository          repositories.ServiceRepository
 	comandsRepository   repositories.CommandsRepository
 	finder              services.BinaryFinder
+	downloader          *download.DownloadUsecase
 	lstore              *logstore.ServiceLogDB
 	operationLogger     *operationlog.Logger
 	//
@@ -44,6 +46,7 @@ func NewLauncherManager(
 	repository repositories.ServiceRepository,
 	comandsRepository repositories.CommandsRepository,
 	finder services.BinaryFinder,
+	downloader *download.DownloadUsecase,
 	lstore *logstore.ServiceLogDB,
 	operationLogger *operationlog.Logger,
 	c configs.Config,
@@ -53,6 +56,7 @@ func NewLauncherManager(
 		repository:          repository,
 		comandsRepository:   comandsRepository,
 		finder:              finder,
+		downloader:          downloader,
 		lstore:              lstore,
 		operationLogger:     operationLogger,
 		dataDir:             c.GetDataDir(),
@@ -113,6 +117,35 @@ func (lm *LauncherManager) buildArgs(serviceID string) ([]string, error) {
 	}, nil
 }
 
+func (lm *LauncherManager) findOrDownloadBinary(ctx context.Context, service models.Service) (string, error) {
+	executablePath, err := lm.finder.FindBinary(ctx, service.RepositoryID, service.Version, service.ExecFilePattern)
+	if err == nil {
+		return executablePath, nil
+	}
+
+	slog.Warn("binary not found locally, downloading release",
+		"serviceID", service.ID,
+		"releaseID", service.ReleaseID,
+		"version", service.Version,
+		"error", err,
+	)
+	lm.lstore.InsertLog(service.ID, logstore.StreamStdout, fmt.Sprintf("Binary v%s not found locally. Downloading release...", service.Version))
+
+	if err := lm.downloader.EnsureReleaseDownloaded(ctx, service.ReleaseID); err != nil {
+		lm.lstore.InsertLog(service.ID, logstore.StreamStderr, fmt.Sprintf("Failed to download binary v%s: %s", service.Version, err.Error()))
+		return "", fmt.Errorf("failed to download release %s: %w", service.ReleaseID, err)
+	}
+
+	executablePath, err = lm.finder.FindBinary(ctx, service.RepositoryID, service.Version, service.ExecFilePattern)
+	if err != nil {
+		lm.lstore.InsertLog(service.ID, logstore.StreamStderr, fmt.Sprintf("Binary v%s downloaded, but executable was not found: %s", service.Version, err.Error()))
+		return "", err
+	}
+
+	lm.lstore.InsertLog(service.ID, logstore.StreamStdout, fmt.Sprintf("Binary v%s downloaded successfully", service.Version))
+	return executablePath, nil
+}
+
 // initializeBootUser sets up the initial boot user for the service instance.
 func (lm *LauncherManager) UpsertSuperuser(ctx context.Context, serviceID, email, password string) error {
 	service, err := lm.repository.FindService(ctx, serviceID)
@@ -120,7 +153,7 @@ func (lm *LauncherManager) UpsertSuperuser(ctx context.Context, serviceID, email
 		return fmt.Errorf("failed to find service %s: %w", serviceID, err)
 	}
 
-	binaryPath, err := lm.finder.FindBinary(ctx, service.RepositoryID, service.Version, service.ExecFilePattern)
+	binaryPath, err := lm.findOrDownloadBinary(ctx, *service)
 	if err != nil {
 		slog.Error("failed to find binary", "serviceID", service.ID, "error", err)
 		return err
@@ -174,7 +207,7 @@ func (lm *LauncherManager) startService(ctx context.Context, service models.Serv
 		}
 	}
 
-	executablePath, err := lm.finder.FindBinary(ctx, service.RepositoryID, service.Version, service.ExecFilePattern)
+	executablePath, err := lm.findOrDownloadBinary(ctx, service)
 	if err != nil {
 		slog.Error("failed to find binary", "serviceID", service.ID, "error", err)
 		return err
@@ -299,7 +332,10 @@ func (lm *LauncherManager) upgradeService(ctx context.Context, service models.Se
 		return fmt.Errorf("target version %s must be greater than current version %s", targetVersion.String(), currentVersion.String())
 	}
 
-	if _, err := lm.finder.FindBinary(ctx, service.RepositoryID, targetRelease.Version, service.ExecFilePattern); err != nil {
+	validationService := service
+	validationService.ReleaseID = targetRelease.ID
+	validationService.Version = targetRelease.Version
+	if _, err := lm.findOrDownloadBinary(ctx, validationService); err != nil {
 		return fmt.Errorf("target version binary not found: %w", err)
 	}
 
@@ -308,6 +344,7 @@ func (lm *LauncherManager) upgradeService(ctx context.Context, service models.Se
 	}
 
 	upgradedService := service
+	upgradedService.ReleaseID = targetRelease.ID
 	upgradedService.Version = targetRelease.Version
 	lm.lstore.InsertLog(service.ID, logstore.StreamStdout, fmt.Sprintf("Upgrading service from v%s to v%s...", service.Version, targetRelease.Version))
 	if err := lm.startService(ctx, upgradedService); err != nil {

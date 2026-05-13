@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Edit, Plus, Trash2 } from "lucide-react";
+import { Edit, Plus, RefreshCw, Trash2 } from "lucide-react";
+import classNames from "classnames";
 import toast from "react-hot-toast";
 import { useModal } from "../../components/modal/hook";
 import { ErrorFallback } from "../../components/helpers/ErrorFallback";
@@ -19,6 +20,10 @@ export const SettingsPage = () => {
   const repositoriesQuery = useQuery({
     queryKey: ["repositories"],
     queryFn: repositoriesService.fetchAll,
+    refetchInterval: query =>
+      query.state.data?.some(repository => repository.last_sync_status === "syncing")
+        ? 3000
+        : false,
   });
 
   const deleteMutation = useMutation({
@@ -28,6 +33,18 @@ export const SettingsPage = () => {
       setTimeout(() => repositoriesQuery.refetch());
     },
     onError: error => toast.error(getErrorMessage(error)),
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: repositoriesService.sync,
+    onSuccess: () => {
+      toast.success("Repository synced successfully");
+      setTimeout(() => repositoriesQuery.refetch());
+    },
+    onError: error => {
+      toast.error(getErrorMessage(error));
+      setTimeout(() => repositoriesQuery.refetch());
+    },
   });
 
   const openRepositoryForm = (repository?: RepositoryDto) => {
@@ -95,6 +112,9 @@ export const SettingsPage = () => {
                 <th>Repository</th>
                 <th>Retention</th>
                 <th>Status</th>
+                <th>Sync</th>
+                <th>Last Sync</th>
+                <th>Releases</th>
                 <th>Release Pattern</th>
                 <th>Exec Pattern</th>
                 <th className="text-right">Actions</th>
@@ -116,6 +136,31 @@ export const SettingsPage = () => {
                         {repository.disabled ? "Disabled" : "Enabled"}
                       </span>
                     </td>
+                    <td>
+                      <div className="flex flex-col gap-1">
+                        <span
+                          className={classNames("badge badge-sm", {
+                            "badge-neutral": !repository.last_sync_status || repository.last_sync_status === "never",
+                            "badge-info": repository.last_sync_status === "syncing",
+                            "badge-success": repository.last_sync_status === "success",
+                            "badge-error": repository.last_sync_status === "error",
+                          })}
+                        >
+                          {repository.last_sync_status ?? "never"}
+                        </span>
+                        {repository.last_sync_error && (
+                          <span className="text-xs text-error max-w-[220px] truncate" title={repository.last_sync_error}>
+                            {repository.last_sync_error}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap">
+                      {repository.last_sync_at
+                        ? new Date(repository.last_sync_at).toLocaleString()
+                        : "-"}
+                    </td>
+                    <td>{repository.release_count ?? 0}</td>
                     <td className="font-mono text-xs max-w-xs truncate">
                       {repository.release_file_pattern}
                     </td>
@@ -124,6 +169,18 @@ export const SettingsPage = () => {
                     </td>
                     <td>
                       <div className="flex justify-end gap-2">
+                        <button
+                          className="btn btn-xs btn-ghost"
+                          disabled={repository.disabled || syncMutation.isPending || repository.last_sync_status === "syncing"}
+                          onClick={() => syncMutation.mutate(repository.id)}
+                          title="Sync now"
+                        >
+                          <RefreshCw
+                            className={classNames("w-4 h-4", {
+                              "animate-spin": repository.last_sync_status === "syncing",
+                            })}
+                          />
+                        </button>
                         <button
                           className="btn btn-xs btn-ghost"
                           onClick={() => openRepositoryForm(repository)}

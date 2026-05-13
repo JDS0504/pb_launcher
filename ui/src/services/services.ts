@@ -61,6 +61,12 @@ export type OperationLog = {
   message: string;
   metadata?: Record<string, unknown>;
   created: string;
+  expand?: {
+    service?: {
+      id: string;
+      name: string;
+    };
+  };
 };
 
 export const SERVICES_COLLECTION = "services";
@@ -250,6 +256,14 @@ export const serviceService = {
     return pb.collection(OPERATION_LOGS_COLLECTION).getFullList<OperationLog>({
       filter: `service="${service_id}"`,
       fields: "id,service,operation,status,message,metadata,created",
+      sort: "-created",
+    });
+  },
+  fetchAllOperationLogs: async (): Promise<OperationLog[]> => {
+    return pb.collection(OPERATION_LOGS_COLLECTION).getFullList<OperationLog>({
+      expand: "service",
+      fields:
+        "id,service,operation,status,message,metadata,created,expand.service.id,expand.service.name",
       sort: "-created",
     });
   },

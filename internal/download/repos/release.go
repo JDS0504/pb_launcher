@@ -9,6 +9,7 @@ import (
 	"pb_launcher/internal/download/domain/repositories"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/go-version"
 	"github.com/pocketbase/dbx"
@@ -196,4 +197,36 @@ func (r *ReleaseRepository) SaveReleases(ctx context.Context, releases []dtos.Re
 		}
 	}
 	return nil
+}
+
+func (r *ReleaseRepository) MarkRepositorySyncing(ctx context.Context, repositoryID string) error {
+	record, err := r.app.FindRecordById(collections.Repositories, repositoryID)
+	if err != nil {
+		return err
+	}
+	record.Set("last_sync_status", "syncing")
+	record.Set("last_sync_error", nil)
+	return r.app.Save(record)
+}
+
+func (r *ReleaseRepository) MarkRepositorySyncSuccess(ctx context.Context, repositoryID string) error {
+	record, err := r.app.FindRecordById(collections.Repositories, repositoryID)
+	if err != nil {
+		return err
+	}
+	record.Set("last_sync_status", "success")
+	record.Set("last_sync_error", nil)
+	record.Set("last_sync_at", time.Now())
+	return r.app.Save(record)
+}
+
+func (r *ReleaseRepository) MarkRepositorySyncError(ctx context.Context, repositoryID string, errorMessage string) error {
+	record, err := r.app.FindRecordById(collections.Repositories, repositoryID)
+	if err != nil {
+		return err
+	}
+	record.Set("last_sync_status", "error")
+	record.Set("last_sync_error", errorMessage)
+	record.Set("last_sync_at", time.Now())
+	return r.app.Save(record)
 }

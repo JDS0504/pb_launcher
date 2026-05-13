@@ -6,6 +6,7 @@ import { DomainsSection } from "./details_section/DomainsSection";
 import { ServiceLogsSection } from "./details_section/ServiceLogsSection";
 import { OperationHistorySection } from "./details_section/OperationHistorySection";
 import { PBHooksSection } from "./details_section/PBHooksSection";
+import { SnapshotsSection } from "./details_section/SnapshotsSection";
 
 export const ServiceDetailPage = () => {
   const { service_id } = useParams<{ service_id: string }>();
@@ -63,6 +64,14 @@ export const ServiceDetailPage = () => {
                 onClick={() => handleSectionChange("logs")}
               >
                 Logs
+              </button>
+            </li>
+            <li>
+              <button
+                className={menuItemClass("snapshots")}
+                onClick={() => handleSectionChange("snapshots")}
+              >
+                Snapshots
               </button>
             </li>
             <li>
@@ -130,6 +139,15 @@ export const ServiceDetailPage = () => {
             <h3 className="text-lg font-semibold mb-6">History</h3>
             <div className="px-4 py-4 bg-base-200 rounded-box">
               <OperationHistorySection service_id={service_id} />
+            </div>
+          </div>
+        )}
+
+        {activeSection === "snapshots" && (
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold mb-6">Snapshots</h3>
+            <div className="px-4 py-4 bg-base-200 rounded-box">
+              <SnapshotsSection service_id={service_id} />
             </div>
           </div>
         )}

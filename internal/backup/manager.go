@@ -15,6 +15,7 @@ import (
 	"pb_launcher/internal/launcher/domain/models"
 	"pb_launcher/internal/launcher/domain/repositories"
 	"pb_launcher/internal/operationlog"
+	"sort"
 	"strings"
 	"time"
 
@@ -43,6 +44,18 @@ type ManifestService struct {
 type BackupFile struct {
 	Path     string
 	Filename string
+}
+
+type SnapshotInfo struct {
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	ServiceID     string    `json:"service_id"`
+	SourceService string    `json:"source_service"`
+	Version       string    `json:"version"`
+	CreatedAt     time.Time `json:"created_at"`
+	Size          int64     `json:"size"`
+	Path          string    `json:"-"`
+	MetadataPath  string    `json:"-"`
 }
 
 type Manager struct {
@@ -121,6 +134,167 @@ func (m *Manager) Create(ctx context.Context, serviceID string) (*BackupFile, er
 		Path:     backupPath,
 		Filename: fmt.Sprintf("%s-%s-backup.zip", sanitizeFilename(service.Name), service.ID),
 	}, nil
+}
+
+func (m *Manager) snapshotsDir(serviceID string) string {
+	return filepath.Join(m.dataDir, "_snapshots", serviceID)
+}
+
+func (m *Manager) ListSnapshots(ctx context.Context, serviceID string) ([]SnapshotInfo, error) {
+	if _, err := m.serviceRepo.FindService(ctx, serviceID); err != nil {
+		return nil, err
+	}
+	dir := m.snapshotsDir(serviceID)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []SnapshotInfo{}, nil
+		}
+		return nil, err
+	}
+
+	snapshots := []SnapshotInfo{}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		metadataPath := filepath.Join(dir, entry.Name())
+		data, err := os.ReadFile(metadataPath)
+		if err != nil {
+			return nil, err
+		}
+		var snapshot SnapshotInfo
+		if err := json.Unmarshal(data, &snapshot); err != nil {
+			return nil, err
+		}
+		snapshot.MetadataPath = metadataPath
+		snapshot.Path = filepath.Join(dir, snapshot.ID+".zip")
+		if info, err := os.Stat(snapshot.Path); err == nil {
+			snapshot.Size = info.Size()
+		}
+		snapshots = append(snapshots, snapshot)
+	}
+	sort.Slice(snapshots, func(i, j int) bool {
+		return snapshots[i].CreatedAt.After(snapshots[j].CreatedAt)
+	})
+	return snapshots, nil
+}
+
+func (m *Manager) CreateSnapshot(ctx context.Context, serviceID string, name string) (*SnapshotInfo, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, fmt.Errorf("snapshot name is required")
+	}
+	service, err := m.serviceRepo.FindService(ctx, serviceID)
+	if err != nil {
+		return nil, err
+	}
+	if service.Status != models.Stopped {
+		return nil, fmt.Errorf("service must be stopped before snapshot")
+	}
+
+	serviceDir := filepath.Join(m.dataDir, service.ID)
+	if info, err := os.Stat(serviceDir); err != nil || !info.IsDir() {
+		return nil, fmt.Errorf("service data directory not found")
+	}
+
+	snapshotID := fmt.Sprintf("%d", time.Now().UnixNano())
+	snapshotDir := m.snapshotsDir(service.ID)
+	if err := os.MkdirAll(snapshotDir, 0755); err != nil {
+		return nil, err
+	}
+
+	manifest := Manifest{
+		Format:    manifestFormat,
+		CreatedAt: time.Now().UTC(),
+		Service: ManifestService{
+			Name:             service.Name,
+			ReleaseID:        service.ReleaseID,
+			RepositoryID:     service.RepositoryID,
+			Version:          service.Version,
+			RestartPolicy:    string(service.RestartPolicy),
+			BootUserEmail:    service.BootUserEmail,
+			BootUserPassword: service.BootUserPassword,
+		},
+	}
+	manifestBytes, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+
+	snapshotPath := filepath.Join(snapshotDir, snapshotID+".zip")
+	if err := m.zipper.CreateFromDir(serviceDir, snapshotPath, "data", map[string][]byte{"manifest.json": manifestBytes}); err != nil {
+		m.logger.Error(ctx, service.ID, "snapshot_create", err.Error(), nil)
+		return nil, err
+	}
+	info, _ := os.Stat(snapshotPath)
+	snapshot := SnapshotInfo{
+		ID:            snapshotID,
+		Name:          name,
+		ServiceID:     service.ID,
+		SourceService: service.Name,
+		Version:       service.Version,
+		CreatedAt:     time.Now().UTC(),
+		Path:          snapshotPath,
+		MetadataPath:  filepath.Join(snapshotDir, snapshotID+".json"),
+	}
+	if info != nil {
+		snapshot.Size = info.Size()
+	}
+	metadataBytes, err := json.MarshalIndent(snapshot, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(snapshot.MetadataPath, metadataBytes, 0644); err != nil {
+		return nil, err
+	}
+	m.logger.Success(ctx, service.ID, "snapshot_create", "snapshot created successfully", map[string]any{"snapshot_id": snapshot.ID, "name": snapshot.Name})
+	return &snapshot, nil
+}
+
+func (m *Manager) RestoreSnapshot(ctx context.Context, serviceID string, snapshotID string, name string) (string, error) {
+	snapshot, err := m.findSnapshot(ctx, serviceID, snapshotID)
+	if err != nil {
+		return "", err
+	}
+	restoredID, err := m.Restore(ctx, snapshot.Path, name)
+	if err != nil {
+		return "", err
+	}
+	m.logger.Success(ctx, restoredID, "snapshot_restore", "snapshot restored successfully", map[string]any{"snapshot_id": snapshot.ID, "source_service_id": serviceID})
+	return restoredID, nil
+}
+
+func (m *Manager) DeleteSnapshot(ctx context.Context, serviceID string, snapshotID string) error {
+	snapshot, err := m.findSnapshot(ctx, serviceID, snapshotID)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(snapshot.Path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.Remove(snapshot.MetadataPath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	m.logger.Success(ctx, serviceID, "snapshot_delete", "snapshot deleted successfully", map[string]any{"snapshot_id": snapshot.ID})
+	return nil
+}
+
+func (m *Manager) findSnapshot(ctx context.Context, serviceID string, snapshotID string) (*SnapshotInfo, error) {
+	snapshotID = strings.TrimSpace(snapshotID)
+	if snapshotID == "" || strings.Contains(snapshotID, "/") || strings.Contains(snapshotID, "..") {
+		return nil, fmt.Errorf("invalid snapshot id")
+	}
+	snapshots, err := m.ListSnapshots(ctx, serviceID)
+	if err != nil {
+		return nil, err
+	}
+	for _, snapshot := range snapshots {
+		if snapshot.ID == snapshotID {
+			return &snapshot, nil
+		}
+	}
+	return nil, fmt.Errorf("snapshot not found")
 }
 
 func (m *Manager) Restore(ctx context.Context, backupPath string, name string) (string, error) {

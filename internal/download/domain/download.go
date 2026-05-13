@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"pb_launcher/internal/download/domain/dtos"
 	"pb_launcher/internal/download/domain/repositories"
 	"pb_launcher/internal/download/domain/services"
+	"sync"
 )
 
 type DownloadUsecase struct {
@@ -17,6 +19,7 @@ type DownloadUsecase struct {
 	repository      repositories.ReleaseRepository
 	artifactStorage services.RepositoryArtifactStorage
 	unzip           *unzip.Unzip
+	mu              sync.Mutex
 }
 
 func NewDownloadUsecase(
@@ -31,6 +34,49 @@ func NewDownloadUsecase(
 		artifactStorage: artifactStorage,
 		unzip:           unzip,
 	}
+}
+
+func (uc *DownloadUsecase) syncRepository(ctx context.Context, repo dtos.Repository) error {
+	availableReleases, err := uc.service.FetchReleases(ctx, repo)
+	if err != nil {
+		return fmt.Errorf("failed to fetch releases: %w", err)
+	}
+
+	existingReleases, err := uc.repository.ListReleases(ctx, repo.ID)
+	if err != nil {
+		return fmt.Errorf("failed to list existing releases: %w", err)
+	}
+
+	diff := uc.DiffReleases(availableReleases, existingReleases)
+	if len(diff) > 0 {
+		if err := uc.repository.SaveReleases(ctx, diff); err != nil {
+			return fmt.Errorf("failed to save new releases: %w", err)
+		}
+	}
+
+	if err := uc.resolveMissingReleases(ctx, repo); err != nil {
+		return fmt.Errorf("failed to resolve missing releases: %w", err)
+	}
+	return nil
+}
+
+func (uc *DownloadUsecase) SyncRepository(ctx context.Context, repositoryID string) error {
+	uc.mu.Lock()
+	defer uc.mu.Unlock()
+
+	repo, err := uc.repository.FindRepository(ctx, repositoryID)
+	if err != nil {
+		return err
+	}
+	if err := uc.repository.MarkRepositorySyncing(ctx, repo.ID); err != nil {
+		return err
+	}
+
+	if err := uc.syncRepository(ctx, *repo); err != nil {
+		_ = uc.repository.MarkRepositorySyncError(ctx, repo.ID, err.Error())
+		return err
+	}
+	return uc.repository.MarkRepositorySyncSuccess(ctx, repo.ID)
 }
 
 // diffReleases returns the releases present in 'a' but not in 'b'.
@@ -159,6 +205,9 @@ func (uc *DownloadUsecase) resolveMissingReleases(ctx context.Context, repo dtos
 }
 
 func (uc *DownloadUsecase) Run(ctx context.Context) error {
+	uc.mu.Lock()
+	defer uc.mu.Unlock()
+
 	repositories, err := uc.repository.ListRepositories(ctx)
 	if err != nil {
 		slog.Error("failed to list repositories", "error", err)
@@ -166,34 +215,18 @@ func (uc *DownloadUsecase) Run(ctx context.Context) error {
 	}
 	var combinedErr error
 	for _, repo := range repositories {
-
-		availableReleases, err := uc.service.FetchReleases(ctx, repo)
-		if err != nil {
-			slog.Error("failed to fetch releases", "repository_id", repo.ID, "error", err)
+		if err := uc.repository.MarkRepositorySyncing(ctx, repo.ID); err != nil {
 			combinedErr = errors.Join(combinedErr, err)
 			continue
 		}
-
-		existingReleases, err := uc.repository.ListReleases(ctx, repo.ID)
-		if err != nil {
-			slog.Error("failed to list existing releases", "repository_id", repo.ID, "error", err)
+		if err := uc.syncRepository(ctx, repo); err != nil {
+			slog.Error("failed to sync repository", "repository_id", repo.ID, "error", err)
+			_ = uc.repository.MarkRepositorySyncError(ctx, repo.ID, err.Error())
 			combinedErr = errors.Join(combinedErr, err)
 			continue
 		}
-
-		diff := uc.DiffReleases(availableReleases, existingReleases)
-		if len(diff) > 0 {
-			if err := uc.repository.SaveReleases(ctx, diff); err != nil {
-				slog.Error("failed to save new releases", "repository_id", repo.ID, "error", err)
-				combinedErr = errors.Join(combinedErr, err)
-				continue
-			}
-		}
-
-		if err := uc.resolveMissingReleases(ctx, repo); err != nil {
-			slog.Error("failed to resolve missing releases", "repository_id", repo.ID, "error", err)
+		if err := uc.repository.MarkRepositorySyncSuccess(ctx, repo.ID); err != nil {
 			combinedErr = errors.Join(combinedErr, err)
-			continue
 		}
 	}
 	return combinedErr

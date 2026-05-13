@@ -72,4 +72,96 @@ export const backupService = {
     }
     return json as { service_id: string };
   },
+
+  listSnapshots: async (serviceID: string): Promise<SnapshotInfo[]> => {
+    const url = joinUrls(pb.baseURL, `/x-api/services/${serviceID}/snapshots`);
+    const response = await fetch(url, {
+      headers: { Authorization: pb.authStore.token },
+    });
+    const json = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new HttpError(
+        response.status,
+        json?.message || "Failed to list snapshots",
+        json,
+      );
+    }
+    return Array.isArray(json) ? (json as SnapshotInfo[]) : [];
+  },
+
+  createSnapshot: async (data: { serviceID: string; name: string }) => {
+    const form = new FormData();
+    form.append("name", data.name);
+    const url = joinUrls(pb.baseURL, `/x-api/services/${data.serviceID}/snapshots`);
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: pb.authStore.token },
+      body: form,
+    });
+    const json = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new HttpError(
+        response.status,
+        json?.message || "Failed to create snapshot",
+        json,
+      );
+    }
+    return json as SnapshotInfo;
+  },
+
+  restoreSnapshot: async (data: {
+    serviceID: string;
+    snapshotID: string;
+    name: string;
+  }) => {
+    const form = new FormData();
+    form.append("name", data.name);
+    const url = joinUrls(
+      pb.baseURL,
+      `/x-api/services/${data.serviceID}/snapshots/${data.snapshotID}/restore`,
+    );
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: pb.authStore.token },
+      body: form,
+    });
+    const json = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new HttpError(
+        response.status,
+        json?.message || "Failed to restore snapshot",
+        json,
+      );
+    }
+    return json as { service_id: string };
+  },
+
+  deleteSnapshot: async (data: { serviceID: string; snapshotID: string }) => {
+    const url = joinUrls(
+      pb.baseURL,
+      `/x-api/services/${data.serviceID}/snapshots/${data.snapshotID}`,
+    );
+    const response = await fetch(url, {
+      method: "DELETE",
+      headers: { Authorization: pb.authStore.token },
+    });
+    if (!response.ok) {
+      const json = await response.json().catch(() => null);
+      throw new HttpError(
+        response.status,
+        json?.message || "Failed to delete snapshot",
+        json,
+      );
+    }
+  },
+};
+
+export type SnapshotInfo = {
+  id: string;
+  name: string;
+  service_id: string;
+  source_service: string;
+  version: string;
+  created_at: string;
+  size: number;
 };
