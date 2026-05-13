@@ -5,6 +5,7 @@ import { useModal } from "../../components/modal/hook";
 import { ServiceForm } from "./forms/ServiceForm";
 import { UpgradeServiceForm } from "./forms/UpgradeServiceForm";
 import { RestoreBackupForm } from "./forms/RestoreBackupForm";
+import { CloneServiceForm } from "./forms/CloneServiceForm";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocalStorage } from "@uidotdev/usehooks";
 import { serviceService, type ServiceDto } from "../../services/services";
@@ -120,6 +121,16 @@ export const ServicesPage = () => {
     backupMutation.mutate(service.id);
   };
 
+  const handleCloneService = (service: ServiceDto) => {
+    openModal(
+      <CloneServiceForm
+        service={service}
+        onClone={() => setTimeout(() => servicesQuery.refetch())}
+      />,
+      { title: "Clone Service", width: 420 },
+    );
+  };
+
   const openRestoreBackupModal = () => {
     openModal(
       <RestoreBackupForm
@@ -210,6 +221,7 @@ export const ServicesPage = () => {
             onRestart={() => handleRestartService(service.id)}
             onUpgrade={() => handleUpgradeService(service)}
             onBackup={() => handleBackupService(service)}
+            onClone={() => handleCloneService(service)}
           />
         ))}
       </div>

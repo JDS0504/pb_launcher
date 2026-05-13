@@ -186,6 +186,62 @@ func (m *Manager) Restore(ctx context.Context, backupPath string, name string) (
 	return record.Id, nil
 }
 
+func (m *Manager) Clone(ctx context.Context, sourceServiceID string, name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", fmt.Errorf("instance name is required")
+	}
+
+	source, err := m.serviceRepo.FindService(ctx, sourceServiceID)
+	if err != nil {
+		return "", err
+	}
+	if source.Status != models.Stopped {
+		return "", fmt.Errorf("service must be stopped before clone")
+	}
+	if err := m.downloader.EnsureReleaseDownloaded(ctx, source.ReleaseID); err != nil {
+		return "", fmt.Errorf("failed to download service release: %w", err)
+	}
+
+	sourceDir := filepath.Join(m.dataDir, source.ID)
+	if info, err := os.Stat(sourceDir); err != nil || !info.IsDir() {
+		return "", fmt.Errorf("service data directory not found")
+	}
+
+	collection, err := m.app.FindCachedCollectionByNameOrId(collections.Services)
+	if err != nil {
+		return "", err
+	}
+	record := core.NewRecord(collection)
+	record.Set("name", name)
+	record.Set("release", source.ReleaseID)
+	record.Set("restart_policy", string(source.RestartPolicy))
+	record.Set("status", string(models.Restoring))
+	record.Set("boot_user_email", source.BootUserEmail)
+	record.Set("boot_user_password", source.BootUserPassword)
+
+	if err := m.app.Save(record); err != nil {
+		return "", err
+	}
+
+	targetDir := filepath.Join(m.dataDir, record.Id)
+	if err := copyDir(sourceDir, targetDir); err != nil {
+		_ = m.app.Delete(record)
+		_ = os.RemoveAll(targetDir)
+		return "", err
+	}
+
+	record.Set("status", string(models.Stopped))
+	if err := m.app.Save(record); err != nil {
+		return "", err
+	}
+	if err := m.commandsRepo.PublishStartCommand(ctx, record.Id); err != nil {
+		return "", err
+	}
+
+	return record.Id, nil
+}
+
 func readManifest(path string) (*Manifest, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

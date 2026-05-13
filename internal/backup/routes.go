@@ -59,6 +59,19 @@ func RegisterRoutes(app *pocketbase.PocketBase, manager *Manager) {
 			}
 			return e.JSON(http.StatusOK, map[string]string{"service_id": serviceID})
 		}).Bind(apis.RequireAuth())
+
+		se.Router.POST("/x-api/services/{service_id}/clone", func(e *core.RequestEvent) error {
+			name := strings.TrimSpace(e.Request.FormValue("name"))
+			if name == "" {
+				return e.BadRequestError("instance name is required", nil)
+			}
+
+			serviceID, err := manager.Clone(e.Request.Context(), e.Request.PathValue("service_id"), name)
+			if err != nil {
+				return e.BadRequestError("failed to clone service", err)
+			}
+			return e.JSON(http.StatusOK, map[string]string{"service_id": serviceID})
+		}).Bind(apis.RequireAuth())
 		return se.Next()
 	})
 }

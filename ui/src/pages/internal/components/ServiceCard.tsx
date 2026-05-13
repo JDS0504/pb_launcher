@@ -1,6 +1,7 @@
 import { useMemo, useRef, type FC } from "react";
 import type { ServiceDto } from "../../../services/services";
 import {
+  Copy,
   MoreVertical,
   Pencil,
   Power,
@@ -26,6 +27,7 @@ type Props = {
   onRestart: () => void;
   onUpgrade: () => void;
   onBackup: () => void;
+  onClone: () => void;
   refreshData: () => void;
 };
 
@@ -39,6 +41,7 @@ export const ServiceCard: FC<Props> = ({
   onStop,
   onUpgrade,
   onBackup,
+  onClone,
   refreshData,
 }) => {
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -181,6 +184,15 @@ export const ServiceCard: FC<Props> = ({
                       >
                         <Upload className="w-4 h-4" />
                         Upgrade
+                      </button>
+                    </li>
+                    <li>
+                      <button
+                        onClick={() => executeAfterBlur(onClone)}
+                        className="flex items-center gap-2 w-full justify-start text-accent hover:bg-base-200"
+                      >
+                        <Copy className="w-4 h-4" />
+                        Clone
                       </button>
                     </li>
                     <li>

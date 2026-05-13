@@ -52,4 +52,24 @@ export const backupService = {
     }
     return json as { service_id: string };
   },
+
+  cloneService: async (data: { serviceID: string; name: string }) => {
+    const form = new FormData();
+    form.append("name", data.name);
+    const url = joinUrls(pb.baseURL, `/x-api/services/${data.serviceID}/clone`);
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: pb.authStore.token },
+      body: form,
+    });
+    const json = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new HttpError(
+        response.status,
+        json?.message || "Failed to clone service",
+        json,
+      );
+    }
+    return json as { service_id: string };
+  },
 };
