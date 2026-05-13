@@ -1,15 +1,20 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FC } from "react";
 import { serviceService, type ServiceLog } from "../../../services/services";
 import { ErrorFallback } from "../../../components/helpers/ErrorFallback";
 import { useViewportHeight } from "../../../hooks/useViewportHeight";
 import classNames from "classnames";
+import { Play, RotateCw, Square } from "lucide-react";
+import toast from "react-hot-toast";
+import { getErrorMessage } from "../../../utils/errors";
+import { useConfirmModal } from "../../../hooks/useConfirmModal";
 
 type Props = {
   service_id: string;
 };
 
 export const ServiceLogsSection: FC<Props> = ({ service_id }) => {
+  const confirm = useConfirmModal();
   const initLogsQuery = useQuery({
     queryKey: ["services", service_id],
     queryFn: ({ signal }) =>
@@ -17,7 +22,30 @@ export const ServiceLogsSection: FC<Props> = ({ service_id }) => {
     refetchOnMount: true,
   });
 
-  if (initLogsQuery.isFetching) {
+  const serviceQuery = useQuery({
+    queryKey: ["services", service_id, "status"],
+    queryFn: () => serviceService.fetchServiceByID(service_id),
+    refetchInterval: 3000,
+  });
+
+  const commandMutation = useMutation({
+    mutationFn: serviceService.executeServiceCommand,
+    onSuccess: () => setTimeout(() => serviceQuery.refetch()),
+    onError: error => toast.error(getErrorMessage(error)),
+  });
+
+  const executeCommand = async (action: "start" | "stop" | "restart") => {
+    if (action !== "start") {
+      const ok = await confirm(
+        `${action.charAt(0).toUpperCase()}${action.slice(1)} service`,
+        `Are you sure you want to ${action} this service?`,
+      );
+      if (!ok) return;
+    }
+    commandMutation.mutate({ service_id, action });
+  };
+
+  if (initLogsQuery.isFetching || serviceQuery.isLoading) {
     return <div className="p-4">Loading...</div>;
   }
 
@@ -29,8 +57,53 @@ export const ServiceLogsSection: FC<Props> = ({ service_id }) => {
       />
     );
 
+  if (serviceQuery.isError)
+    return (
+      <ErrorFallback
+        error={serviceQuery.error}
+        onRetry={() => setTimeout(serviceQuery.refetch)}
+      />
+    );
+
+  const status = serviceQuery.data?.status;
+  const isRunning = status === "running";
+  const isPending = status === "pending";
+
   return (
-    <LogsView initLogs={initLogsQuery.data ?? []} service_id={service_id} />
+    <div className="space-y-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="text-sm text-base-content/70">
+          Status: <span className="font-medium capitalize">{status}</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            className="btn btn-sm btn-success gap-2"
+            disabled={isRunning || isPending || commandMutation.isPending}
+            onClick={() => executeCommand("start")}
+          >
+            <Play className="w-4 h-4" />
+            Start
+          </button>
+          <button
+            className="btn btn-sm btn-warning gap-2"
+            disabled={!isRunning || commandMutation.isPending}
+            onClick={() => executeCommand("restart")}
+          >
+            <RotateCw className="w-4 h-4" />
+            Restart
+          </button>
+          <button
+            className="btn btn-sm btn-error gap-2"
+            disabled={!isRunning || commandMutation.isPending}
+            onClick={() => executeCommand("stop")}
+          >
+            <Square className="w-4 h-4" />
+            Stop
+          </button>
+        </div>
+      </div>
+      <LogsView initLogs={initLogsQuery.data ?? []} service_id={service_id} />
+    </div>
   );
 };
 

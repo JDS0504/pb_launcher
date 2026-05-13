@@ -5,6 +5,7 @@ import { GeneralSection } from "./details_section/GeneralSection";
 import { DomainsSection } from "./details_section/DomainsSection";
 import { ServiceLogsSection } from "./details_section/ServiceLogsSection";
 import { OperationHistorySection } from "./details_section/OperationHistorySection";
+import { PBHooksSection } from "./details_section/PBHooksSection";
 
 export const ServiceDetailPage = () => {
   const { service_id } = useParams<{ service_id: string }>();
@@ -72,6 +73,14 @@ export const ServiceDetailPage = () => {
                 History
               </button>
             </li>
+            <li>
+              <button
+                className={menuItemClass("hooks")}
+                onClick={() => handleSectionChange("hooks")}
+              >
+                PB Hooks
+              </button>
+            </li>
             {/* <li>
               <button
                 className={menuItemClass("settings")}
@@ -121,6 +130,15 @@ export const ServiceDetailPage = () => {
             <h3 className="text-lg font-semibold mb-6">History</h3>
             <div className="px-4 py-4 bg-base-200 rounded-box">
               <OperationHistorySection service_id={service_id} />
+            </div>
+          </div>
+        )}
+
+        {activeSection === "hooks" && (
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold mb-6">PB Hooks</h3>
+            <div className="px-4 py-4 bg-base-200 rounded-box">
+              <PBHooksSection service_id={service_id} />
             </div>
           </div>
         )}
