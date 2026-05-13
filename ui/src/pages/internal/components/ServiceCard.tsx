@@ -1,6 +1,13 @@
 import { useMemo, useRef, type FC } from "react";
 import type { ServiceDto } from "../../../services/services";
-import { MoreVertical, Pencil, Power, ShieldAlert, Trash2 } from "lucide-react";
+import {
+  MoreVertical,
+  Pencil,
+  Power,
+  ShieldAlert,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import classNames from "classnames";
 import { useModal } from "../../../components/modal/hook";
 import { DefaultCredentialsCard } from "./DefaultCredentialsCard";
@@ -16,6 +23,7 @@ type Props = {
   onStart: () => void;
   onStop: () => void;
   onRestart: () => void;
+  onUpgrade: () => void;
   refreshData: () => void;
 };
 
@@ -27,6 +35,7 @@ export const ServiceCard: FC<Props> = ({
   onRestart,
   onStart,
   onStop,
+  onUpgrade,
   refreshData,
 }) => {
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -160,6 +169,17 @@ export const ServiceCard: FC<Props> = ({
                     </ul>
                   </details>
                 </li>
+                {service.status === "stopped" && (
+                  <li>
+                    <button
+                      onClick={() => executeAfterBlur(onUpgrade)}
+                      className="flex items-center gap-2 w-full justify-start text-info hover:bg-base-200"
+                    >
+                      <Upload className="w-4 h-4" />
+                      Upgrade
+                    </button>
+                  </li>
+                )}
                 <li>
                   <button
                     onClick={() => executeAfterBlur(onDelete)}

@@ -129,6 +129,18 @@ func (s *ServiceRepository) FindService(ctx context.Context, id string) (*models
 	return &services[0], nil
 }
 
+func (s *ServiceRepository) FindRelease(ctx context.Context, id string) (*models.Release, error) {
+	record, err := s.app.FindRecordById(collections.Releases, id)
+	if err != nil {
+		return nil, err
+	}
+	return &models.Release{
+		ID:           record.Id,
+		RepositoryID: record.GetString("repository"),
+		Version:      record.GetString("version"),
+	}, nil
+}
+
 // MarkServiceStoped implements repositories.ServiceRepository.
 func (s *ServiceRepository) MarkServiceStoped(ctx context.Context, id string) error {
 
@@ -184,6 +196,18 @@ func (s *ServiceRepository) MarkServiceRunning(ctx context.Context, id, listenIp
 	}
 
 	return nil
+}
+
+func (s *ServiceRepository) UpdateServiceRelease(ctx context.Context, serviceID, releaseID string) error {
+	record, err := s.app.FindRecordById(collections.Services, serviceID)
+	if err != nil {
+		return err
+	}
+
+	record.Set("release", releaseID)
+	record.Set("error_message", nil)
+
+	return s.app.Save(record)
 }
 
 // SetPbInstallToken implements repositories.ServiceRepository.

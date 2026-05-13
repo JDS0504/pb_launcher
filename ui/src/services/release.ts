@@ -3,6 +3,13 @@ import { pb } from "./client/pb";
 export const RELEASES_COLLECTION = "releases";
 export const COMANDS_COLLECTION = "comands";
 
+export interface ReleaseOption {
+  id: string;
+  repositoryId: string;
+  repositoryName: string;
+  version: string;
+}
+
 interface ReleaseDto {
   id: string;
   version: string;
@@ -15,7 +22,7 @@ interface ReleaseDto {
 }
 
 export const releaseService = {
-  fetchAll: async () => {
+  fetchAll: async (): Promise<ReleaseOption[]> => {
     const releases = pb.collection(RELEASES_COLLECTION);
     const records = await releases.getFullList<ReleaseDto>({
       expand: "repository",

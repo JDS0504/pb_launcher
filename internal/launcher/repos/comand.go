@@ -42,7 +42,7 @@ func (c *CommandsRepository) PublishStartComand(ctx context.Context, serviceID s
 func (c *CommandsRepository) GetPendingCommands(ctx context.Context) ([]models.ServiceCommand, error) {
 	var records []*core.Record
 	query := c.app.RecordQuery(collections.ServicesComands).
-		Select("id", "service", "action").
+		Select("id", "service", "action", "target_release").
 		AndWhere(dbx.NewExp("status = 'pending'")).
 		OrderBy("created")
 	if err := query.All(&records); err != nil {
@@ -58,11 +58,14 @@ func (c *CommandsRepository) GetPendingCommands(ctx context.Context) ([]models.S
 			action = models.ActionStart
 		case "restart":
 			action = models.ActionRestart
+		case "upgrade":
+			action = models.ActionUpgrade
 		}
 		comands = append(comands, models.ServiceCommand{
-			ID:      r.Id,
-			Service: r.GetString("service"),
-			Action:  action,
+			ID:            r.Id,
+			Service:       r.GetString("service"),
+			Action:        action,
+			TargetRelease: r.GetString("target_release"),
 		})
 	}
 	return comands, nil

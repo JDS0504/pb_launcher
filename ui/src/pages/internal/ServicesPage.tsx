@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { Plus, RefreshCcw } from "lucide-react";
 import { useModal } from "../../components/modal/hook";
 import { ServiceForm } from "./forms/ServiceForm";
+import { UpgradeServiceForm } from "./forms/UpgradeServiceForm";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocalStorage } from "@uidotdev/usehooks";
 import { serviceService, type ServiceDto } from "../../services/services";
@@ -98,6 +99,16 @@ export const ServicesPage = () => {
     }
   };
 
+  const handleUpgradeService = (service: ServiceDto) => {
+    openModal(
+      <UpgradeServiceForm
+        service={service}
+        onUpgrade={() => setTimeout(() => servicesQuery.refetch())}
+      />,
+      { title: "Upgrade Service", width: 420 },
+    );
+  };
+
   const openCreateServiceModal = () => {
     openModal(
       <ServiceForm
@@ -170,6 +181,7 @@ export const ServicesPage = () => {
             onStart={() => handleStartService(service.id)}
             onStop={() => handleStopService(service.id)}
             onRestart={() => handleRestartService(service.id)}
+            onUpgrade={() => handleUpgradeService(service)}
           />
         ))}
       </div>

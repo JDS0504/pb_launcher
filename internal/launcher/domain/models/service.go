@@ -31,3 +31,9 @@ type Service struct {
 	BootUserPassword  string
 	Deleted           string
 }
+
+type Release struct {
+	ID           string
+	RepositoryID string
+	Version      string
+}

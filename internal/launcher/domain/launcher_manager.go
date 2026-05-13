@@ -19,6 +19,8 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+
+	version "github.com/hashicorp/go-version"
 )
 
 type LauncherManager struct {
@@ -265,6 +267,53 @@ func (lm *LauncherManager) restartService(ctx context.Context, service models.Se
 	return nil
 }
 
+func (lm *LauncherManager) upgradeService(ctx context.Context, service models.Service, targetReleaseID string) error {
+	if targetReleaseID == "" {
+		return fmt.Errorf("target release is required for service upgrade")
+	}
+	if service.Status != models.Stopped {
+		return fmt.Errorf("service %s must be stopped before upgrade", service.ID)
+	}
+
+	targetRelease, err := lm.repository.FindRelease(ctx, targetReleaseID)
+	if err != nil {
+		return fmt.Errorf("failed to find target release %s: %w", targetReleaseID, err)
+	}
+	if targetRelease.RepositoryID != service.RepositoryID {
+		return fmt.Errorf("target release belongs to a different repository")
+	}
+
+	currentVersion, err := version.NewVersion(service.Version)
+	if err != nil {
+		return fmt.Errorf("invalid current service version %q: %w", service.Version, err)
+	}
+	targetVersion, err := version.NewVersion(targetRelease.Version)
+	if err != nil {
+		return fmt.Errorf("invalid target release version %q: %w", targetRelease.Version, err)
+	}
+	if !targetVersion.GreaterThan(currentVersion) {
+		return fmt.Errorf("target version %s must be greater than current version %s", targetVersion.String(), currentVersion.String())
+	}
+
+	if _, err := lm.finder.FindBinary(ctx, service.RepositoryID, targetRelease.Version, service.ExecFilePattern); err != nil {
+		return fmt.Errorf("target version binary not found: %w", err)
+	}
+
+	if err := lm.repository.UpdateServiceRelease(ctx, service.ID, targetRelease.ID); err != nil {
+		return fmt.Errorf("failed to update service release: %w", err)
+	}
+
+	upgradedService := service
+	upgradedService.Version = targetRelease.Version
+	lm.lstore.InsertLog(service.ID, logstore.StreamStdout, fmt.Sprintf("Upgrading service from v%s to v%s...", service.Version, targetRelease.Version))
+	if err := lm.startService(ctx, upgradedService); err != nil {
+		slog.Error("upgrade failed: unable to start service", "serviceID", service.ID, "error", err)
+		return err
+	}
+	lm.lstore.InsertLog(service.ID, logstore.StreamStdout, "Service upgraded successfully")
+	return nil
+}
+
 // RecoveryLastState restores and starts all services that were active
 // before pb_launcher was shut down.
 func (lm *LauncherManager) RecoveryLastState(ctx context.Context) error {
@@ -306,6 +355,8 @@ func (lm *LauncherManager) evaluateCommand(ctx context.Context, cmd models.Servi
 		return lm.stopService(ctx, service.ID)
 	case models.ActionRestart:
 		return lm.restartService(ctx, *service)
+	case models.ActionUpgrade:
+		return lm.upgradeService(ctx, *service, cmd.TargetRelease)
 	default:
 		return fmt.Errorf("unknown action %q for service %s", cmd.Action, cmd.Service)
 	}

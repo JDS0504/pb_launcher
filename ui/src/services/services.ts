@@ -20,6 +20,7 @@ interface _Service {
   created: string;
 
   repository: string;
+  repository_id: string;
   release_id: string;
   release_version: string;
 
@@ -30,6 +31,7 @@ interface _Service {
       version: string;
       expand: {
         repository: {
+          id: string;
           name: string;
         };
       };
@@ -88,9 +90,10 @@ export const serviceService = {
     "error_message",
     "created",
     "release",
-    "expand.release.id",
-    "expand.release.version",
-    "expand.release.expand.repository.name",
+        "expand.release.id",
+        "expand.release.version",
+        "expand.release.expand.repository.id",
+        "expand.release.expand.repository.name",
   ].join(","),
 
   fetchServiceByID: async (serviceID: string): Promise<ServiceDto> => {
@@ -121,9 +124,10 @@ export const serviceService = {
       restart_policy: service.restart_policy,
       error_message: service.error_message,
       created: service.created,
-      repository: service.expand.release.expand.repository.name,
-      release_id: service.expand.release.id,
-      release_version: service.expand.release.version,
+        repository: service.expand.release.expand.repository.name,
+        repository_id: service.expand.release.expand.repository.id,
+        release_id: service.expand.release.id,
+        release_version: service.expand.release.version,
     };
   },
 
@@ -158,6 +162,7 @@ export const serviceService = {
         error_message: s.error_message,
         created: s.created,
         repository: s.expand.release.expand.repository.name,
+        repository_id: s.expand.release.expand.repository.id,
         release_id: s.expand.release.id,
         release_version: s.expand.release.version,
         domains: domains.filter(
@@ -174,10 +179,15 @@ export const serviceService = {
 
   executeServiceCommand: async (data: {
     service_id: string;
-    action: "stop" | "start" | "restart";
+    action: "stop" | "start" | "restart" | "upgrade";
+    target_release?: string;
   }) => {
     const comands = pb.collection(COMANDS_COLLECTION);
-    await comands.create({ service: data.service_id, action: data.action });
+    await comands.create({
+      service: data.service_id,
+      action: data.action,
+      target_release: data.target_release,
+    });
   },
   upsertSuperuser: async (service_id: string) => {
     const url = joinUrls(pb.baseURL, `/x-api/upsert_superuser/${service_id}`);
