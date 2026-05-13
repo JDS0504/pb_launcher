@@ -16,6 +16,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const selected = useMemo(() => {
     if (pathname === "/" || pathname.startsWith("/services/")) return "service";
     if (pathname === "/proxy" || pathname.startsWith("/proxy/")) return "proxy";
+    if (pathname === "/settings") return "settings";
     return "<none>";
   }, [pathname]);
 
@@ -26,6 +27,10 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
     );
     if (!confirmed) return;
     await authService.logout();
+  };
+
+  const closeDropdown = () => {
+    (document.activeElement as HTMLElement)?.blur?.();
   };
 
   return (
@@ -61,6 +66,19 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
               <Waypoints className="w-4 h-4" />
               Proxy
             </NavLink>
+
+            <NavLink
+              to="/settings"
+              className={classNames(
+                "btn btn-sm btn-ghost gap-2 text-base-content transition-colors",
+                {
+                  "bg-base-200 text-primary": selected === "settings",
+                },
+              )}
+            >
+              <Settings className="w-4 h-4" />
+              Settings
+            </NavLink>
           </div>
           <div className="dropdown dropdown-end">
             <label tabIndex={0} className="btn btn-sm btn-ghost gap-2">
@@ -72,7 +90,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
               className="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-48 mt-2 z-[1]"
             >
               <li>
-                <NavLink to="/account/settings">
+                <NavLink to="/settings" onClick={closeDropdown}>
                   <Settings className="w-4 h-4" />
                   Settings
                 </NavLink>

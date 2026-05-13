@@ -9,7 +9,7 @@ import {
 } from "../../../components/fields/SelectField";
 import { serviceService, type ServiceDto } from "../../../services/services";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useMemo, type FC } from "react";
+import { useEffect, useMemo, type FC } from "react";
 import { useModal } from "../../../components/modal/hook";
 import toast from "react-hot-toast";
 import { getErrorMessage } from "../../../utils/errors";
@@ -18,6 +18,7 @@ import { releaseService } from "../../../services/release";
 
 const schema = object({
   name: stringRequired(), // Name of the new PocketBase instance
+  repository: stringRequired(), // Repository/source for the instance
   instanceSource: stringRequired(), // Source for the instance (template, version, etc.)
   restartPolicy: stringRequired(), // Restart policy: "no" or "on-failure"
 });
@@ -33,24 +34,55 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
   const form = useCustomForm(schema, {
     defaultValues: {
       name: record?.name,
+      repository: record?.repository_id,
       instanceSource: record?.release_id,
       restartPolicy: record?.restart_policy ?? "on-failure",
     },
   });
+  const selectedRepository = form.watch("repository");
 
   const releasesQuery = useQuery({
     queryKey: ["releases"],
     queryFn: releaseService.fetchAll,
   });
 
+  const repositoryOptions = useMemo<SelectFieldOption[]>(() => {
+    const repositories = new Map<string, string>();
+    for (const release of releasesQuery.data ?? []) {
+      repositories.set(release.repositoryId, release.repositoryName);
+    }
+    return [...repositories.entries()].map(([value, label]) => ({
+      label,
+      value,
+    }));
+  }, [releasesQuery.data]);
+
   const releaseOptions = useMemo<SelectFieldOption[]>(() => {
     return (
-      releasesQuery.data?.map(r => ({
-        label: `${r.repositoryName} v${r.version}`,
+      releasesQuery.data
+        ?.filter(r => r.repositoryId === selectedRepository)
+        .map(r => ({
+        label: `v${r.version}`,
         value: r.id,
-      })) ?? []
+        })) ?? []
     );
-  }, [releasesQuery.data]);
+  }, [releasesQuery.data, selectedRepository]);
+
+  useEffect(() => {
+    if (record != null || selectedRepository || repositoryOptions.length === 0) {
+      return;
+    }
+    form.setValue("repository", repositoryOptions[0].value, {
+      shouldValidate: true,
+    });
+  }, [form, record, repositoryOptions, selectedRepository]);
+
+  useEffect(() => {
+    if (record != null) return;
+    const currentRelease = form.getValues("instanceSource");
+    if (releaseOptions.some(option => option.value === currentRelease)) return;
+    form.setValue("instanceSource", "", { shouldValidate: true });
+  }, [form, record, releaseOptions]);
 
   const createInstanceMutation = useMutation({
     mutationFn: serviceService.createServiceInstance,
@@ -100,14 +132,27 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
         />
 
         <SelectField
-          label="Source/Version"
-          options={releaseOptions}
+          label="Repository"
+          options={repositoryOptions}
           isLoading={releasesQuery.isLoading}
           onReload={releasesQuery.refetch}
+          registration={form.register("repository")}
+          autoComplete="off"
+          error={form.formState.errors.repository}
+          disabled={record != null}
+        />
+
+        <SelectField
+          label="Version"
+          options={releaseOptions}
+          isLoading={releasesQuery.isLoading}
           registration={form.register("instanceSource")}
           autoComplete="off"
           error={form.formState.errors.instanceSource}
           disabled={record != null}
+          placeholderOptionLabel={
+            selectedRepository ? "Select a version" : "Select a repository first"
+          }
         />
 
         <SelectField

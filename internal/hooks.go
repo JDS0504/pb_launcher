@@ -14,4 +14,5 @@ var Module = fx.Module("hooks",
 	fx.Invoke(hooks.AddProxyEntriesHooks),
 	fx.Invoke(hooks.AddServiceDomainsHooks),
 	fx.Invoke(hooks.AddComandHooks),
+	fx.Invoke(hooks.AddRepositoryHooks),
 )
