@@ -1,9 +1,10 @@
 import toast from "react-hot-toast";
 import { useMemo, useState } from "react";
-import { Plus, RefreshCcw } from "lucide-react";
+import { Plus, RefreshCcw, Upload } from "lucide-react";
 import { useModal } from "../../components/modal/hook";
 import { ServiceForm } from "./forms/ServiceForm";
 import { UpgradeServiceForm } from "./forms/UpgradeServiceForm";
+import { RestoreBackupForm } from "./forms/RestoreBackupForm";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocalStorage } from "@uidotdev/usehooks";
 import { serviceService, type ServiceDto } from "../../services/services";
@@ -13,6 +14,7 @@ import { getErrorMessage } from "../../utils/errors";
 import classNames from "classnames";
 import { useNavigate } from "react-router-dom";
 import { useProxyConfigs } from "../../hooks/useProxyConfigs";
+import { backupService } from "../../services/backup";
 
 const STATUS_FILTER_KEY = "pb-dashboard-status-filter";
 type TStatus = "all" | "running" | "stopped";
@@ -56,6 +58,11 @@ export const ServicesPage = () => {
   const deleteMutation = useMutation({
     mutationFn: serviceService.deleteServiceInstance,
     onSuccess: () => setTimeout(() => servicesQuery.refetch()),
+    onError: error => toast.error(getErrorMessage(error)),
+  });
+
+  const backupMutation = useMutation({
+    mutationFn: backupService.downloadBackup,
     onError: error => toast.error(getErrorMessage(error)),
   });
 
@@ -106,6 +113,19 @@ export const ServicesPage = () => {
         onUpgrade={() => setTimeout(() => servicesQuery.refetch())}
       />,
       { title: "Upgrade Service", width: 420 },
+    );
+  };
+
+  const handleBackupService = async (service: ServiceDto) => {
+    backupMutation.mutate(service.id);
+  };
+
+  const openRestoreBackupModal = () => {
+    openModal(
+      <RestoreBackupForm
+        onRestore={() => setTimeout(() => servicesQuery.refetch())}
+      />,
+      { title: "Import Backup", width: 420 },
     );
   };
 
@@ -160,6 +180,13 @@ export const ServicesPage = () => {
             <option value="stopped">Stopped</option>
           </select>
           <button
+            className="btn btn-sm btn-secondary gap-2 w-full sm:w-auto"
+            onClick={openRestoreBackupModal}
+          >
+            <Upload className="w-4 h-4" />
+            Import backup
+          </button>
+          <button
             className="btn btn-sm btn-primary gap-2 w-full sm:w-auto"
             onClick={openCreateServiceModal}
           >
@@ -182,6 +209,7 @@ export const ServicesPage = () => {
             onStop={() => handleStopService(service.id)}
             onRestart={() => handleRestartService(service.id)}
             onUpgrade={() => handleUpgradeService(service)}
+            onBackup={() => handleBackupService(service)}
           />
         ))}
       </div>

@@ -7,7 +7,13 @@ import { domainsService, type DomainDto } from "./services_domain";
 interface _Service {
   id: string;
   name: string;
-  status: "idle" | "pending" | "running" | "stopped" | "failure";
+  status:
+    | "idle"
+    | "pending"
+    | "running"
+    | "stopped"
+    | "failure"
+    | "restoring";
 
   _pb_install: string;
   boot_user_email: string;

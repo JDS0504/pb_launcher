@@ -2,6 +2,7 @@ package repos
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"pb_launcher/collections"
 	"pb_launcher/internal/download/domain/dtos"
@@ -74,6 +75,38 @@ func (r *ReleaseRepository) ListRepositories(ctx context.Context) ([]dtos.Reposi
 	return repositories, nil
 }
 
+func (r *ReleaseRepository) FindRepository(ctx context.Context, repositoryID string) (*dtos.Repository, error) {
+	record, err := r.app.FindRecordById(collections.Repositories, repositoryID)
+	if err != nil {
+		return nil, err
+	}
+	if record.GetBool("disabled") {
+		return nil, fmt.Errorf("repository %s is disabled", repositoryID)
+	}
+
+	releasePattern := strings.TrimSpace(record.GetString("release_file_pattern"))
+	releasePatternRegex, err := regexp.Compile(releasePattern)
+	if err != nil {
+		return nil, fmt.Errorf("invalid release file pattern: %w", err)
+	}
+	execPattern := strings.TrimSpace(record.GetString("exec_file_pattern"))
+	execPatternRegex, err := regexp.Compile(execPattern)
+	if err != nil {
+		return nil, fmt.Errorf("invalid exec file pattern: %w", err)
+	}
+
+	retention := max(record.GetInt("retention"), 1)
+	retention = min(retention, 6)
+	return &dtos.Repository{
+		ID:                 record.Id,
+		Repo:               record.GetString("repository"),
+		Token:              record.GetString("token"),
+		ReleaseFilePattern: releasePatternRegex,
+		ExecFilePattern:    execPatternRegex,
+		Retention:          retention,
+	}, nil
+}
+
 func (r *ReleaseRepository) ListReleases(ctx context.Context, repositoryId string) ([]dtos.Release, error) {
 	records, err := r.app.FindAllRecords(collections.Releases,
 		dbx.NewExp("repository={:id}", dbx.Params{"id": repositoryId}),
@@ -107,6 +140,31 @@ func (r *ReleaseRepository) ListReleases(ctx context.Context, repositoryId strin
 		})
 	}
 	return releases, nil
+}
+
+func (r *ReleaseRepository) FindRelease(ctx context.Context, releaseID string) (*dtos.Release, error) {
+	record, err := r.app.FindRecordById(collections.Releases, releaseID)
+	if err != nil {
+		return nil, err
+	}
+	versionString := record.GetString("version")
+	v, err := version.NewVersion(versionString)
+	if err != nil {
+		return nil, fmt.Errorf("invalid version format %q: %w", versionString, err)
+	}
+
+	return &dtos.Release{
+		RepositoryID: record.GetString("repository"),
+		Version:      v,
+		ReleaseName:  record.GetString("release_name"),
+		PublishedAt:  record.GetDateTime("published_at").Time(),
+		ReleaseAsset: dtos.ReleaseAsset{
+			AssetID:       record.GetString("asset_id"),
+			AssetFileName: record.GetString("asset_file_name"),
+			DownloadURL:   record.GetString("download_url"),
+			AssetSize:     int64(record.GetInt("asset_size")),
+		},
+	}, nil
 }
 
 func (r *ReleaseRepository) SaveReleases(ctx context.Context, releases []dtos.Release) error {

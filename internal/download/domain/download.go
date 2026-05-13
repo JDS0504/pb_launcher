@@ -100,6 +100,29 @@ func (uc *DownloadUsecase) processDownload(ctx context.Context, repo dtos.Reposi
 	return nil
 }
 
+func (uc *DownloadUsecase) EnsureReleaseDownloaded(ctx context.Context, releaseID string) error {
+	release, err := uc.repository.FindRelease(ctx, releaseID)
+	if err != nil {
+		return err
+	}
+	repo, err := uc.repository.FindRepository(ctx, release.RepositoryID)
+	if err != nil {
+		return err
+	}
+
+	downloadedVersions, err := uc.artifactStorage.Versions(ctx, repo.ID)
+	if err != nil {
+		return err
+	}
+	for _, downloaded := range downloadedVersions {
+		if downloaded.Equal(release.Version) {
+			return nil
+		}
+	}
+
+	return uc.processDownload(ctx, *repo, *release)
+}
+
 func (uc *DownloadUsecase) resolveMissingReleases(ctx context.Context, repo dtos.Repository) error {
 	releases, err := uc.repository.ListReleases(ctx, repo.ID)
 	if err != nil {

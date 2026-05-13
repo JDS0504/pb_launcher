@@ -71,6 +71,9 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 	})
 
 	app.OnRecordAfterCreateSuccess(collections.Services).BindFunc(func(e *core.RecordEvent) error {
+		if e.Record.GetString("status") == "restoring" {
+			return e.Next()
+		}
 		comandCollection, err := e.App.FindCachedCollectionByNameOrId(collections.ServicesComands)
 		if err != nil {
 			return err

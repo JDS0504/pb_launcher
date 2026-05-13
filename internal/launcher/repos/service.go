@@ -30,6 +30,8 @@ func (s *ServiceRepository) services(ids ...string) ([]models.Service, error) {
 	qry := `
 		select 
 			s.id, 
+			s.name,
+			s.release,
 			s.status, 
 			s.restart_policy, 
 			r.version, 
@@ -64,6 +66,8 @@ func (s *ServiceRepository) services(ids ...string) ([]models.Service, error) {
 	services := make([]models.Service, 0, len(results))
 	for _, row := range results {
 		id, _ := row["id"]
+		name, _ := row["name"]
+		release, _ := row["release"]
 		status, _ := row["status"]
 		restartPolicy, _ := row["restart_policy"]
 		version, _ := row["version"]
@@ -82,6 +86,8 @@ func (s *ServiceRepository) services(ids ...string) ([]models.Service, error) {
 
 		services = append(services, models.Service{
 			ID:                id.String,
+			Name:              name.String,
+			ReleaseID:         release.String,
 			Status:            models.ServiceStatus(status.String),
 			RestartPolicy:     models.RestartPolicy(restartPolicy.String),
 			Version:           version.String,

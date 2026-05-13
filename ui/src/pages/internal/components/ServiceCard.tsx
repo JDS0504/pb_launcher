@@ -4,6 +4,7 @@ import {
   MoreVertical,
   Pencil,
   Power,
+  Save,
   ShieldAlert,
   Trash2,
   Upload,
@@ -24,6 +25,7 @@ type Props = {
   onStop: () => void;
   onRestart: () => void;
   onUpgrade: () => void;
+  onBackup: () => void;
   refreshData: () => void;
 };
 
@@ -36,6 +38,7 @@ export const ServiceCard: FC<Props> = ({
   onStart,
   onStop,
   onUpgrade,
+  onBackup,
   refreshData,
 }) => {
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -170,15 +173,26 @@ export const ServiceCard: FC<Props> = ({
                   </details>
                 </li>
                 {service.status === "stopped" && (
-                  <li>
-                    <button
-                      onClick={() => executeAfterBlur(onUpgrade)}
-                      className="flex items-center gap-2 w-full justify-start text-info hover:bg-base-200"
-                    >
-                      <Upload className="w-4 h-4" />
-                      Upgrade
-                    </button>
-                  </li>
+                  <>
+                    <li>
+                      <button
+                        onClick={() => executeAfterBlur(onUpgrade)}
+                        className="flex items-center gap-2 w-full justify-start text-info hover:bg-base-200"
+                      >
+                        <Upload className="w-4 h-4" />
+                        Upgrade
+                      </button>
+                    </li>
+                    <li>
+                      <button
+                        onClick={() => executeAfterBlur(onBackup)}
+                        className="flex items-center gap-2 w-full justify-start text-secondary hover:bg-base-200"
+                      >
+                        <Save className="w-4 h-4" />
+                        Backup
+                      </button>
+                    </li>
+                  </>
                 )}
                 <li>
                   <button

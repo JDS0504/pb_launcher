@@ -9,7 +9,9 @@ import (
 	"pb_launcher/helpers/logstore"
 	"pb_launcher/helpers/serialexecutor"
 	"pb_launcher/helpers/unzip"
+	"pb_launcher/helpers/zip"
 	"pb_launcher/internal"
+	"pb_launcher/internal/backup"
 	"runtime"
 	"strings"
 
@@ -76,6 +78,7 @@ func createRootCommand(app core.App) *cobra.Command {
 				certificates.Module,
 				fx.Provide(configs.NewPBServeConfig),
 				fx.Provide(unzip.NewUnzip),
+				fx.Provide(zip.NewZip),
 				fx.Provide(logstore.NewServiceLogDB),
 				fx.Provide(serialexecutor.NewSequentialExecutor),
 				fx.Supply(app),
@@ -83,6 +86,7 @@ func createRootCommand(app core.App) *cobra.Command {
 				launcher.Module,
 				proxy.Module,
 				certmanager.Module,
+				backup.Module,
 				internal.Module, // hooks
 				fx.Invoke(
 					StartApiServer,

@@ -6,10 +6,11 @@ type ServiceStatus string
 type RestartPolicy string
 
 const (
-	Idle    ServiceStatus = "idle"    // Created but never started
-	Running ServiceStatus = "running" // Active and running
-	Stopped ServiceStatus = "stopped" // Stopped manually
-	Failure ServiceStatus = "failure" // Stopped manually
+	Idle      ServiceStatus = "idle"    // Created but never started
+	Running   ServiceStatus = "running" // Active and running
+	Stopped   ServiceStatus = "stopped" // Stopped manually
+	Failure   ServiceStatus = "failure" // Stopped manually
+	Restoring ServiceStatus = "restoring"
 )
 
 const (
@@ -19,9 +20,11 @@ const (
 
 type Service struct {
 	ID            string
+	Name          string
 	Status        ServiceStatus
 	RestartPolicy RestartPolicy
 	//
+	ReleaseID       string
 	RepositoryID    string
 	Version         string
 	ExecFilePattern *regexp.Regexp

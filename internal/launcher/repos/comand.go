@@ -23,6 +23,10 @@ func NewCommandsRepository(app *pocketbase.PocketBase) *CommandsRepository {
 }
 
 func (c *CommandsRepository) PublishStartComand(ctx context.Context, serviceID string) error {
+	return c.PublishStartCommand(ctx, serviceID)
+}
+
+func (c *CommandsRepository) PublishStartCommand(ctx context.Context, serviceID string) error {
 	comandCollection, err := c.app.FindCachedCollectionByNameOrId(collections.ServicesComands)
 	if err != nil {
 		return err
