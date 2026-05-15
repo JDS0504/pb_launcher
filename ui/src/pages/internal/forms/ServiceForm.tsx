@@ -81,6 +81,7 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
     if (record != null) return;
     const currentRelease = form.getValues("instanceSource");
     if (releaseOptions.some(option => option.value === currentRelease)) return;
+    if (currentRelease === "") return;
     form.setValue("instanceSource", "", { shouldValidate: true });
   }, [form, record, releaseOptions]);
 

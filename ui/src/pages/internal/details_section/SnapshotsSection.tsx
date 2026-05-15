@@ -2,11 +2,14 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Camera, RotateCcw, Trash2 } from "lucide-react";
 import type { FC } from "react";
 import toast from "react-hot-toast";
+import { useNavigate } from "react-router-dom";
 import { ErrorFallback } from "../../../components/helpers/ErrorFallback";
+import { useModal } from "../../../components/modal/hook";
 import { useConfirmModal } from "../../../hooks/useConfirmModal";
 import { backupService, type SnapshotInfo } from "../../../services/backup";
 import { serviceService } from "../../../services/services";
 import { getErrorMessage } from "../../../utils/errors";
+import { SnapshotNameForm } from "../forms/SnapshotNameForm";
 
 type Props = {
   service_id: string;
@@ -19,6 +22,8 @@ const formatSize = (size: number) => {
 };
 
 export const SnapshotsSection: FC<Props> = ({ service_id }) => {
+  const navigate = useNavigate();
+  const { openModal } = useModal();
   const confirm = useConfirmModal();
   const serviceQuery = useQuery({
     queryKey: ["services", service_id],
@@ -40,7 +45,10 @@ export const SnapshotsSection: FC<Props> = ({ service_id }) => {
 
   const restoreMutation = useMutation({
     mutationFn: backupService.restoreSnapshot,
-    onSuccess: () => toast.success("Snapshot restore started successfully"),
+    onSuccess: data => {
+      toast.success("Snapshot restored as a new instance");
+      navigate(`/services/${data.service_id}`);
+    },
     onError: error => toast.error(getErrorMessage(error)),
   });
 
@@ -54,29 +62,38 @@ export const SnapshotsSection: FC<Props> = ({ service_id }) => {
   });
 
   const createSnapshot = () => {
-    const name = window.prompt("Snapshot name");
-    if (name == null) return;
-    const trimmedName = name.trim();
-    if (trimmedName === "") {
-      toast.error("Enter a snapshot name");
-      return;
-    }
-    createMutation.mutate({ serviceID: service_id, name: trimmedName });
+    openModal(
+      <SnapshotNameForm
+        description="Create a local point-in-time ZIP snapshot of this stopped instance."
+        label="Snapshot Name"
+        submitLabel="Create snapshot"
+        emptyMessage="Enter a snapshot name"
+        onSubmit={async name => {
+          await createMutation.mutateAsync({ serviceID: service_id, name });
+        }}
+      />,
+      { title: "Create Snapshot", width: 420 },
+    );
   };
 
   const restoreSnapshot = (snapshot: SnapshotInfo) => {
-    const name = window.prompt("Restored instance name", `${snapshot.source_service} snapshot`);
-    if (name == null) return;
-    const trimmedName = name.trim();
-    if (trimmedName === "") {
-      toast.error("Enter an instance name");
-      return;
-    }
-    restoreMutation.mutate({
-      serviceID: service_id,
-      snapshotID: snapshot.id,
-      name: trimmedName,
-    });
+    openModal(
+      <SnapshotNameForm
+        defaultName={`${snapshot.source_service} snapshot`}
+        description="Restore this snapshot as a new instance. The current instance is not modified."
+        label="Restored Instance Name"
+        submitLabel="Restore snapshot"
+        emptyMessage="Enter an instance name"
+        onSubmit={async name => {
+          await restoreMutation.mutateAsync({
+            serviceID: service_id,
+            snapshotID: snapshot.id,
+            name,
+          });
+        }}
+      />,
+      { title: "Restore Snapshot", width: 420 },
+    );
   };
 
   const deleteSnapshot = async (snapshot: SnapshotInfo) => {
@@ -123,12 +140,22 @@ export const SnapshotsSection: FC<Props> = ({ service_id }) => {
           className="btn btn-sm btn-primary gap-2"
           disabled={!canCreate || createMutation.isPending}
           onClick={createSnapshot}
-          title={canCreate ? "Create snapshot" : "Stop the service before creating a snapshot"}
+          title={
+            canCreate
+              ? "Create snapshot"
+              : "Stop the service before creating a snapshot"
+          }
         >
           <Camera className="w-4 h-4" />
-          Snapshot
+          Create snapshot
         </button>
       </div>
+
+      {!canCreate && (
+        <div className="alert alert-info py-2 text-sm">
+          Stop this instance before creating a snapshot.
+        </div>
+      )}
 
       {snapshots.length === 0 ? (
         <div className="text-sm text-base-content/70">No snapshots yet.</div>
@@ -159,20 +186,22 @@ export const SnapshotsSection: FC<Props> = ({ service_id }) => {
                   <td>
                     <div className="flex justify-end gap-2">
                       <button
-                        className="btn btn-xs btn-ghost"
+                        className="btn btn-xs btn-ghost gap-1"
                         disabled={restoreMutation.isPending}
                         onClick={() => restoreSnapshot(snapshot)}
                         title="Restore as new instance"
                       >
                         <RotateCcw className="w-4 h-4" />
+                        Restore
                       </button>
                       <button
-                        className="btn btn-xs btn-ghost text-error"
+                        className="btn btn-xs btn-ghost gap-1 text-error"
                         disabled={deleteMutation.isPending}
                         onClick={() => deleteSnapshot(snapshot)}
                         title="Delete snapshot"
                       >
                         <Trash2 className="w-4 h-4" />
+                        Delete
                       </button>
                     </div>
                   </td>

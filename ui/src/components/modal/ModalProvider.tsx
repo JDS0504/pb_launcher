@@ -58,6 +58,7 @@ export const ModalProvider: React.FC<{ children: ReactNode }> = ({
 
             return (
               <dialog
+                open
                 key={index}
                 className="modal modal-open"
                 style={overlayStyle}
