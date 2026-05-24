@@ -75,7 +75,7 @@ export const ProxyEntryForm: FC<Props> = ({ onSaveRecord, record, width }) => {
   );
 
   return (
-    <div style={{ width: width }}>
+    <div style={{ width, maxWidth: "100%" }}>
       <form onSubmit={handleFormSubmit} className="space-y-5">
         <div>
           {record != null && (

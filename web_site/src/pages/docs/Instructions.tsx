@@ -1,8 +1,8 @@
 import { Link } from "react-router";
 
 export const Instructions = () => (
-  <section className="p-6 bg-white rounded-2xl shadow-xl">
-    <h2 className="text-2xl font-bold mb-5">Production Deployment Guide</h2>
+  <section className="overflow-hidden rounded-2xl bg-white p-4 shadow-xl sm:p-6">
+    <h2 className="mb-5 text-2xl font-bold">Production Deployment Guide</h2>
     <ol className="list-decimal list-inside space-y-4 text-base">
       <DownloadRelease />
       <ExtractAndMoveFiles />

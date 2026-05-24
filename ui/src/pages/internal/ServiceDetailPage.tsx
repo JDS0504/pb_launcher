@@ -21,12 +21,12 @@ export const ServiceDetailPage = () => {
   };
 
   const menuItemClass = (section: string) =>
-    `btn btn-ghost justify-start w-full text-left ${activeSection === section ? "bg-primary text-primary-content" : ""}`;
+    `btn btn-ghost shrink-0 justify-start whitespace-nowrap text-left md:w-full ${activeSection === section ? "bg-primary text-primary-content" : ""}`;
 
   if (service_id == null || service_id === "") return <Navigate to={"/"} />;
   return (
-    <div className="flex h-full flex-col md:flex-row bg-base-100 text-base-content">
-      <div className="md:hidden p-4 flex justify-end items-center border-b border-base-300">
+    <div className="flex h-full min-w-0 flex-col bg-base-100 text-base-content md:flex-row">
+      <div className="flex items-center justify-end border-b border-base-300 p-2 sm:p-4 md:hidden">
         <button
           className="btn btn-ghost"
           onClick={() => setMenuOpen(!menuOpen)}
@@ -39,9 +39,10 @@ export const ServiceDetailPage = () => {
         </button>
       </div>
 
-      {(menuOpen || window.innerWidth >= 768) && (
-        <aside className="w-full md:w-64 bg-base-200 p-4 border-b md:border-b-0 md:border-r border-base-300 md:block">
-          <ul className="menu flex md:flex-col flex-wrap gap-2">
+      <aside
+        className={`${menuOpen ? "block" : "hidden"} w-full border-b border-base-300 bg-base-200 p-2 sm:p-4 md:block md:w-64 md:shrink-0 md:border-b-0 md:border-r`}
+      >
+        <ul className="menu menu-horizontal w-full flex-nowrap gap-2 overflow-x-auto p-0 md:menu-vertical md:overflow-visible">
             <li>
               <button
                 className={menuItemClass("general")}
@@ -98,15 +99,14 @@ export const ServiceDetailPage = () => {
                 Settings
               </button>
             </li> */}
-          </ul>
-        </aside>
-      )}
+        </ul>
+      </aside>
 
-      <main className="flex-1 p-4 md:p-6 overflow-auto">
+      <main className="min-w-0 flex-1 overflow-auto p-3 sm:p-4 md:p-6">
         {activeSection === "general" && (
           <div className="mb-8 ">
             <h3 className="text-lg font-semibold mb-6">General</h3>
-            <div className="md:px-4 py-6 bg-base-200 rounded-box">
+            <div className="rounded-box bg-base-200 p-3 sm:p-4 md:py-6">
               <GeneralSection service_id={service_id} />
             </div>
           </div>
@@ -128,7 +128,7 @@ export const ServiceDetailPage = () => {
         {activeSection === "logs" && (
           <div className="mb-8">
             <h3 className="text-lg font-semibold mb-6">Logs</h3>
-            <div className="px-4 py-4 bg-base-200 rounded-box">
+            <div className="rounded-box bg-base-200 p-3 sm:p-4">
               <ServiceLogsSection service_id={service_id} />
             </div>
           </div>
@@ -137,7 +137,7 @@ export const ServiceDetailPage = () => {
         {activeSection === "history" && (
           <div className="mb-8">
             <h3 className="text-lg font-semibold mb-6">History</h3>
-            <div className="px-4 py-4 bg-base-200 rounded-box">
+            <div className="rounded-box bg-base-200 p-3 sm:p-4">
               <OperationHistorySection service_id={service_id} />
             </div>
           </div>
@@ -146,7 +146,7 @@ export const ServiceDetailPage = () => {
         {activeSection === "snapshots" && (
           <div className="mb-8">
             <h3 className="text-lg font-semibold mb-6">Snapshots</h3>
-            <div className="px-4 py-4 bg-base-200 rounded-box">
+            <div className="rounded-box bg-base-200 p-3 sm:p-4">
               <SnapshotsSection service_id={service_id} />
             </div>
           </div>
@@ -155,7 +155,7 @@ export const ServiceDetailPage = () => {
         {activeSection === "hooks" && (
           <div className="mb-8">
             <h3 className="text-lg font-semibold mb-6">PB Hooks</h3>
-            <div className="px-4 py-4 bg-base-200 rounded-box">
+            <div className="rounded-box bg-base-200 p-3 sm:p-4">
               <PBHooksSection service_id={service_id} />
             </div>
           </div>
@@ -164,7 +164,7 @@ export const ServiceDetailPage = () => {
         {activeSection === "settings" && (
           <div className="mb-8">
             <h3 className="text-lg font-semibold mb-6">Settings</h3>
-            <div className="px-4 py-8 bg-base-200 rounded-box">
+            <div className="rounded-box bg-base-200 p-3 sm:p-4 md:py-8">
               Settings panel
             </div>
           </div>

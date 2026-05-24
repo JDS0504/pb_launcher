@@ -40,64 +40,64 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
         style={{ height: DASHBOARD_LAYOUT_APP_BAR_HEIGHT }}
         className="w-full bg-base-100 shadow-sm"
       >
-        <div className="mx-auto w-full px-4 py-3 flex items-center justify-between">
-          <div className="flex">
+        <div className="mx-auto flex w-full items-center justify-between gap-2 px-2 py-3 sm:px-4">
+          <nav className="flex min-w-0 flex-1 overflow-x-auto">
             <NavLink
               to="/"
               className={classNames(
-                "btn btn-sm btn-ghost gap-2 text-base-content transition-colors",
+                "btn btn-sm btn-ghost shrink-0 gap-2 text-base-content transition-colors",
                 {
                   "bg-base-200 text-primary": selected === "service",
                 },
               )}
             >
               <Server className="w-4 h-4" />
-              Services
+              <span className="hidden sm:inline">Services</span>
             </NavLink>
 
             <NavLink
               to="/proxy"
               className={classNames(
-                "btn btn-sm btn-ghost gap-2 text-base-content transition-colors",
+                "btn btn-sm btn-ghost shrink-0 gap-2 text-base-content transition-colors",
                 {
                   "bg-base-200 text-primary": selected === "proxy",
                 },
               )}
             >
               <Waypoints className="w-4 h-4" />
-              Proxy
+              <span className="hidden sm:inline">Proxy</span>
             </NavLink>
 
             <NavLink
               to="/settings"
               className={classNames(
-                "btn btn-sm btn-ghost gap-2 text-base-content transition-colors",
+                "btn btn-sm btn-ghost shrink-0 gap-2 text-base-content transition-colors",
                 {
                   "bg-base-200 text-primary": selected === "settings",
                 },
               )}
             >
               <Settings className="w-4 h-4" />
-              Settings
+              <span className="hidden sm:inline">Settings</span>
             </NavLink>
 
             <NavLink
               to="/operations"
               className={classNames(
-                "btn btn-sm btn-ghost gap-2 text-base-content transition-colors",
+                "btn btn-sm btn-ghost shrink-0 gap-2 text-base-content transition-colors",
                 {
                   "bg-base-200 text-primary": selected === "operations",
                 },
               )}
             >
               <History className="w-4 h-4" />
-              Operations
+              <span className="hidden sm:inline">Operations</span>
             </NavLink>
-          </div>
-          <div className="dropdown dropdown-end">
-            <label tabIndex={0} className="btn btn-sm btn-ghost gap-2">
+          </nav>
+          <div className="dropdown dropdown-end shrink-0">
+            <label tabIndex={0} className="btn btn-sm btn-ghost gap-2 px-2 sm:px-3">
               <User className="w-4 h-4" />
-              Account
+              <span className="hidden sm:inline">Account</span>
             </label>
             <ul
               tabIndex={0}
@@ -122,7 +122,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
 
       <main
         style={{ height: height - DASHBOARD_LAYOUT_APP_BAR_HEIGHT }}
-        className="w-full flex-1 px-4 py-6"
+        className="w-full flex-1 overflow-auto px-2 py-4 sm:px-4 sm:py-6"
       >
         {children || <Outlet />}
       </main>

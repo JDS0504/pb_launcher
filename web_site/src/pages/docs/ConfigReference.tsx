@@ -1,5 +1,5 @@
 export const ConfigReference = () => (
-  <section className="p-6 bg-white rounded-2xl shadow-xl">
+  <section className="overflow-hidden rounded-2xl bg-white p-4 shadow-xl sm:p-6">
     <h2 className="text-2xl font-bold mb-5">Config Reference</h2>
 
     <h3 className="text-lg font-semibold mb-3">Network settings</h3>

@@ -34,11 +34,13 @@ export const ConfirmModalProvider = ({ children }: { children: ReactNode }) => {
     if (!isOpen) return null;
 
     return (
-      <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-[9999]">
-        <div className="bg-base-100 p-6 rounded-lg shadow-lg w-full max-w-sm">
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-2 sm:p-4">
+        <div className="w-full max-w-sm rounded-lg bg-base-100 p-4 shadow-lg sm:p-6">
           <h3 className="text-lg font-bold mb-2">{title}</h3>
-          <p className="text-base-content/80 mb-6">{message}</p>
-          <div className="flex justify-end gap-4">
+          <p className="mb-5 text-sm text-base-content/80 sm:mb-6 sm:text-base">
+            {message}
+          </p>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-4">
             <button className="btn btn-ghost" onClick={handleCancel}>
               Cancel
             </button>

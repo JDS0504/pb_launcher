@@ -9,15 +9,18 @@ export const DocsLayout: React.FC = () => {
   const isActive = (path: string): boolean => location.pathname === path;
 
   return (
-    <div className="flex">
-      <div className="w-64 h-screen bg-gray-900 text-white p-6 flex flex-col gap-4 fixed">
-        <Link to="/" className="text-2xl font-bold mb-8 hover:text-gray-200">
+    <div className="min-h-screen bg-gray-100 md:flex">
+      <div className="bg-gray-900 text-white p-4 md:fixed md:h-screen md:w-64 md:p-6">
+        <Link
+          to="/"
+          className="block text-2xl font-bold hover:text-gray-200 md:mb-8"
+        >
           PBLauncher
         </Link>
-        <nav className="flex flex-col gap-3">
+        <nav className="mt-4 flex gap-2 overflow-x-auto pb-1 md:mt-0 md:flex-col md:gap-3 md:overflow-visible md:pb-0">
           <Link
             to="/"
-            className={classNames("rounded px-3 py-2 hover:bg-gray-800", {
+            className={classNames("shrink-0 rounded px-3 py-2 hover:bg-gray-800", {
               "bg-gray-800 font-bold": isActive("/"),
             })}
           >
@@ -25,7 +28,7 @@ export const DocsLayout: React.FC = () => {
           </Link>
           <Link
             to="/docs"
-            className={classNames("rounded px-3 py-2 hover:bg-gray-800", {
+            className={classNames("shrink-0 rounded px-3 py-2 hover:bg-gray-800", {
               "bg-gray-800 font-bold": isActive("/docs"),
             })}
           >
@@ -33,20 +36,23 @@ export const DocsLayout: React.FC = () => {
           </Link>
           <Link
             to="/docs/config"
-            className={classNames("rounded px-3 py-2 hover:bg-gray-800", {
-              "bg-gray-800 font-bold": isActive("/docs/config"),
-            })}
+            className={classNames(
+              "shrink-0 rounded px-3 py-2 hover:bg-gray-800",
+              {
+                "bg-gray-800 font-bold": isActive("/docs/config"),
+              },
+            )}
           >
             Config Reference
           </Link>
         </nav>
       </div>
-      <div className="flex-1 ml-64 p-8">
+      <main className="min-w-0 flex-1 p-4 md:ml-64 md:p-8">
         <Routes>
           <Route path="/" element={<Instructions />} />
           <Route path="config" element={<ConfigReference />} />
         </Routes>
-      </div>
+      </main>
     </div>
   );
 };

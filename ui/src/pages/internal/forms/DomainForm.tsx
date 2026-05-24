@@ -80,7 +80,7 @@ export const DomainForm: FC<Props> = ({
 
   const isWide = !width || width > 400;
   return (
-    <div style={{ width: width ?? 300 }}>
+    <div style={{ width: width ?? 300, maxWidth: "100%" }}>
       <form onSubmit={handleFormSubmit} className="space-y-5">
         <InputField
           label="Domain"

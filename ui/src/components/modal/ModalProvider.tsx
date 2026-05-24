@@ -66,16 +66,16 @@ export const ModalProvider: React.FC<{ children: ReactNode }> = ({
               >
                 <div
                   className={classNames(
-                    "modal-box w-full max-w-[calc(100vw-2rem)] max-h-[calc(100vh-2rem)]",
+                    "modal-box w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] max-h-[calc(100dvh-1rem)] sm:w-full sm:max-w-[calc(100vw-2rem)] sm:max-h-[calc(100dvh-2rem)]",
                     "flex flex-col overflow-hidden",
                     "bg-base-100 text-base-content shadow-xl",
-                    "p-4 sm:p-6",
+                    "p-3 sm:p-5 md:p-6",
                   )}
                   style={modalStyle}
                   onClick={e => e.stopPropagation()}
                 >
                   {!disableCloseButton && (
-                    <div className="absolute right-4 top-4 z-10">
+                    <div className="absolute right-2 top-2 z-10 sm:right-4 sm:top-4">
                       <button
                         onClick={closeModal}
                         className="btn btn-sm btn-circle btn-ghost"
@@ -86,11 +86,11 @@ export const ModalProvider: React.FC<{ children: ReactNode }> = ({
                     </div>
                   )}
                   {title && (
-                    <div className="mb-4">
-                      <h3 className="text-xl font-semibold">{title}</h3>
+                    <div className="mb-3 pr-10 sm:mb-4">
+                      <h3 className="text-lg font-semibold sm:text-xl">{title}</h3>
                     </div>
                   )}
-                  <div className="flex-1 overflow-y-auto">{modalBody}</div>
+                  <div className="min-w-0 flex-1 overflow-y-auto">{modalBody}</div>
                 </div>
               </dialog>
             );

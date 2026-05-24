@@ -97,7 +97,7 @@ export const LandingPage = () => {
       <main>
         <section className="relative overflow-hidden border-b border-border/60">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,120,73,0.24),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(92,124,250,0.16),transparent_30%)]" />
-          <div className="relative mx-auto grid max-w-7xl gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:px-8 lg:py-28">
+          <div className="relative mx-auto grid max-w-[90rem] gap-12 px-4 py-16 sm:px-6 md:py-20 lg:grid-cols-[0.85fr_1.15fr] lg:items-center lg:px-8 lg:py-28 xl:grid-cols-[0.8fr_1.2fr]">
             <div className="flex flex-col justify-center">
               <div className="mb-6 inline-flex w-fit items-center gap-2 rounded-full border border-accent/40 bg-accent/10 px-4 py-2 text-sm text-accent-light">
                 <BadgeCheck className="h-4 w-4" />
@@ -147,15 +147,15 @@ export const LandingPage = () => {
               </dl>
             </div>
 
-            <div className="relative">
-              <div className="rounded-3xl border border-border bg-surface/80 p-3 shadow-2xl shadow-black/40">
+            <div className="relative min-w-0 lg:-mr-6 xl:-mr-12">
+              <div className="rounded-3xl border border-border bg-surface/80 p-2 shadow-2xl shadow-black/40 sm:p-3">
                 <img
                   src="/screenshot.png"
                   alt="PBLauncher dashboard showing PocketBase instances and management actions"
-                  className="rounded-2xl border border-border object-cover"
+                  className="h-auto w-full rounded-2xl border border-border object-cover"
                 />
               </div>
-              <div className="absolute -bottom-6 left-6 right-6 rounded-2xl border border-border bg-background/95 p-5 shadow-xl backdrop-blur">
+              <div className="mt-3 rounded-2xl border border-border bg-background/95 p-4 shadow-xl backdrop-blur sm:absolute sm:-bottom-6 sm:left-6 sm:right-6 sm:mt-0 sm:p-5">
                 <div className="flex items-start gap-3">
                   <Workflow className="mt-1 h-5 w-5 text-accent" />
                   <p className="text-sm leading-6 text-subtle">
