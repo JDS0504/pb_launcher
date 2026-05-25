@@ -55,7 +55,27 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 				dbx.Params{"domain": friendlyDomain},
 			)
 			if err == nil && existing != nil {
-				return apis.NewBadRequestError(fmt.Sprintf("el nombre '%s' no está disponible porque el dominio '%s' ya está en uso", name, friendlyDomain), nil)
+				serviceId := existing.GetString("service")
+				isOrphanOrDeleted := false
+				if serviceId != "" {
+					serviceRecord, err := e.App.FindRecordById(collections.Services, serviceId)
+					if err != nil || serviceRecord == nil {
+						isOrphanOrDeleted = true
+					} else {
+						serviceDeleted := serviceRecord.GetDateTime("deleted")
+						if !serviceDeleted.IsZero() {
+							isOrphanOrDeleted = true
+						}
+					}
+				} else {
+					isOrphanOrDeleted = true
+				}
+
+				if isOrphanOrDeleted {
+					_ = e.App.Delete(existing)
+				} else {
+					return apis.NewBadRequestError(fmt.Sprintf("el nombre '%s' no está disponible porque el dominio '%s' ya está en uso", name, friendlyDomain), nil)
+				}
 			}
 
 			restart_policy := e.Record.GetString("restart_policy")
@@ -90,6 +110,16 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 			return err
 		}
 		if !deleted.IsZero() {
+			domains, err := e.App.FindAllRecords(
+				collections.ServicesDomains,
+				dbx.HashExp{"service": e.Record.Id},
+			)
+			if err == nil {
+				for _, domainRecord := range domains {
+					_ = e.App.Delete(domainRecord)
+				}
+			}
+
 			comandCollection, err := e.App.FindCachedCollectionByNameOrId(collections.ServicesComands)
 			if err != nil {
 				return err
