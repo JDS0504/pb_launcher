@@ -145,24 +145,37 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 					}
 				}
 
-				oldDomainRecord, err := e.App.FindFirstRecordByFilter(
+				domainRecords, err := e.App.FindAllRecords(
 					collections.ServicesDomains,
-					"service = {:service} && domain LIKE {:suffix}",
-					dbx.Params{"service": e.Record.Id, "suffix": "%." + rootDomain},
+					dbx.NewExp("service = {:service}", dbx.Params{"service": e.Record.Id}),
 				)
-				if err == nil && oldDomainRecord != nil {
-					oldDomainRecord.Set("domain", newFriendlyDomain)
-					if err := e.App.Save(oldDomainRecord); err != nil {
-						return fmt.Errorf("failed to update domain name: %w", err)
+				if err == nil {
+					var autogenRecords []*core.Record
+					for _, rec := range domainRecords {
+						dom := rec.GetString("domain")
+						if strings.HasSuffix(dom, "."+rootDomain) {
+							autogenRecords = append(autogenRecords, rec)
+						}
 					}
-				} else {
-					domainCollection, err := e.App.FindCachedCollectionByNameOrId(collections.ServicesDomains)
-					if err == nil {
-						domainRecord := core.NewRecord(domainCollection)
-						domainRecord.Set("domain", newFriendlyDomain)
-						domainRecord.Set("service", e.Record.Id)
-						domainRecord.Set("use_https", "yes")
-						_ = e.App.Save(domainRecord)
+
+					if len(autogenRecords) > 0 {
+						first := autogenRecords[0]
+						first.Set("domain", newFriendlyDomain)
+						if err := e.App.Save(first); err != nil {
+							return fmt.Errorf("failed to update domain name: %w", err)
+						}
+						for i := 1; i < len(autogenRecords); i++ {
+							_ = e.App.Delete(autogenRecords[i])
+						}
+					} else {
+						domainCollection, err := e.App.FindCachedCollectionByNameOrId(collections.ServicesDomains)
+						if err == nil {
+							domainRecord := core.NewRecord(domainCollection)
+							domainRecord.Set("domain", newFriendlyDomain)
+							domainRecord.Set("service", e.Record.Id)
+							domainRecord.Set("use_https", "yes")
+							_ = e.App.Save(domainRecord)
+						}
 					}
 				}
 			}
