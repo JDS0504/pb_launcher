@@ -189,7 +189,7 @@ export const serviceService = {
         release_id: s.expand.release.id,
         release_version: s.expand.release.version,
         domains: domains.filter(
-          d => d.service === s.id && d.x_has_valid_ssl_cert,
+          d => d.service === s.id,
         ),
       }),
     );

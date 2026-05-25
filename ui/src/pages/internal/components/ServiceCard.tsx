@@ -50,15 +50,18 @@ export const ServiceCard: FC<Props> = ({
 
   const serviceUrls = useMemo((): string[] => {
     const domains: string[] = [];
+    domains.push(...(service.domains ?? []).map(d => d.domain));
     if (proxyInfo.base_domain) {
       domains.push(`${service.id}.${proxyInfo.base_domain}`);
     }
-    domains.push(...(service.domains ?? []).map(d => d.domain));
     return domains.map(domain => {
+      const customDom = service.domains?.find(d => d.domain === domain);
+      const useHttps = customDom ? customDom.use_https === "yes" : proxyInfo.use_https;
+
       const urlStr = formatUrl(
-        proxyInfo.use_https ? "https" : "http",
+        useHttps ? "https" : "http",
         domain,
-        proxyInfo.use_https ? proxyInfo.https_port : proxyInfo.http_port,
+        useHttps ? proxyInfo.https_port : proxyInfo.http_port,
       );
       if (service._pb_install)
         return `${urlStr}/_/#/pbinstal/${service._pb_install}`;
