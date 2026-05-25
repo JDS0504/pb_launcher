@@ -115,71 +115,56 @@ export const ServiceCard: FC<Props> = ({
               >
                 <li>
                   <button
-                    className="flex items-center gap-2 w-full justify-start hover:bg-base-200 text-primary"
-                    onClick={() => executeAfterBlur(onDetails)}
+                    disabled={
+                      service.status === "running" ||
+                      service.status === "pending"
+                    }
+                    className={classNames(
+                      "flex items-center gap-2 w-full justify-start px-2 py-1 rounded-md text-left",
+                      service.status === "running" ||
+                        service.status === "pending"
+                        ? "text-base-content/40 cursor-not-allowed"
+                        : "text-success hover:bg-success/10 hover:text-success",
+                    )}
+                    onClick={() => executeAfterBlur(onStart)}
                   >
-                    <Pencil className="w-4 h-4" />
-                    Details
+                    <Power className="w-4 h-4 text-success" />
+                    Start
                   </button>
                 </li>
                 <li>
-                  <details className="group">
-                    <summary className="flex items-center gap-2 text-base-content cursor-pointer select-none py-1 px-2 hover:bg-base-200 rounded-md">
-                      <Power className="w-4 h-4" />
-                      <span className="font-medium">Power</span>
-                    </summary>
-                    <ul className="mt-1 space-y-1">
-                      <li>
-                        <button
-                          disabled={
-                            service.status === "running" ||
-                            service.status === "pending"
-                          }
-                          className={classNames(
-                            "flex items-center gap-2 w-full px-2 py-1 rounded-md text-left",
-                            service.status === "running" ||
-                              service.status === "pending"
-                              ? "text-base-content/60 cursor-not-allowed"
-                              : "text-success hover:bg-success/10 hover:text-success",
-                          )}
-                          onClick={() => executeAfterBlur(onStart)}
-                        >
-                          Start
-                        </button>
-                      </li>
-                      <li>
-                        <button
-                          disabled={service.status !== "running"}
-                          className={classNames(
-                            "flex items-center gap-2 w-full px-2 py-1 rounded-md text-left",
-                            service.status !== "running"
-                              ? "text-base-content/60 cursor-not-allowed"
-                              : "text-warning hover:bg-warning/10 hover:text-warning",
-                          )}
-                          onClick={() => executeAfterBlur(onRestart)}
-                        >
-                          Restart
-                        </button>
-                      </li>
-                      <li>
-                        <button
-                          disabled={service.status !== "running"}
-                          className={classNames(
-                            "flex items-center gap-2 w-full px-2 py-1 rounded-md text-left",
-                            service.status !== "running"
-                              ? "text-base-content/60 cursor-not-allowed"
-                              : "text-error hover:bg-error/10 hover:text-error",
-                          )}
-                          onClick={() => executeAfterBlur(onStop)}
-                        >
-                          Stop
-                        </button>
-                      </li>
-                    </ul>
-                  </details>
+                  <button
+                    disabled={service.status !== "running"}
+                    className={classNames(
+                      "flex items-center gap-2 w-full justify-start px-2 py-1 rounded-md text-left",
+                      service.status !== "running"
+                        ? "text-base-content/40 cursor-not-allowed"
+                        : "text-warning hover:bg-warning/10 hover:text-warning",
+                    )}
+                    onClick={() => executeAfterBlur(onRestart)}
+                  >
+                    <Power className="w-4 h-4 text-warning" />
+                    Restart
+                  </button>
+                </li>
+                <li>
+                  <button
+                    disabled={service.status !== "running"}
+                    className={classNames(
+                      "flex items-center gap-2 w-full justify-start px-2 py-1 rounded-md text-left",
+                      service.status !== "running"
+                        ? "text-base-content/40 cursor-not-allowed"
+                        : "text-error hover:bg-error/10 hover:text-error",
+                    )}
+                    onClick={() => executeAfterBlur(onStop)}
+                  >
+                    <Power className="w-4 h-4 text-error" />
+                    Stop
+                  </button>
                 </li>
                 {service.status === "stopped" && (
                   <>
+                    <div className="border-t border-base-300 my-1"></div>
                     <li>
                       <button
                         onClick={() => executeAfterBlur(onUpgrade)}
@@ -209,6 +194,7 @@ export const ServiceCard: FC<Props> = ({
                     </li>
                   </>
                 )}
+                <div className="border-t border-base-300 my-1"></div>
                 <li>
                   <button
                     onClick={() => executeAfterBlur(onDelete)}
@@ -260,6 +246,15 @@ export const ServiceCard: FC<Props> = ({
         {serviceUrls.map(serviceUrl => (
           <CopyableField key={serviceUrl} value={serviceUrl} isUrl />
         ))}
+        <div className="card-actions justify-end mt-4">
+          <button
+            className="btn btn-sm btn-outline btn-primary w-full flex items-center gap-2"
+            onClick={onDetails}
+          >
+            <Pencil className="w-4 h-4" />
+            Details
+          </button>
+        </div>
       </div>
     </div>
   );
