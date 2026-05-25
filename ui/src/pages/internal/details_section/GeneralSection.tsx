@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { FC } from "react";
 import { ServiceForm } from "../forms/ServiceForm";
 import { Navigate } from "react-router-dom";
@@ -11,6 +11,7 @@ type Props = {
 };
 
 export const GeneralSection: FC<Props> = ({ service_id }) => {
+  const queryClient = useQueryClient();
   const serviceQuery = useQuery({
     queryKey: ["services", service_id],
     queryFn: () => serviceService.fetchServiceByID(service_id),
@@ -38,7 +39,9 @@ export const GeneralSection: FC<Props> = ({ service_id }) => {
     <div className="relative pt-4">
       <ServiceForm
         record={service}
-        onSaveRecord={() => setTimeout(() => serviceQuery.refetch())}
+        onSaveRecord={() => {
+          queryClient.invalidateQueries({ queryKey: ["services", service_id] });
+        }}
       />
       <p
         className={classNames("badge badge-sm absolute -top-2 right-2", {
