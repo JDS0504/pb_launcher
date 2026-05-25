@@ -6,7 +6,7 @@ import (
 	"pb_launcher/collections"
 	"pb_launcher/configs"
 	"pb_launcher/internal/proxy/domain"
-	"regexp"
+	"pb_launcher/utils/domainutil"
 	"slices"
 	"strings"
 
@@ -15,15 +15,6 @@ import (
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
 )
-
-var slugRegex = regexp.MustCompile(`[^a-z0-9]+`)
-
-func sanitizeToSlug(name string) string {
-	slug := strings.ToLower(name)
-	slug = slugRegex.ReplaceAllString(slug, "-")
-	slug = strings.Trim(slug, "-")
-	return slug
-}
 
 func AddServiceHooks(app *pocketbase.PocketBase,
 	serviceDiscovery *domain.ServiceDiscovery,
@@ -36,18 +27,10 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 			}
 
 			name := e.Record.GetString("name")
-			slug := sanitizeToSlug(name)
-			if slug == "" {
+			friendlyDomain, err := domainutil.GenerateFriendlyDomain(name, cnf.GetDomain())
+			if err != nil {
 				return apis.NewBadRequestError("el nombre del servicio no es válido", nil)
 			}
-
-			domainBase := cnf.GetDomain()
-			parts := strings.SplitN(domainBase, ".", 2)
-			rootDomain := domainBase
-			if len(parts) > 1 {
-				rootDomain = parts[1]
-			}
-			friendlyDomain := fmt.Sprintf("%s.%s", slug, rootDomain)
 
 			existing, err := e.App.FindFirstRecordByFilter(
 				collections.ServicesDomains,
@@ -103,16 +86,14 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 
 		oldName := currentRecord.GetString("name")
 		if oldName != updatedName && deleted.IsZero() {
-			oldSlug := sanitizeToSlug(oldName)
-			newSlug := sanitizeToSlug(updatedName)
+			oldSlug := domainutil.SanitizeToSlug(oldName)
+			newSlug := domainutil.SanitizeToSlug(updatedName)
 			if oldSlug != newSlug {
-				domainBase := cnf.GetDomain()
-				parts := strings.SplitN(domainBase, ".", 2)
-				rootDomain := domainBase
-				if len(parts) > 1 {
-					rootDomain = parts[1]
+				newFriendlyDomain, err := domainutil.GenerateFriendlyDomain(updatedName, cnf.GetDomain())
+				if err != nil {
+					return apis.NewBadRequestError("el nombre del servicio no es válido", nil)
 				}
-				newFriendlyDomain := fmt.Sprintf("%s.%s", newSlug, rootDomain)
+				rootDomain := domainutil.RootDomain(cnf.GetDomain())
 
 				existing, err := e.App.FindFirstRecordByFilter(
 					collections.ServicesDomains,
@@ -225,14 +206,10 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 		}
 
 		name := e.Record.GetString("name")
-		slug := sanitizeToSlug(name)
-		domainBase := cnf.GetDomain()
-		parts := strings.SplitN(domainBase, ".", 2)
-		rootDomain := domainBase
-		if len(parts) > 1 {
-			rootDomain = parts[1]
+		friendlyDomain, err := domainutil.GenerateFriendlyDomain(name, cnf.GetDomain())
+		if err != nil {
+			return fmt.Errorf("invalid service name: %w", err)
 		}
-		friendlyDomain := fmt.Sprintf("%s.%s", slug, rootDomain)
 
 		domainCollection, err := e.App.FindCachedCollectionByNameOrId(collections.ServicesDomains)
 		if err != nil {

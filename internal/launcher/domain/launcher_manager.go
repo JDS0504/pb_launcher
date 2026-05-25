@@ -547,7 +547,7 @@ func (lm *LauncherManager) WakeupService(ctx context.Context, serviceID string) 
 	}
 	if service.Status == models.Stopped {
 		lm.rwMtx.Unlock()
-		return "", 0, fmt.Errorf("service is manually stopped by administrator")
+		return "", 0, fmt.Errorf("service is stopped or paused")
 	}
 
 	// Iniciar

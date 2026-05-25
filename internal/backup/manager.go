@@ -15,6 +15,7 @@ import (
 	"pb_launcher/internal/launcher/domain/models"
 	"pb_launcher/internal/launcher/domain/repositories"
 	"pb_launcher/internal/operationlog"
+	"pb_launcher/utils/domainutil"
 	"sort"
 	"strings"
 	"time"
@@ -61,6 +62,7 @@ type SnapshotInfo struct {
 type Manager struct {
 	app          *pocketbase.PocketBase
 	dataDir      string
+	domainBase   string
 	serviceRepo  repositories.ServiceRepository
 	commandsRepo repositories.CommandsRepository
 	downloader   *download.DownloadUsecase
@@ -82,6 +84,7 @@ func NewManager(
 	return &Manager{
 		app:          app,
 		dataDir:      cfg.GetDataDir(),
+		domainBase:   cfg.GetDomain(),
 		serviceRepo:  serviceRepo,
 		commandsRepo: commandsRepo,
 		downloader:   downloader,
@@ -357,8 +360,16 @@ func (m *Manager) Restore(ctx context.Context, backupPath string, name string) (
 
 	record.Set("status", string(models.Stopped))
 	if err := m.app.Save(record); err != nil {
+		_ = os.RemoveAll(serviceDir)
 		return "", err
 	}
+
+	if err := m.createFriendlyDomain(record); err != nil {
+		_ = m.app.Delete(record)
+		_ = os.RemoveAll(serviceDir)
+		return "", err
+	}
+
 	if err := m.commandsRepo.PublishStartCommand(ctx, record.Id); err != nil {
 		m.logger.Error(ctx, record.Id, "restore", err.Error(), map[string]any{"source_version": manifest.Service.Version})
 		return "", err
@@ -415,8 +426,16 @@ func (m *Manager) Clone(ctx context.Context, sourceServiceID string, name string
 
 	record.Set("status", string(models.Stopped))
 	if err := m.app.Save(record); err != nil {
+		_ = os.RemoveAll(targetDir)
 		return "", err
 	}
+
+	if err := m.createFriendlyDomain(record); err != nil {
+		_ = m.app.Delete(record)
+		_ = os.RemoveAll(targetDir)
+		return "", err
+	}
+
 	if err := m.commandsRepo.PublishStartCommand(ctx, record.Id); err != nil {
 		m.logger.Error(ctx, record.Id, "clone", err.Error(), map[string]any{"source_service_id": source.ID})
 		return "", err
@@ -504,3 +523,53 @@ func copyFile(source, destination string, mode os.FileMode) error {
 	_, err = io.Copy(out, in)
 	return err
 }
+
+func (m *Manager) createFriendlyDomain(serviceRecord *core.Record) error {
+	friendlyDomain, err := domainutil.GenerateFriendlyDomain(serviceRecord.GetString("name"), m.domainBase)
+	if err != nil {
+		return nil
+	}
+
+	domainCollection, err := m.app.FindCachedCollectionByNameOrId(collections.ServicesDomains)
+	if err != nil {
+		return err
+	}
+
+	existing, err := m.app.FindFirstRecordByFilter(
+		collections.ServicesDomains,
+		"domain = {:domain}",
+		map[string]any{"domain": friendlyDomain},
+	)
+	if err == nil && existing != nil {
+		serviceId := existing.GetString("service")
+		isOrphanOrDeleted := false
+		if serviceId != "" {
+			serviceRecord, err := m.app.FindRecordById(collections.Services, serviceId)
+			if err != nil || serviceRecord == nil {
+				isOrphanOrDeleted = true
+			} else {
+				serviceDeleted := serviceRecord.GetDateTime("deleted")
+				if !serviceDeleted.IsZero() {
+					isOrphanOrDeleted = true
+				}
+			}
+		} else {
+			isOrphanOrDeleted = true
+		}
+
+		if isOrphanOrDeleted {
+			_ = m.app.Delete(existing)
+		} else {
+			return fmt.Errorf("el nombre '%s' no está disponible porque el dominio '%s' ya está en uso", serviceRecord.GetString("name"), friendlyDomain)
+		}
+	}
+
+	domainRecord := core.NewRecord(domainCollection)
+	domainRecord.Set("domain", friendlyDomain)
+	domainRecord.Set("service", serviceRecord.Id)
+	domainRecord.Set("use_https", "yes")
+
+	return m.app.Save(domainRecord)
+}
+
+
