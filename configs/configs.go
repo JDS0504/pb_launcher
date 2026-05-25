@@ -47,6 +47,9 @@ type Config interface {
 	GetHttpsPort() string
 	GetAcmeEmail() string
 
+	GetInstanceCpuQuota() string
+	GetInstanceMemoryLimit() string
+
 	GetTlsConfig() TlsConfig
 }
 
@@ -99,6 +102,9 @@ type configs struct {
 	CertRequestExecutorInterval string `mapstructure:"cert_request_executor_interval" yaml:"cert_request_executor_interval"` // default: 1m
 
 	AcmeEmail string `mapstructure:"acme_email" yaml:"acme_email"`
+
+	InstanceCpuQuota    string `mapstructure:"instance_cpu_quota" yaml:"instance_cpu_quota"`       // default: 20%
+	InstanceMemoryLimit string `mapstructure:"instance_memory_limit" yaml:"instance_memory_limit"` // default: 512M
 
 	Tls tls_configs `mapstructure:"cert" yaml:"cert"`
 }
@@ -206,6 +212,26 @@ func (c *configs) GetAcmeEmail() string {
 	return strings.TrimSpace(c.AcmeEmail)
 }
 
+func (c *configs) GetInstanceCpuQuota() string {
+	if c.InstanceCpuQuota == "" {
+		return "20%"
+	}
+	if strings.EqualFold(c.InstanceCpuQuota, "none") || strings.EqualFold(c.InstanceCpuQuota, "disabled") {
+		return ""
+	}
+	return c.InstanceCpuQuota
+}
+
+func (c *configs) GetInstanceMemoryLimit() string {
+	if c.InstanceMemoryLimit == "" {
+		return "512M"
+	}
+	if strings.EqualFold(c.InstanceMemoryLimit, "none") || strings.EqualFold(c.InstanceMemoryLimit, "disabled") {
+		return ""
+	}
+	return c.InstanceMemoryLimit
+}
+
 func (c *configs) GetMinCertificateTtl() time.Duration {
 	return parseDurationWithMin(
 		c.MinCertificateTtl,
@@ -286,6 +312,8 @@ func LoadConfigs(configPath string) (Config, error) {
 	c.HttpPort = strings.TrimSpace(c.HttpPort)
 	c.HttpsPort = strings.TrimSpace(c.HttpsPort)
 	c.AcmeEmail = strings.TrimSpace(c.AcmeEmail)
+	c.InstanceCpuQuota = strings.TrimSpace(c.InstanceCpuQuota)
+	c.InstanceMemoryLimit = strings.TrimSpace(c.InstanceMemoryLimit)
 
 	if err := is.IPv4.Validate(c.GetBindIPAddress()); err != nil {
 		slog.Error(

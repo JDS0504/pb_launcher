@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os/exec"
+	"runtime"
 	"syscall"
 	"time"
 )
@@ -16,9 +17,11 @@ type ProcessErrorMessage struct {
 }
 
 type ProcessOptions struct {
-	errChan chan<- ProcessErrorMessage
-	stderr  io.Writer
-	stdout  io.Writer
+	errChan     chan<- ProcessErrorMessage
+	stderr      io.Writer
+	stdout      io.Writer
+	cpuQuota    string
+	memoryLimit string
 }
 
 type ProcessOption = func(*ProcessOptions)
@@ -33,6 +36,14 @@ func WithStdout(w io.Writer) ProcessOption {
 
 func WithStderr(w io.Writer) ProcessOption {
 	return func(options *ProcessOptions) { options.stderr = w }
+}
+
+func WithCpuQuota(quota string) ProcessOption {
+	return func(options *ProcessOptions) { options.cpuQuota = quota }
+}
+
+func WithMemoryLimit(limit string) ProcessOption {
+	return func(options *ProcessOptions) { options.memoryLimit = limit }
 }
 
 type Process struct {
@@ -74,7 +85,30 @@ func (p *Process) Start() error {
 
 	p.closeChan = make(chan struct{})
 
-	cmd := exec.Command(p.command, p.args...)
+	command := p.command
+	args := p.args
+
+	if runtime.GOOS == "linux" && (p.options.cpuQuota != "" || p.options.memoryLimit != "") {
+		if systemdRunPath, err := exec.LookPath("systemd-run"); err == nil {
+			unitName := fmt.Sprintf("pblauncher-%s", p.id)
+			systemdArgs := []string{
+				"--scope",
+				"--unit=" + unitName,
+			}
+			if p.options.cpuQuota != "" {
+				systemdArgs = append(systemdArgs, "-p", "CPUQuota="+p.options.cpuQuota)
+			}
+			if p.options.memoryLimit != "" {
+				systemdArgs = append(systemdArgs, "-p", "MemoryMax="+p.options.memoryLimit)
+			}
+			systemdArgs = append(systemdArgs, command)
+			systemdArgs = append(systemdArgs, args...)
+			command = systemdRunPath
+			args = systemdArgs
+		}
+	}
+
+	cmd := exec.Command(command, args...)
 	cmd.Env = []string{}
 	if p.options.stdout != nil {
 		cmd.Stdout = p.options.stdout

@@ -38,8 +38,10 @@ type LauncherManager struct {
 	lstore              *logstore.ServiceLogDB
 	operationLogger     *operationlog.Logger
 	//
-	processList map[string]*process.Process
-	errChan     chan process.ProcessErrorMessage
+	processList     map[string]*process.Process
+	errChan         chan process.ProcessErrorMessage
+	cpuQuota        string
+	memoryLimit     string
 }
 
 func NewLauncherManager(
@@ -64,6 +66,8 @@ func NewLauncherManager(
 		ipAddress:           c.GetBindIPAddress(),
 		processList:         make(map[string]*process.Process),
 		errChan:             make(chan process.ProcessErrorMessage, 10),
+		cpuQuota:            c.GetInstanceCpuQuota(),
+		memoryLimit:         c.GetInstanceMemoryLimit(),
 	}
 	go lm.handleServiceErrors()
 	return lm
@@ -254,6 +258,8 @@ func (lm *LauncherManager) startService(ctx context.Context, service models.Serv
 		process.WithErrorChan(lm.errChan),
 		process.WithStdout(stdout),
 		process.WithStderr(lm.lstore.NewWriter(service.ID, logstore.StreamStderr)),
+		process.WithCpuQuota(lm.cpuQuota),
+		process.WithMemoryLimit(lm.memoryLimit),
 	)
 
 	if err := newProcess.Start(); err != nil {
