@@ -46,7 +46,6 @@ var (
 	lastUser    uint64
 	lastChecked time.Time
 )
-
 func collectCPU() CPUInfo {
 	cpuMutex.Lock()
 	defer cpuMutex.Unlock()
@@ -88,7 +87,31 @@ func collectCPU() CPUInfo {
 		cpuMutex.Unlock()
 		time.Sleep(100 * time.Millisecond)
 		cpuMutex.Lock()
-		return collectCPU()
+
+		var nextIdle, nextKernel, nextUser filetime
+		r2, _, _ := procGetSystemTimes.Call(
+			uintptr(unsafe.Pointer(&nextIdle)),
+			uintptr(unsafe.Pointer(&nextKernel)),
+			uintptr(unsafe.Pointer(&nextUser)),
+		)
+		if r2 != 0 {
+			nIdle := nextIdle.toUint64()
+			nKernel := nextKernel.toUint64()
+			nUser := nextUser.toUint64()
+
+			idleDiff := nIdle - lastIdle
+			kernelDiff := nKernel - lastKernel
+			userDiff := nUser - lastUser
+			total := kernelDiff + userDiff
+
+			if total > 0 && total >= idleDiff {
+				active := total - idleDiff
+				usage = (float64(active) / float64(total)) * 100
+			}
+			currIdle = nIdle
+			currKernel = nKernel
+			currUser = nUser
+		}
 	}
 
 	lastIdle = currIdle

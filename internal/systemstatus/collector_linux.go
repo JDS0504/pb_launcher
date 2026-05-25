@@ -48,7 +48,6 @@ func getCPUStats() (idle, total uint64, err error) {
 	}
 	return 0, 0, os.ErrInvalid
 }
-
 func collectCPU() CPUInfo {
 	cpuMutex.Lock()
 	defer cpuMutex.Unlock()
@@ -74,7 +73,19 @@ func collectCPU() CPUInfo {
 		cpuMutex.Unlock()
 		time.Sleep(100 * time.Millisecond)
 		cpuMutex.Lock()
-		return collectCPU()
+
+		nextIdle, nextTotal, err := getCPUStats()
+		if err != nil {
+			return CPUInfo{UsagePercent: 0, Cores: runtime.NumCPU()}
+		}
+		totalDiff := nextTotal - lastTotal
+		idleDiff := nextIdle - lastIdle
+		if totalDiff > 0 && totalDiff >= idleDiff {
+			active := totalDiff - idleDiff
+			usage = (float64(active) / float64(totalDiff)) * 100
+		}
+		currIdle = nextIdle
+		currTotal = nextTotal
 	}
 
 	lastIdle = currIdle

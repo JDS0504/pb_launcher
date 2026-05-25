@@ -14,6 +14,7 @@ import (
 
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
+	"github.com/pocketbase/pocketbase/core"
 )
 
 type ServiceRepository struct {
@@ -153,103 +154,64 @@ func (s *ServiceRepository) FindRelease(ctx context.Context, id string) (*models
 	}, nil
 }
 
-// MarkServiceStoped implements repositories.ServiceRepository.
-func (s *ServiceRepository) MarkServiceStoped(ctx context.Context, id string) error {
-
+// updateRecord is a helper to find a service record, apply changes, and save it, ensuring DRY.
+func (s *ServiceRepository) updateRecord(id string, updateFn func(r *core.Record)) error {
 	record, err := s.app.FindRecordById(collections.Services, id)
 	if err != nil {
 		return err
 	}
+	updateFn(record)
+	return s.app.Save(record)
+}
 
-	record.Set("status", string(models.Stopped))
-	record.Set("error_message", nil)
-
-	if err := s.app.Save(record); err != nil {
-		return err
-	}
-
-	return nil
+// MarkServiceStoped implements repositories.ServiceRepository.
+func (s *ServiceRepository) MarkServiceStoped(ctx context.Context, id string) error {
+	return s.updateRecord(id, func(record *core.Record) {
+		record.Set("status", string(models.Stopped))
+		record.Set("error_message", nil)
+	})
 }
 
 // MarkServiceSleeping implements repositories.ServiceRepository.
 func (s *ServiceRepository) MarkServiceSleeping(ctx context.Context, id string) error {
-	record, err := s.app.FindRecordById(collections.Services, id)
-	if err != nil {
-		return err
-	}
-
-	record.Set("status", string(models.Sleeping))
-	record.Set("error_message", nil)
-
-	if err := s.app.Save(record); err != nil {
-		return err
-	}
-
-	return nil
+	return s.updateRecord(id, func(record *core.Record) {
+		record.Set("status", string(models.Sleeping))
+		record.Set("error_message", nil)
+	})
 }
 
 // MarkServiceFailure implements repositories.ServiceRepository.
 func (s *ServiceRepository) MarkServiceFailure(ctx context.Context, id string, errorMessage string) error {
-
-	record, err := s.app.FindRecordById(collections.Services, id)
-	if err != nil {
-		return err
-	}
-
-	record.Set("status", string(models.Failure))
-	record.Set("error_message", errorMessage)
-
-	if err := s.app.Save(record); err != nil {
-		return err
-	}
-
-	return nil
+	return s.updateRecord(id, func(record *core.Record) {
+		record.Set("status", string(models.Failure))
+		record.Set("error_message", errorMessage)
+	})
 }
 
 // MarkServiceRunning implements repositories.ServiceRepository.
 func (s *ServiceRepository) MarkServiceRunning(ctx context.Context, id, listenIp, port string) error {
-
-	record, err := s.app.FindRecordById(collections.Services, id)
-	if err != nil {
-		return err
-	}
-
-	record.Set("status", string(models.Running))
-	record.Set("last_started", time.Now())
-	record.Set("error_message", nil)
-	record.Set("ip", listenIp)
-	record.Set("port", port)
-
-	if err := s.app.Save(record); err != nil {
-		return err
-	}
-
-	return nil
+	return s.updateRecord(id, func(record *core.Record) {
+		record.Set("status", string(models.Running))
+		record.Set("last_started", time.Now())
+		record.Set("error_message", nil)
+		record.Set("ip", listenIp)
+		record.Set("port", port)
+	})
 }
 
+// UpdateServiceRelease implements repositories.ServiceRepository.
 func (s *ServiceRepository) UpdateServiceRelease(ctx context.Context, serviceID, releaseID string) error {
-	record, err := s.app.FindRecordById(collections.Services, serviceID)
-	if err != nil {
-		return err
-	}
-
-	record.Set("release", releaseID)
-	record.Set("error_message", nil)
-
-	return s.app.Save(record)
+	return s.updateRecord(serviceID, func(record *core.Record) {
+		record.Set("release", releaseID)
+		record.Set("error_message", nil)
+	})
 }
 
-// SetPbInstallToken implements repositories.ServiceRepository.
+// SetServiceInstallToken implements repositories.ServiceRepository.
 func (s *ServiceRepository) SetServiceInstallToken(ctx context.Context, id string, _pb_install string) error {
-	record, err := s.app.FindRecordById(collections.Services, id)
-	if err != nil {
-		return err
-	}
-	record.Set("_pb_install", _pb_install)
-	if err := s.app.Save(record); err != nil {
-		return err
-	}
-	return nil
+	return s.updateRecord(id, func(record *core.Record) {
+		record.Set("_pb_install", _pb_install)
+	})
 }
 
 // CleanPbInstallToken implements repositories.ServiceRepository.

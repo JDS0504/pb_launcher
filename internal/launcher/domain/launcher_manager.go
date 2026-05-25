@@ -331,7 +331,7 @@ func (lm *LauncherManager) stopService(ctx context.Context, serviceID string) er
 	return lm.stopServiceLocked(ctx, serviceID)
 }
 
-func (lm *LauncherManager) stopServiceLocked(ctx context.Context, serviceID string) error {
+func (lm *LauncherManager) stopProcessOnlyLocked(serviceID string) error {
 	existingProcess, exists := lm.processList[serviceID]
 	if !exists {
 		return fmt.Errorf("no running process found for service %s", serviceID)
@@ -341,12 +341,19 @@ func (lm *LauncherManager) stopServiceLocked(ctx context.Context, serviceID stri
 	}
 
 	if err := existingProcess.Stop(); err != nil {
-		slog.Error("failed to stop existing process", "serviceID", serviceID, "error", err)
 		return err
 	}
 
 	delete(lm.processList, serviceID)
 	delete(lm.activityMap, serviceID)
+	return nil
+}
+
+func (lm *LauncherManager) stopServiceLocked(ctx context.Context, serviceID string) error {
+	if err := lm.stopProcessOnlyLocked(serviceID); err != nil {
+		slog.Error("failed to stop existing process", "serviceID", serviceID, "error", err)
+		return err
+	}
 
 	if err := lm.repository.MarkServiceStoped(ctx, serviceID); err != nil {
 		slog.Error("failed to mark service as stopped", "serviceID", serviceID, "error", err)
@@ -597,7 +604,7 @@ func (lm *LauncherManager) waitForHealthCheck(ctx context.Context, ip string, po
 	healthURL := fmt.Sprintf("http://%s/api/health", net.JoinHostPort(ip, portStr))
 	client := &http.Client{Timeout: 100 * time.Millisecond}
 
-	maxRetries := 25 // 25 * 40ms = 1000ms max
+	maxRetries := 75 // 75 * 40ms = 3000ms max
 	for i := 0; i < maxRetries; i++ {
 		req, err := http.NewRequestWithContext(ctx, "GET", healthURL, nil)
 		if err == nil {
@@ -651,21 +658,10 @@ func (lm *LauncherManager) suspendService(ctx context.Context, serviceID string)
 }
 
 func (lm *LauncherManager) suspendServiceLocked(ctx context.Context, serviceID string) error {
-	existingProcess, exists := lm.processList[serviceID]
-	if !exists {
-		return fmt.Errorf("no running process found for service %s", serviceID)
-	}
-	if !existingProcess.IsRunning() {
-		return fmt.Errorf("process for service %s is not currently running", serviceID)
-	}
-
-	if err := existingProcess.Stop(); err != nil {
+	if err := lm.stopProcessOnlyLocked(serviceID); err != nil {
 		slog.Error("failed to stop existing process for suspension", "serviceID", serviceID, "error", err)
 		return err
 	}
-
-	delete(lm.processList, serviceID)
-	delete(lm.activityMap, serviceID)
 
 	if err := lm.repository.MarkServiceSleeping(ctx, serviceID); err != nil {
 		slog.Error("failed to mark service as sleeping", "serviceID", serviceID, "error", err)
