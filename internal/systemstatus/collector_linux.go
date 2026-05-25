@@ -4,6 +4,7 @@ package systemstatus
 
 import (
 	"bufio"
+	"log/slog"
 	"os"
 	"runtime"
 	"strconv"
@@ -130,6 +131,9 @@ func collectRAM() RAMInfo {
 			memAvailable = val * 1024 // kB to bytes
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		slog.Error("failed to scan meminfo", "error", err)
+	}
 
 	if memTotal == 0 {
 		return RAMInfo{}
@@ -185,6 +189,9 @@ func getLinuxPlatform() string {
 			prettyName = strings.Trim(prettyName, `"`+"'")
 			return prettyName
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		slog.Error("failed to scan os-release", "error", err)
 	}
 	return "Linux"
 }
