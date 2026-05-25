@@ -24,8 +24,8 @@ export const formatUrl = (
   const normalizedProtocol = protocol.endsWith(":") ? protocol : `${protocol}:`;
 
   const isDefaultPort =
-    (normalizedProtocol === "http:" && port === "80") ||
-    (normalizedProtocol === "https:" && port === "443");
+    (normalizedProtocol === "http:" && (port === "80" || port === "7080")) ||
+    (normalizedProtocol === "https:" && (port === "443" || port === "8443"));
 
   const portSegment = port && !isDefaultPort ? `:${port}` : "";
 
@@ -35,8 +35,9 @@ export const formatUrl = (
 export const extractParts = (url: URL) => {
   const { protocol, hostname, port } = url;
   const isDefaultPort =
-    (protocol === "http:" && port === "80") ||
-    (protocol === "https:" && port === "443");
+    (protocol === "http:" && (port === "80" || port === "7080")) ||
+    (protocol === "https:" && (port === "443" || port === "8443"));
   const portPart = port && !isDefaultPort ? `:${port}` : "";
   return { protocol, hostname, portPart };
 };
+

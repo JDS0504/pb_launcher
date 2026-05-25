@@ -81,7 +81,7 @@ export const serviceService = {
     restart_policy: string;
   }) => {
     const services = pb.collection(SERVICES_COLLECTION);
-    await services.create({
+    return await services.create({
       name: data.name,
       release: data.release,
       restart_policy: data.restart_policy,

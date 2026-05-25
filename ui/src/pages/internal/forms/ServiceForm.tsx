@@ -1,4 +1,4 @@
-import { object } from "yup";
+import { object, string } from "yup";
 import { stringRequired } from "../../../utils/validation";
 import { useCustomForm } from "../../../hooks/useCustomForm";
 import { InputField } from "../../../components/fields/InputField";
@@ -16,11 +16,23 @@ import { getErrorMessage } from "../../../utils/errors";
 import classNames from "classnames";
 import { releaseService } from "../../../services/release";
 
+const LOCAL_STORAGE_KEY = "pb-launcher-create-service-defaults";
+
+const getLocalStorageDefaults = () => {
+  try {
+    const data = localStorage.getItem(LOCAL_STORAGE_KEY);
+    return data ? JSON.parse(data) : {};
+  } catch {
+    return {};
+  }
+};
+
 const schema = object({
   name: stringRequired(), // Name of the new PocketBase instance
   repository: stringRequired(), // Repository/source for the instance
   instanceSource: stringRequired(), // Source for the instance (template, version, etc.)
   restartPolicy: stringRequired(), // Restart policy: "no" or "on-failure"
+  superuserPassword: string().optional(),
 });
 
 type Props = {
@@ -31,12 +43,17 @@ type Props = {
 
 export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
   const { closeModal } = useModal();
+  const savedDefaults = useMemo(() => {
+    return record == null ? getLocalStorageDefaults() : {};
+  }, [record]);
+
   const form = useCustomForm(schema, {
     defaultValues: {
-      name: record?.name,
-      repository: record?.repository_id,
-      instanceSource: record?.release_id,
-      restartPolicy: record?.restart_policy ?? "on-failure",
+      name: record?.name ?? "",
+      repository: record?.repository_id ?? savedDefaults.repository ?? "",
+      instanceSource: record?.release_id ?? savedDefaults.instanceSource ?? "",
+      restartPolicy: record?.restart_policy ?? savedDefaults.restartPolicy ?? "on-failure",
+      superuserPassword: savedDefaults.superuserPassword ?? "",
     },
   });
   const selectedRepository = form.watch("repository");
@@ -86,7 +103,31 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
   }, [form, record, releaseOptions]);
 
   const createInstanceMutation = useMutation({
-    mutationFn: serviceService.createServiceInstance,
+    mutationFn: async (data: {
+      name: string;
+      release: string;
+      restart_policy: string;
+      superuserPassword?: string;
+    }) => {
+      const newService = await serviceService.createServiceInstance({
+        name: data.name,
+        release: data.release,
+        restart_policy: data.restart_policy,
+      });
+
+      if (data.superuserPassword && newService?.id) {
+        try {
+          await serviceService.upsertSuperuser({
+            service_id: newService.id,
+            password: data.superuserPassword,
+          });
+        } catch (e) {
+          console.error("Failed to upsert superuser on creation", e);
+          throw new Error("El servicio se creó, pero no se pudo configurar la contraseña del administrador: " + getErrorMessage(e));
+        }
+      }
+      return newService;
+    },
     onSuccess: () => {
       toast.success("Service created successfully");
       closeModal();
@@ -106,20 +147,44 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
   });
 
   const handleFormSubmit = form.handleSubmit(
-    ({ instanceSource, name, restartPolicy }) => {
-      if (record == null)
+    async ({ instanceSource, name, restartPolicy, superuserPassword }) => {
+      if (record == null) {
+        if (!superuserPassword) {
+          form.setError("superuserPassword", {
+            type: "manual",
+            message: "La contraseña de administrador es requerida",
+          });
+          return;
+        }
+
+        try {
+          localStorage.setItem(
+            LOCAL_STORAGE_KEY,
+            JSON.stringify({
+              repository: form.getValues("repository"),
+              instanceSource,
+              restartPolicy,
+              superuserPassword,
+            }),
+          );
+        } catch (e) {
+          console.error("Failed to save to localStorage", e);
+        }
+
         createInstanceMutation.mutate({
           name,
           release: instanceSource,
           restart_policy: restartPolicy,
+          superuserPassword,
         });
-      else
+      } else {
         updateInstanceMutation.mutate({
           id: record.id,
           name,
           release: instanceSource,
           restart_policy: restartPolicy,
         });
+      }
     },
   );
   return (
@@ -131,6 +196,16 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
           autoComplete="off"
           error={form.formState.errors.name}
         />
+
+        {record == null && (
+          <InputField
+            label="Superuser Password"
+            type="password"
+            registration={form.register("superuserPassword")}
+            autoComplete="new-password"
+            error={form.formState.errors.superuserPassword}
+          />
+        )}
 
         <SelectField
           label="Repository"
