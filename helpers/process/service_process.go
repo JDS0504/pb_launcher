@@ -56,6 +56,7 @@ type Process struct {
 	h *handler
 
 	closeChan chan struct{}
+	isSystemd bool
 }
 
 func New(ID string, command string, args []string, options ...ProcessOption) *Process {
@@ -91,6 +92,7 @@ func (p *Process) Start() error {
 	if runtime.GOOS == "linux" && (p.options.cpuQuota != "" || p.options.memoryLimit != "") {
 		if systemdRunPath, err := exec.LookPath("systemd-run"); err == nil {
 			unitName := fmt.Sprintf("pblauncher-%s", p.id)
+			p.isSystemd = true
 			
 			// Limpiar de forma segura cualquier unidad scope anterior en memoria o estado failed
 			_ = exec.Command("systemctl", "stop", unitName+".scope").Run()
@@ -137,7 +139,10 @@ func (p *Process) Start() error {
 }
 
 func (p *Process) waitForExit(cmd *exec.Cmd, doneChan chan struct{}) {
-	if err := cmd.Wait(); err != nil {
+	err := cmd.Wait()
+	currentState := p.Status()
+
+	if err != nil && currentState != Stopping && currentState != Stopped {
 		if err.Error() != "signal: terminated" {
 			if p.options.errChan != nil {
 				p.options.errChan <- ProcessErrorMessage{
@@ -167,10 +172,27 @@ func (p *Process) Stop() error {
 	}
 
 	p.h.updateStatus(Stopping)
-	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+
+	var stopErr error
+	if p.isSystemd {
+		unitName := fmt.Sprintf("pblauncher-%s", p.id)
+		slog.Info("stopping systemd scope unit", "unit", unitName, "process_id", p.id)
+		stopErr = exec.Command("systemctl", "stop", unitName+".scope").Run()
+		_ = exec.Command("systemctl", "reset-failed", unitName+".scope").Run()
+		if stopErr != nil {
+			slog.Warn("systemctl stop failed, falling back to SIGTERM", "error", stopErr, "process_id", p.id)
+			stopErr = cmd.Process.Signal(syscall.SIGTERM)
+		}
+	} else if runtime.GOOS == "windows" {
+		stopErr = cmd.Process.Kill()
+	} else {
+		stopErr = cmd.Process.Signal(syscall.SIGTERM)
+	}
+
+	if stopErr != nil {
 		p.h.updateStatus(Running)
-		slog.Error("failed to stop process", "error", err, "process_id", p.id)
-		return err
+		slog.Error("failed to stop process", "error", stopErr, "process_id", p.id)
+		return stopErr
 	}
 
 	if p.closeChan != nil {
