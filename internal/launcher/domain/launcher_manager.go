@@ -408,7 +408,17 @@ func (lm *LauncherManager) evaluateCommand(ctx context.Context, cmd models.Servi
 	case models.ActionStart:
 		return lm.startService(ctx, *service)
 	case models.ActionStop:
-		return lm.stopService(ctx, service.ID)
+		_ = lm.stopService(ctx, service.ID)
+
+		if service.Deleted != "" {
+			serviceDir := path.Join(lm.dataDir, service.ID)
+			if err := os.RemoveAll(serviceDir); err != nil {
+				slog.Error("failed to remove service data directory on deletion", "serviceID", service.ID, "path", serviceDir, "error", err)
+				return fmt.Errorf("failed to remove data directory: %w", err)
+			}
+			slog.Info("successfully removed service data directory on deletion", "serviceID", service.ID, "path", serviceDir)
+		}
+		return nil
 	case models.ActionRestart:
 		return lm.restartService(ctx, *service)
 	case models.ActionUpgrade:

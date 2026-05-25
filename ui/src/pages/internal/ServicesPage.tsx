@@ -69,8 +69,8 @@ export const ServicesPage = () => {
 
   const handleDeleteService = async (id: string) => {
     const ok = await confirm(
-      "Delete service",
-      "Are you sure you want to delete this service?",
+      "Eliminar servicio",
+      "¿Estás seguro de que deseas eliminar este servicio? Esta acción es irreversible y eliminará permanentemente su carpeta de datos y base de datos en el servidor VPS.",
     );
     if (ok) {
       deleteMutation.mutate(id);
