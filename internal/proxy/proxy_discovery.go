@@ -38,6 +38,11 @@ func NewDynamicReverseProxyDiscovery(
 	launcherManager *launcherdomain.LauncherManager,
 	cfg configs.Config,
 	pbConf *apis.ServeConfig) *DynamicReverseProxyDiscovery {
+	
+	launcherManager.SetOnServiceDeactivated(func(serviceID string) {
+		_ = serviceDiscovery.InvalidateServiceCacheByID(serviceID)
+	})
+
 	return &DynamicReverseProxyDiscovery{
 		serviceDiscovery:    serviceDiscovery,
 		proxyEntryDiscovery: proxyEntryDiscovery,

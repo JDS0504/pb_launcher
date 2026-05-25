@@ -103,9 +103,14 @@ const LogsView: FC<LogsViewProps> = ({ service_id }) => {
       .fetchServiceLogs(controller.signal, service_id, -1)
       .then(initLogs => {
         if (!isActive) return;
-        setLogs(Array.isArray(initLogs) ? initLogs : []);
-        if (containerRef.current) {
-          containerRef.current.scrollTop = containerRef.current.scrollHeight;
+        const safeInitLogs = Array.isArray(initLogs) ? initLogs : [];
+        setLogs(safeInitLogs);
+        if (safeInitLogs.length > 0) {
+          setTimeout(() => {
+            if (containerRef.current) {
+              containerRef.current.scrollTop = containerRef.current.scrollHeight;
+            }
+          }, 50);
         }
       })
       .catch(() => {
@@ -119,25 +124,34 @@ const LogsView: FC<LogsViewProps> = ({ service_id }) => {
           service_id,
           10,
         );
+
         // Verificar isActive antes de cualquier setState
         if (!isActive) return;
 
         const safeLogs = Array.isArray(newLogs) ? newLogs : [];
-        let isScrolledToBottom = false;
+        let shouldScrollToBottom = false;
+
         if (containerRef.current) {
-          isScrolledToBottom =
-            containerRef.current.scrollTop +
-              containerRef.current.clientHeight >=
-            containerRef.current.scrollHeight - 5;
+          const { scrollTop, clientHeight, scrollHeight } = containerRef.current;
+          // Si está a menos de 30px del fondo, asumimos que quiere auto-scroll
+          shouldScrollToBottom = scrollTop + clientHeight >= scrollHeight - 30;
         }
-        setLogs(prev => mergeLogsUnique(prev, safeLogs));
-        if (isScrolledToBottom) {
+
+        setLogs(prev => {
+          const merged = mergeLogsUnique(prev, safeLogs);
+          // Si antes estaba vacío y ahora tiene elementos, forzar auto-scroll
+          if (prev.length === 0 && merged.length > 0) {
+            shouldScrollToBottom = true;
+          }
+          return merged;
+        });
+
+        if (shouldScrollToBottom) {
           setTimeout(() => {
             if (containerRef.current) {
-              containerRef.current.scrollTop =
-                containerRef.current.scrollHeight;
+              containerRef.current.scrollTop = containerRef.current.scrollHeight;
             }
-          }, 10);
+          }, 50);
         }
         setConnectionState(true);
       } catch (err) {

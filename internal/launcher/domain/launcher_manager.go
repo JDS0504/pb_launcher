@@ -377,6 +377,8 @@ func (lm *LauncherManager) stopServiceLocked(ctx context.Context, serviceID stri
 	if err := lm.repository.MarkServiceStoped(ctx, serviceID); err != nil {
 		slog.Error("failed to mark service as stopped", "serviceID", serviceID, "error", err)
 	}
+
+	lm.notifyDeactivated(serviceID)
 	return nil
 }
 
@@ -685,6 +687,8 @@ func (lm *LauncherManager) suspendServiceLocked(ctx context.Context, serviceID s
 	if err := lm.repository.MarkServiceSleeping(ctx, serviceID); err != nil {
 		slog.Error("failed to mark service as sleeping", "serviceID", serviceID, "error", err)
 	}
+
+	lm.notifyDeactivated(serviceID)
 	return nil
 }
 
