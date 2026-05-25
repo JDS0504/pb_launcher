@@ -224,7 +224,7 @@ func (c *configs) GetInstanceCpuQuota() string {
 
 func (c *configs) GetInstanceMemoryLimit() string {
 	if c.InstanceMemoryLimit == "" {
-		return "512M"
+		return "256M"
 	}
 	if strings.EqualFold(c.InstanceMemoryLimit, "none") || strings.EqualFold(c.InstanceMemoryLimit, "disabled") {
 		return ""
