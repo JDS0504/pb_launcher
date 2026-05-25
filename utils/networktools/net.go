@@ -21,3 +21,17 @@ func GetAvailablePort(ipAddress string) (string, int, error) {
 	addr := listener.Addr().(*net.TCPAddr)
 	return ipAddress, addr.Port, nil
 }
+
+// IsPortAvailable checks if a specific port on a given IP address is free.
+func IsPortAvailable(ipAddress string, port int) bool {
+	if net.ParseIP(ipAddress) == nil {
+		return false
+	}
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", ipAddress, port))
+	if err != nil {
+		return false
+	}
+	listener.Close()
+	return true
+}
+

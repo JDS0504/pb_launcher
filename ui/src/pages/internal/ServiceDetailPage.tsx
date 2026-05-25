@@ -5,7 +5,7 @@ import { GeneralSection } from "./details_section/GeneralSection";
 import { DomainsSection } from "./details_section/DomainsSection";
 import { ServiceLogsSection } from "./details_section/ServiceLogsSection";
 import { OperationHistorySection } from "./details_section/OperationHistorySection";
-import { PBHooksSection } from "./details_section/PBHooksSection";
+import { FileManagerSection } from "./details_section/FileManagerSection";
 import { SnapshotsSection } from "./details_section/SnapshotsSection";
 
 export const ServiceDetailPage = () => {
@@ -85,10 +85,10 @@ export const ServiceDetailPage = () => {
             </li>
             <li>
               <button
-                className={menuItemClass("hooks")}
-                onClick={() => handleSectionChange("hooks")}
+                className={menuItemClass("files")}
+                onClick={() => handleSectionChange("files")}
               >
-                PB Hooks
+                Files
               </button>
             </li>
             {/* <li>
@@ -152,11 +152,11 @@ export const ServiceDetailPage = () => {
           </div>
         )}
 
-        {activeSection === "hooks" && (
+        {activeSection === "files" && (
           <div className="mb-8">
-            <h3 className="text-lg font-semibold mb-6">PB Hooks</h3>
+            <h3 className="text-lg font-semibold mb-6">Files</h3>
             <div className="rounded-box bg-base-200 p-3 sm:p-4">
-              <PBHooksSection service_id={service_id} />
+              <FileManagerSection service_id={service_id} />
             </div>
           </div>
         )}

@@ -18,6 +18,7 @@ import (
 	"pb_launcher/internal/certificates"
 	"pb_launcher/internal/certmanager"
 	"pb_launcher/internal/download"
+	"pb_launcher/internal/filemanager"
 	"pb_launcher/internal/hookmanager"
 	"pb_launcher/internal/launcher"
 	"pb_launcher/internal/operationlog"
@@ -92,6 +93,7 @@ func createRootCommand(app core.App) *cobra.Command {
 				certmanager.Module,
 				backup.Module,
 				hookmanager.Module,
+				filemanager.Module,
 				repositorymanager.Module,
 				internal.Module, // hooks
 				fx.Invoke(

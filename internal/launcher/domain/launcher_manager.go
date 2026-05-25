@@ -251,10 +251,28 @@ func (lm *LauncherManager) startServiceLocked(ctx context.Context, service model
 	ensureDir("pb_hooks")
 	ensureDir("pb_migrations")
 
-	ip, port, err := networktools.GetAvailablePort(lm.ipAddress)
-	if err != nil {
-		slog.Error("failed to find free port", "serviceID", service.ID, "error", err)
-		return err
+	var ip string
+	var port int
+
+	useExistingPort := false
+	if service.Port != "" {
+		if p, errConv := strconv.Atoi(service.Port); errConv == nil && p > 0 {
+			if networktools.IsPortAvailable(lm.ipAddress, p) {
+				ip = lm.ipAddress
+				port = p
+				useExistingPort = true
+				slog.Info("reusing existing persistent port for service", "serviceID", service.ID, "port", port)
+			}
+		}
+	}
+
+	if !useExistingPort {
+		ip, port, err = networktools.GetAvailablePort(lm.ipAddress)
+		if err != nil {
+			slog.Error("failed to find free port", "serviceID", service.ID, "error", err)
+			return err
+		}
+		slog.Info("assigned new dynamic port for service", "serviceID", service.ID, "port", port)
 	}
 
 	baseArgs, err := lm.buildArgs(service.ID)
