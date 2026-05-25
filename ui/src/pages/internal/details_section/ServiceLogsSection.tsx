@@ -1,7 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FC } from "react";
 import { serviceService, type ServiceLog, type ServiceDto } from "../../../services/services";
-import { ErrorFallback } from "../../../components/helpers/ErrorFallback";
 import { useViewportHeight } from "../../../hooks/useViewportHeight";
 import classNames from "classnames";
 import { Play, RotateCw, Square } from "lucide-react";
@@ -18,17 +17,11 @@ export const ServiceLogsSection: FC<Props> = ({ service_id, service }) => {
   const confirm = useConfirmModal();
   const queryClient = useQueryClient();
 
-  const initLogsQuery = useQuery({
-    queryKey: ["services", service_id],
-    queryFn: ({ signal }) =>
-      serviceService.fetchServiceLogs(signal, service_id, -1),
-    refetchOnMount: true,
-  });
-
   const commandMutation = useMutation({
     mutationFn: serviceService.executeServiceCommand,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["services", service_id] });
+      queryClient.invalidateQueries({ queryKey: ["services"] });
     },
     onError: error => toast.error(getErrorMessage(error)),
   });
@@ -44,19 +37,11 @@ export const ServiceLogsSection: FC<Props> = ({ service_id, service }) => {
     commandMutation.mutate({ service_id, action });
   };
 
-  if (initLogsQuery.isFetching || service == null) {
+  if (service == null) {
     return <div className="p-4">Loading...</div>;
   }
 
-  if (initLogsQuery.isError)
-    return (
-      <ErrorFallback
-        error={initLogsQuery.error}
-        onRetry={() => setTimeout(initLogsQuery.refetch)}
-      />
-    );
-
-  const status = service?.status;
+  const status = service.status;
   const isRunning = status === "running";
   const isPending = status === "pending";
 
@@ -93,19 +78,18 @@ export const ServiceLogsSection: FC<Props> = ({ service_id, service }) => {
           </button>
         </div>
       </div>
-      <LogsView initLogs={initLogsQuery.data ?? []} service_id={service_id} />
+      <LogsView service_id={service_id} />
     </div>
   );
 };
 
 type LogsViewProps = {
   service_id: string;
-  initLogs: ServiceLog[];
 };
 
-const LogsView: FC<LogsViewProps> = ({ initLogs, service_id }) => {
+const LogsView: FC<LogsViewProps> = ({ service_id }) => {
   const viewHeight = useViewportHeight();
-  const [logs, setLogs] = useState<ServiceLog[]>(initLogs);
+  const [logs, setLogs] = useState<ServiceLog[]>([]);
   const [connected, setConnectionState] = useState<boolean>(true);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -114,6 +98,20 @@ const LogsView: FC<LogsViewProps> = ({ initLogs, service_id }) => {
     let isActive = true;
     let timeoutId: NodeJS.Timeout;
 
+    // Carga inicial de logs históricos
+    serviceService
+      .fetchServiceLogs(controller.signal, service_id, -1)
+      .then(initLogs => {
+        if (!isActive) return;
+        setLogs(Array.isArray(initLogs) ? initLogs : []);
+        if (containerRef.current) {
+          containerRef.current.scrollTop = containerRef.current.scrollHeight;
+        }
+      })
+      .catch(() => {
+        // ignorar error de abort en carga inicial
+      });
+
     const fetchLoop = async () => {
       try {
         const newLogs = await serviceService.fetchServiceLogs(
@@ -121,7 +119,10 @@ const LogsView: FC<LogsViewProps> = ({ initLogs, service_id }) => {
           service_id,
           10,
         );
+        // Verificar isActive antes de cualquier setState
         if (!isActive) return;
+
+        const safeLogs = Array.isArray(newLogs) ? newLogs : [];
         let isScrolledToBottom = false;
         if (containerRef.current) {
           isScrolledToBottom =
@@ -129,7 +130,7 @@ const LogsView: FC<LogsViewProps> = ({ initLogs, service_id }) => {
               containerRef.current.clientHeight >=
             containerRef.current.scrollHeight - 5;
         }
-        setLogs(prev => mergeLogsUnique(prev, newLogs));
+        setLogs(prev => mergeLogsUnique(prev, safeLogs));
         if (isScrolledToBottom) {
           setTimeout(() => {
             if (containerRef.current) {
@@ -140,28 +141,29 @@ const LogsView: FC<LogsViewProps> = ({ initLogs, service_id }) => {
         }
         setConnectionState(true);
       } catch (err) {
-        console.log(err);
-        setConnectionState(false);
+        // Si el componente ya se desmontó o el signal fue abortado, ignorar
         if (!isActive) return;
+        // Solo loguear errores reales, no aborts
+        if (err instanceof Error && err.name !== "AbortError") {
+          console.warn("Logs fetch error:", err);
+        }
+        setConnectionState(false);
       }
 
       if (isActive) {
         timeoutId = setTimeout(fetchLoop, 1000);
       }
     };
+
+    // Primera iteración con delay
     timeoutId = setTimeout(fetchLoop, 2000);
+
     return () => {
       isActive = false;
       controller.abort();
       clearTimeout(timeoutId);
     };
   }, [service_id]);
-
-  useEffect(() => {
-    if (containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
-    }
-  }, []);
 
   return (
     <div style={{ height: viewHeight - 270 }} className="relative">
@@ -177,7 +179,7 @@ const LogsView: FC<LogsViewProps> = ({ initLogs, service_id }) => {
         ref={containerRef}
       >
         <div className="whitespace-pre-wrap space-y-1">
-          {(Array.isArray(logs) ? logs : []).map(log => (
+          {logs.map(log => (
             <div
               key={log.id}
               className={
