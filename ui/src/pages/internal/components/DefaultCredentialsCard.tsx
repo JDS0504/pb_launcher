@@ -7,7 +7,8 @@ import { useState } from "react";
 import { serviceService } from "../../../services/services";
 import toast from "react-hot-toast";
 import { getErrorMessage } from "../../../utils/errors";
-import { useConfirmModal } from "../../../hooks/useConfirmModal";
+import { useModal } from "../../../components/modal/hook";
+import { ConfirmAdminPasswordForm } from "../forms/ConfirmAdminPasswordForm";
 
 type Props = {
   service_id: string;
@@ -29,7 +30,7 @@ export const DefaultCredentialsCard: FC<Props> = ({
     username: username_init,
     password: password_init,
   });
-  const confirm = useConfirmModal();
+  const { openModal } = useModal();
   const [, copyToClipboard] = useCopyToClipboard();
   const [copiedField, setCopiedField] = useState<
     "username" | "password" | null
@@ -49,14 +50,21 @@ export const DefaultCredentialsCard: FC<Props> = ({
     onError: error => toast.error(getErrorMessage(error)),
   });
 
-  const onUpsertSuperuserHandle = async () => {
-    const ok = await confirm(
-      "Upsert Superuser",
-      "Are you sure you want to create or update the superuser for this service?",
+  const onUpsertSuperuserHandle = () => {
+    openModal(
+      <ConfirmAdminPasswordForm
+        description="Confirma la contraseña de tu cuenta principal de PBLauncher para clonarla en esta instancia."
+        label="Contraseña de Administrador"
+        submitLabel="Confirmar y Clonar"
+        onSubmit={async (adminPassword) => {
+          await upsertSuperuserMutation.mutateAsync({
+            service_id,
+            password: adminPassword,
+          });
+        }}
+      />,
+      { title: "Clonar Contraseña Principal" }
     );
-    if (ok) {
-      upsertSuperuserMutation.mutate(service_id);
-    }
   };
 
   return (

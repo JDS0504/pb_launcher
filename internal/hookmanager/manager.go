@@ -56,7 +56,7 @@ func NewManager(
 }
 
 func (m *Manager) hooksDir(serviceID string) string {
-	return filepath.Join(m.dataDir, serviceID, "hooks")
+	return filepath.Join(m.dataDir, serviceID, "pb_hooks")
 }
 
 func (m *Manager) List(ctx context.Context, serviceID string) ([]HookFile, error) {

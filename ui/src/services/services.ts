@@ -212,10 +212,15 @@ export const serviceService = {
       target_release: data.target_release,
     });
   },
-  upsertSuperuser: async (service_id: string) => {
-    const url = joinUrls(pb.baseURL, `/x-api/upsert_superuser/${service_id}`);
+  upsertSuperuser: async (data: { service_id: string; password?: string }) => {
+    const url = joinUrls(pb.baseURL, `/x-api/upsert_superuser/${data.service_id}`);
     const response = await fetch(url, {
-      headers: { Authorization: pb.authStore.token },
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: pb.authStore.token,
+      },
+      body: JSON.stringify({ password: data.password }),
     });
     const json = await response.json();
     if (!response.ok) {

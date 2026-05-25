@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"path"
 	"pb_launcher/configs"
@@ -111,9 +112,9 @@ func (lm *LauncherManager) buildArgs(serviceID string) ([]string, error) {
 	pb_data := path.Join(lm.dataDir, serviceID)
 	return []string{
 		"--dir", path.Join(pb_data, "pb_data"),
-		"--hooksDir", path.Join(pb_data, "hooks"),
-		"--publicDir", path.Join(pb_data, "public"),
-		"--migrationsDir", path.Join(pb_data, "migrations"),
+		"--hooksDir", path.Join(pb_data, "pb_hooks"),
+		"--publicDir", path.Join(pb_data, "pb_public"),
+		"--migrationsDir", path.Join(pb_data, "pb_migrations"),
 	}, nil
 }
 
@@ -212,6 +213,20 @@ func (lm *LauncherManager) startService(ctx context.Context, service models.Serv
 		slog.Error("failed to find binary", "serviceID", service.ID, "error", err)
 		return err
 	}
+
+	serviceDir := path.Join(lm.dataDir, service.ID)
+	ensureDir := func(name string) {
+		p := path.Join(serviceDir, name)
+		if _, err := os.Stat(p); os.IsNotExist(err) {
+			if err := os.MkdirAll(p, 0755); err != nil {
+				slog.Error("failed to create standard service directory", "path", p, "error", err)
+			}
+		}
+	}
+	ensureDir("pb_public")
+	ensureDir("pb_hooks")
+	ensureDir("pb_migrations")
+
 	ip, port, err := networktools.GetAvailablePort(lm.ipAddress)
 	if err != nil {
 		slog.Error("failed to find free port", "serviceID", service.ID, "error", err)
