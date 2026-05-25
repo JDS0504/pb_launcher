@@ -11,6 +11,7 @@ const (
 	Stopped   ServiceStatus = "stopped" // Stopped manually
 	Failure   ServiceStatus = "failure" // Stopped manually
 	Restoring ServiceStatus = "restoring"
+	Sleeping  ServiceStatus = "sleeping" // Suspendida temporalmente por inactividad
 )
 
 const (

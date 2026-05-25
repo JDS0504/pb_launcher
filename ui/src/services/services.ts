@@ -13,7 +13,8 @@ interface _Service {
     | "running"
     | "stopped"
     | "failure"
-    | "restoring";
+    | "restoring"
+    | "sleeping";
 
   _pb_install: string;
   boot_user_email: string;

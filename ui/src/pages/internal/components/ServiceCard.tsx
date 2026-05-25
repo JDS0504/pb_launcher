@@ -219,6 +219,7 @@ export const ServiceCard: FC<Props> = ({
             <span
               className={classNames("badge badge-sm", {
                 "badge-success": service.status === "running",
+                "badge-info": service.status === "sleeping",
                 "badge-warning":
                   service.status === "pending" || service.status === "idle",
                 "badge-error": service.status === "failure",
@@ -227,6 +228,7 @@ export const ServiceCard: FC<Props> = ({
                   "pending",
                   "idle",
                   "failure",
+                  "sleeping",
                 ].includes(service.status),
               })}
             >

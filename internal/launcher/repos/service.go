@@ -171,6 +171,23 @@ func (s *ServiceRepository) MarkServiceStoped(ctx context.Context, id string) er
 	return nil
 }
 
+// MarkServiceSleeping implements repositories.ServiceRepository.
+func (s *ServiceRepository) MarkServiceSleeping(ctx context.Context, id string) error {
+	record, err := s.app.FindRecordById(collections.Services, id)
+	if err != nil {
+		return err
+	}
+
+	record.Set("status", string(models.Sleeping))
+	record.Set("error_message", nil)
+
+	if err := s.app.Save(record); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // MarkServiceFailure implements repositories.ServiceRepository.
 func (s *ServiceRepository) MarkServiceFailure(ctx context.Context, id string, errorMessage string) error {
 

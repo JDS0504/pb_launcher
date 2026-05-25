@@ -91,6 +91,11 @@ func (p *Process) Start() error {
 	if runtime.GOOS == "linux" && (p.options.cpuQuota != "" || p.options.memoryLimit != "") {
 		if systemdRunPath, err := exec.LookPath("systemd-run"); err == nil {
 			unitName := fmt.Sprintf("pblauncher-%s", p.id)
+			
+			// Limpiar de forma segura cualquier unidad scope anterior en memoria o estado failed
+			_ = exec.Command("systemctl", "stop", unitName+".scope").Run()
+			_ = exec.Command("systemctl", "reset-failed", unitName+".scope").Run()
+
 			systemdArgs := []string{
 				"--scope",
 				"--unit=" + unitName,

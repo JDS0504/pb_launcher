@@ -545,6 +545,10 @@ func (lm *LauncherManager) WakeupService(ctx context.Context, serviceID string) 
 		lm.rwMtx.Unlock()
 		return "", 0, fmt.Errorf("service is deleted")
 	}
+	if service.Status == models.Stopped {
+		lm.rwMtx.Unlock()
+		return "", 0, fmt.Errorf("service is manually stopped by administrator")
+	}
 
 	// Iniciar
 	err = lm.startServiceLocked(ctx, *service)
@@ -622,6 +626,35 @@ func (lm *LauncherManager) startAutoSleepTicker() {
 	}
 }
 
+func (lm *LauncherManager) suspendService(ctx context.Context, serviceID string) error {
+	lm.rwMtx.Lock()
+	defer lm.rwMtx.Unlock()
+	return lm.suspendServiceLocked(ctx, serviceID)
+}
+
+func (lm *LauncherManager) suspendServiceLocked(ctx context.Context, serviceID string) error {
+	existingProcess, exists := lm.processList[serviceID]
+	if !exists {
+		return fmt.Errorf("no running process found for service %s", serviceID)
+	}
+	if !existingProcess.IsRunning() {
+		return fmt.Errorf("process for service %s is not currently running", serviceID)
+	}
+
+	if err := existingProcess.Stop(); err != nil {
+		slog.Error("failed to stop existing process for suspension", "serviceID", serviceID, "error", err)
+		return err
+	}
+
+	delete(lm.processList, serviceID)
+	delete(lm.activityMap, serviceID)
+
+	if err := lm.repository.MarkServiceSleeping(ctx, serviceID); err != nil {
+		slog.Error("failed to mark service as sleeping", "serviceID", serviceID, "error", err)
+	}
+	return nil
+}
+
 func (lm *LauncherManager) checkAndSuspendInactiveServices() {
 	lm.rwMtx.Lock()
 	var toSuspend []string
@@ -646,7 +679,7 @@ func (lm *LauncherManager) checkAndSuspendInactiveServices() {
 	for _, id := range toSuspend {
 		slog.Info("Suspending inactive service", "serviceID", id, "idleTimeout", lm.idleTimeout.String())
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		if err := lm.stopService(ctx, id); err != nil {
+		if err := lm.suspendService(ctx, id); err != nil {
 			slog.Error("failed to auto-sleep service", "serviceID", id, "error", err)
 		} else {
 			slog.Info("Service successfully suspended due to inactivity", "serviceID", id)

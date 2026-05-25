@@ -12,6 +12,7 @@ type ServiceRepository interface {
 	FindRelease(ctx context.Context, id string) (*models.Release, error)
 
 	MarkServiceStoped(ctx context.Context, id string) error
+	MarkServiceSleeping(ctx context.Context, id string) error
 	MarkServiceFailure(ctx context.Context, id string, errorMessage string) error
 	MarkServiceRunning(ctx context.Context, id string, listenIplistenIp, port string) error
 	UpdateServiceRelease(ctx context.Context, serviceID, releaseID string) error
