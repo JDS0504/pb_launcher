@@ -112,7 +112,6 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 				if len(parts) > 1 {
 					rootDomain = parts[1]
 				}
-				oldFriendlyDomain := fmt.Sprintf("%s.%s", oldSlug, rootDomain)
 				newFriendlyDomain := fmt.Sprintf("%s.%s", newSlug, rootDomain)
 
 				existing, err := e.App.FindFirstRecordByFilter(
@@ -148,8 +147,8 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 
 				oldDomainRecord, err := e.App.FindFirstRecordByFilter(
 					collections.ServicesDomains,
-					"domain = {:domain} && service = {:service}",
-					dbx.Params{"domain": oldFriendlyDomain, "service": e.Record.Id},
+					"service = {:service} && domain LIKE {:suffix}",
+					dbx.Params{"service": e.Record.Id, "suffix": "%." + rootDomain},
 				)
 				if err == nil && oldDomainRecord != nil {
 					oldDomainRecord.Set("domain", newFriendlyDomain)
