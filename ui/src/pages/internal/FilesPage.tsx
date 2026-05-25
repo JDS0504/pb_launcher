@@ -1,0 +1,625 @@
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useState,
+  type FC,
+} from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  FileText,
+  FolderOpen,
+  Folder,
+  ChevronDown,
+  ChevronRight,
+  Server,
+  Trash2,
+  Save,
+  Plus,
+  AlertTriangle,
+} from "lucide-react";
+import toast from "react-hot-toast";
+import { ErrorFallback } from "../../components/helpers/ErrorFallback";
+import { filesService, type PBFileEntry } from "../../services/files";
+import { serviceService, type ServiceDto } from "../../services/services";
+import { getErrorMessage } from "../../utils/errors";
+import { useModal } from "../../components/modal/hook";
+import { useConfirmModal } from "../../hooks/useConfirmModal";
+
+const PBHookCodeEditor = lazy(() =>
+  import("./details_section/PBHookCodeEditor").then((module) => ({
+    default: module.PBHookCodeEditor,
+  })),
+);
+
+const formatSize = (size: number) => {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+};
+
+const indentFor = (path: string) => {
+  const parts = path.split("/");
+  return Math.max(parts.length - 1, 0) * 16;
+};
+
+const getFileName = (path: string) => {
+  const parts = path.split("/");
+  return parts[parts.length - 1];
+};
+
+// Componente para renderizar de forma perezosa el árbol de archivos de una instancia
+type ServiceFileTreeProps = {
+  service: ServiceDto;
+  isExpanded: boolean;
+  onToggleExpand: () => void;
+  selectedServiceId?: string;
+  selectedPath: string | null;
+  onSelectFile: (service: ServiceDto, path: string) => void;
+};
+
+const ServiceFileTree: FC<ServiceFileTreeProps> = ({
+  service,
+  isExpanded,
+  onToggleExpand,
+  selectedServiceId,
+  selectedPath,
+  onSelectFile,
+}) => {
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+
+  const filesQuery = useQuery<PBFileEntry[]>({
+    queryKey: ["pb-files", service.id],
+    queryFn: () => filesService.fetchFiles(service.id),
+    enabled: isExpanded,
+  });
+
+  const togglePath = (path: string) => {
+    setExpandedPaths((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+        for (const p of next) {
+          if (p.startsWith(path + "/")) {
+            next.delete(p);
+          }
+        }
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  };
+
+  const isPathVisible = (path: string, expanded: Set<string>): boolean => {
+    const parts = path.split("/");
+    if (parts.length <= 1) return true;
+    for (let i = 1; i < parts.length; i++) {
+      const parent = parts.slice(0, i).join("/");
+      if (!expanded.has(parent)) return false;
+    }
+    return true;
+  };
+
+  const files = filesQuery.data ?? [];
+  const visibleFiles = files.filter((f) => isPathVisible(f.path, expandedPaths));
+
+  return (
+    <div className="space-y-0.5">
+      {/* Nodo Raíz: El Servicio / Instancia */}
+      <button
+        type="button"
+        onClick={onToggleExpand}
+        className={`w-full text-left py-1.5 px-2 rounded-lg flex items-center justify-between gap-2 transition-colors ${
+          selectedServiceId === service.id && selectedPath === null
+            ? "bg-primary/10 text-primary"
+            : "hover:bg-base-300 text-base-content"
+        }`}
+      >
+        <span className="flex items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap">
+          {isExpanded ? (
+            <ChevronDown className="w-3.5 h-3.5 shrink-0 text-base-content/60" />
+          ) : (
+            <ChevronRight className="w-3.5 h-3.5 shrink-0 text-base-content/60" />
+          )}
+          <Server className={`w-3.5 h-3.5 shrink-0 ${service.status === "running" ? "text-success animate-pulse" : "text-base-content/50"}`} />
+          <span className="font-bold truncate">{service.name}</span>
+          <span
+            className={`w-2 h-2 rounded-full shrink-0 ${
+              service.status === "running"
+                ? "bg-success"
+                : service.status === "sleeping"
+                ? "bg-info"
+                : service.status === "pending"
+                ? "bg-warning"
+                : "bg-base-content/30"
+            }`}
+            title={`Estado: ${service.status}`}
+          />
+        </span>
+      </button>
+
+      {/* Árbol de archivos interno */}
+      {isExpanded && (
+        <div className="pl-2 border-l border-base-300/60 ml-3.5 space-y-0.5">
+          {filesQuery.isLoading ? (
+            <div className="p-2 text-[10px] text-base-content/50 italic animate-pulse">Cargando archivos...</div>
+          ) : filesQuery.isError ? (
+            <div className="p-2 text-[10px] text-error">Error al cargar archivos</div>
+          ) : files.length === 0 ? (
+            <div className="p-2 text-[10px] text-base-content/50 italic">No hay archivos</div>
+          ) : (
+            visibleFiles.map((f) => {
+              const isSelected = selectedServiceId === service.id && selectedPath === f.path;
+              return (
+                <button
+                  key={f.path}
+                  type="button"
+                  onClick={() => {
+                    onSelectFile(service, f.path);
+                    if (f.is_dir) {
+                      togglePath(f.path);
+                    }
+                  }}
+                  className={`w-full text-left py-1 px-1.5 rounded flex items-center justify-between gap-2 transition-colors text-[11px] ${
+                    isSelected
+                      ? "bg-primary text-primary-content"
+                      : "hover:bg-base-300 text-base-content/90"
+                  }`}
+                >
+                  <span
+                    className="flex items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap"
+                    style={{ paddingLeft: `${indentFor(f.path)}px` }}
+                  >
+                    {f.is_dir ? (
+                      <>
+                        {expandedPaths.has(f.path) ? (
+                          <ChevronDown className="w-3 h-3 shrink-0 text-base-content/60" />
+                        ) : (
+                          <ChevronRight className="w-3 h-3 shrink-0 text-base-content/60" />
+                        )}
+                        {expandedPaths.has(f.path) ? (
+                          <FolderOpen className="w-3 h-3 shrink-0 text-amber-500" />
+                        ) : (
+                          <Folder className="w-3 h-3 shrink-0 text-amber-500" />
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <span className="w-3 shrink-0" />
+                        <FileText className="w-3 h-3 shrink-0" />
+                      </>
+                    )}
+                    <span>{getFileName(f.path)}</span>
+                  </span>
+                  <span className={`text-[9px] opacity-70 shrink-0 ${isSelected ? "text-primary-content" : ""}`}>
+                    {!f.is_dir && formatSize(f.size)}
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const FilesPage = () => {
+  const { openModal } = useModal();
+  const confirm = useConfirmModal();
+  const queryClient = useQueryClient();
+
+  const [selectedFile, setSelectedFile] = useState<{
+    service: ServiceDto;
+    path: string;
+  } | null>(null);
+  const [editorContent, setEditorContent] = useState("");
+  const [originalContent, setOriginalContent] = useState("");
+  const [isBinaryFile, setIsBinaryFile] = useState(false);
+  const [expandedServices, setExpandedServices] = useState<Set<string>>(new Set());
+
+  // Consulta global de servicios (instancias)
+  const servicesQuery = useQuery<ServiceDto[]>({
+    queryKey: ["services"],
+    queryFn: serviceService.fetchAllServices,
+    refetchInterval: 3000,
+  });
+
+  const services = servicesQuery.data ?? [];
+
+  // Mantener actualizado el objeto del servicio seleccionado para capturar cambios de estado en tiempo real
+  const activeService = selectedFile
+    ? services.find((s) => s.id === selectedFile.service.id) || selectedFile.service
+    : null;
+
+  const isDirSelected =
+    selectedFile != null &&
+    queryClient
+      .getQueryData<PBFileEntry[]>(["pb-files", selectedFile.service.id])
+      ?.find((f) => f.path === selectedFile.path)?.is_dir === true;
+
+  const fileContentQuery = useQuery({
+    queryKey: ["pb-file-content", selectedFile?.service.id, selectedFile?.path],
+    queryFn: () =>
+      filesService.readFile(selectedFile?.service.id || "", selectedFile?.path || ""),
+    enabled: selectedFile != null && !isBinaryFile && !isDirSelected,
+  });
+
+  useEffect(() => {
+    if (selectedFile) {
+      const isBinary =
+        !isDirSelected &&
+        (selectedFile.path.endsWith(".db") ||
+          selectedFile.path.endsWith(".png") ||
+          selectedFile.path.endsWith(".jpg") ||
+          selectedFile.path.endsWith(".jpeg") ||
+          selectedFile.path.endsWith(".gif") ||
+          selectedFile.path.endsWith(".ico") ||
+          selectedFile.path.endsWith(".zip"));
+      setIsBinaryFile(isBinary);
+      if (isBinary || isDirSelected) {
+        setEditorContent("");
+        setOriginalContent("");
+      }
+    } else {
+      setIsBinaryFile(false);
+      setEditorContent("");
+      setOriginalContent("");
+    }
+  }, [selectedFile, isDirSelected]);
+
+  useEffect(() => {
+    if (fileContentQuery.data && !isBinaryFile && !isDirSelected) {
+      setEditorContent(fileContentQuery.data.content);
+      setOriginalContent(fileContentQuery.data.content);
+    }
+  }, [fileContentQuery.data, isBinaryFile, isDirSelected]);
+
+  const commandMutation = useMutation({
+    mutationFn: serviceService.executeServiceCommand,
+    onSuccess: (_, variables) => {
+      toast.success(`Comando '${variables.action}' enviado con éxito`);
+      queryClient.invalidateQueries({ queryKey: ["services"] });
+    },
+    onError: (error) => toast.error(getErrorMessage(error)),
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: filesService.saveFile,
+    onSuccess: () => {
+      toast.success("Archivo guardado con éxito");
+      setOriginalContent(editorContent);
+      if (selectedFile) {
+        queryClient.invalidateQueries({ queryKey: ["pb-files", selectedFile.service.id] });
+      }
+    },
+    onError: (error) => toast.error(getErrorMessage(error)),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: filesService.deleteFile,
+    onSuccess: () => {
+      toast.success("Archivo eliminado con éxito");
+      if (selectedFile) {
+        queryClient.invalidateQueries({ queryKey: ["pb-files", selectedFile.service.id] });
+      }
+      setSelectedFile(null);
+    },
+    onError: (error) => toast.error(getErrorMessage(error)),
+  });
+
+  const toggleServiceExpand = (serviceId: string) => {
+    setExpandedServices((prev) => {
+      const next = new Set(prev);
+      if (next.has(serviceId)) {
+        next.delete(serviceId);
+      } else {
+        next.add(serviceId);
+      }
+      return next;
+    });
+  };
+
+  if (servicesQuery.isError) {
+    return <ErrorFallback error={servicesQuery.error} onRetry={servicesQuery.refetch} />;
+  }
+
+  const isStopped = activeService?.status === "stopped";
+  const hasChanges = editorContent !== originalContent;
+
+  const handleStopService = (serviceId: string) => {
+    commandMutation.mutate({ service_id: serviceId, action: "stop" });
+  };
+
+  const handleSave = () => {
+    if (!selectedFile) return;
+    saveMutation.mutate({
+      serviceID: selectedFile.service.id,
+      path: selectedFile.path,
+      content: editorContent,
+    });
+  };
+
+  const handleDelete = async () => {
+    if (!selectedFile) return;
+    const ok = await confirm(
+      "Eliminar Archivo",
+      `¿Estás seguro de que deseas eliminar permanentemente el archivo ${selectedFile.path}?`
+    );
+    if (ok) {
+      deleteMutation.mutate({ serviceID: selectedFile.service.id, path: selectedFile.path });
+    }
+  };
+
+  const openNewFileModal = (service: ServiceDto) => {
+    const isSvcStopped = service.status === "stopped";
+    openModal(
+      <NewFileModal
+        serviceID={service.id}
+        isStopped={isSvcStopped}
+        onCreated={(newPath) => {
+          queryClient.invalidateQueries({ queryKey: ["pb-files", service.id] });
+          setSelectedFile({ service, path: newPath });
+        }}
+      />,
+      { title: `Nuevo Archivo en ${service.name}`, width: 450 }
+    );
+  };
+
+  const showDbWarning =
+    selectedFile?.path?.endsWith(".db") || selectedFile?.path?.includes("pb_data");
+
+  return (
+    <div className="space-y-4">
+      {/* Contenedor Principal */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-[75vh]">
+        {/* Explorador de Archivos Global (Col 4) */}
+        <div className="lg:col-span-4 flex flex-col bg-base-200 border border-base-300 rounded-xl overflow-hidden h-full">
+          <div className="p-3 bg-base-300 font-semibold text-xs uppercase tracking-wider border-b border-base-300 flex justify-between items-center">
+            <span>Archivos de Instancias</span>
+            <span className="badge badge-sm badge-neutral">{services.length} instancias</span>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-2 space-y-1 font-mono text-xs">
+            {servicesQuery.isLoading ? (
+              <div className="p-4 text-center text-base-content/50 animate-pulse">Cargando instancias...</div>
+            ) : services.length === 0 ? (
+              <div className="p-4 text-center text-base-content/50">No hay instancias configuradas.</div>
+            ) : (
+              services.map((service) => (
+                <div key={service.id} className="space-y-0.5">
+                  <ServiceFileTree
+                    service={service}
+                    isExpanded={expandedServices.has(service.id)}
+                    onToggleExpand={() => toggleServiceExpand(service.id)}
+                    selectedServiceId={selectedFile?.service.id}
+                    selectedPath={selectedFile?.path || null}
+                    onSelectFile={(svc, path) => setSelectedFile({ service: svc, path })}
+                  />
+                  {expandedServices.has(service.id) && (
+                    <div className="pl-4 pr-1 py-1">
+                      <button
+                        type="button"
+                        onClick={() => openNewFileModal(service)}
+                        className="btn btn-xs btn-ghost gap-1 w-full justify-start text-[10px] opacity-75 hover:opacity-100"
+                        disabled={service.status !== "stopped"}
+                      >
+                        <Plus className="w-3 h-3" />
+                        Nuevo Archivo en esta instancia
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Editor de Código (Col 8) */}
+        <div className="lg:col-span-8 flex flex-col bg-base-200 border border-base-300 rounded-xl overflow-hidden h-full">
+          {selectedFile == null ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-base-content/60 space-y-2">
+              <FolderOpen className="w-12 h-12 stroke-1 text-base-content/40" />
+              <p className="text-sm">Selecciona un archivo del explorador lateral para comenzar a visualizarlo o editarlo.</p>
+            </div>
+          ) : (
+            <div className="flex-grow flex flex-col min-h-0">
+              {/* Encabezado del Editor */}
+              <div className="p-3 bg-base-300 border-b border-base-300 flex flex-wrap justify-between items-center gap-2">
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-base-content/50">
+                    Instancia: {selectedFile.service.name}
+                  </span>
+                  <span className="font-mono text-xs font-semibold text-primary truncate max-w-xs md:max-w-md" title={selectedFile.path}>
+                    {selectedFile.path}
+                  </span>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-xs btn-error gap-1"
+                    disabled={!isStopped || deleteMutation.isPending}
+                    onClick={handleDelete}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    Borrar
+                  </button>
+
+                  {!isDirSelected && (
+                    <button
+                      type="button"
+                      className="btn btn-xs btn-primary gap-1"
+                      disabled={!isStopped || !hasChanges || saveMutation.isPending || isBinaryFile}
+                      onClick={handleSave}
+                    >
+                      <Save className="w-3 h-3" />
+                      Guardar
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Advertencia sobre pb_data o archivos .db */}
+              {showDbWarning && (
+                <div className="alert alert-error rounded-none text-xs flex gap-2 py-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-error-content" />
+                  <div>
+                    <span className="font-semibold">ADVERTENCIA CRÍTICA:</span> Este archivo pertenece a{" "}
+                    <span className="font-mono">pb_data</span> o es una base de datos. Escribir aquí puede{" "}
+                    <span className="font-semibold">CORROMPER</span> tus datos permanentemente.
+                  </div>
+                </div>
+              )}
+
+              {/* Advertencia de Estado Activo y Botón de Apagado Rápido */}
+              {!isStopped && activeService && (
+                <div className="alert alert-warning rounded-none text-xs flex justify-between py-2 gap-3 items-center">
+                  <div className="flex gap-2 items-center min-w-0">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-warning-content" />
+                    <span className="truncate">
+                      La instancia <strong>{activeService.name}</strong> ({activeService.status}) debe estar detenida para guardar cambios.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleStopService(activeService.id)}
+                    className="btn btn-xs btn-warning shrink-0"
+                    disabled={commandMutation.isPending || activeService.status === "pending"}
+                  >
+                    {commandMutation.isPending ? "Deteniendo..." : "Detener Ahora"}
+                  </button>
+                </div>
+              )}
+
+              {/* Área del Editor de Código */}
+              <div className="flex-1 overflow-hidden min-h-0 bg-base-100">
+                {isDirSelected ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-center p-6 text-base-content/60 space-y-2">
+                    <FolderOpen className="w-12 h-12 text-amber-500 stroke-1" />
+                    <p className="font-semibold text-sm">Directorio seleccionado ({getFileName(selectedFile.path)})</p>
+                    <p className="text-xs max-w-md">Para agregar nuevos archivos dentro de esta carpeta, usa el botón "Nuevo Archivo en esta instancia" del explorador lateral.</p>
+                  </div>
+                ) : isBinaryFile ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-center p-6 text-base-content/60 space-y-2">
+                    <AlertTriangle className="w-10 h-10 text-error" />
+                    <p className="font-semibold text-sm">Este es un archivo binario o base de datos ({getFileName(selectedFile.path)})</p>
+                    <p className="text-xs max-w-md">No es posible renderizar archivos binarios como texto.</p>
+                  </div>
+                ) : fileContentQuery.isLoading ? (
+                  <div className="p-4 text-xs">Cargando contenido del archivo...</div>
+                ) : fileContentQuery.isError ? (
+                  <div className="p-4 text-xs text-error">
+                    Error al abrir archivo: {getErrorMessage(fileContentQuery.error)}
+                  </div>
+                ) : (
+                  <Suspense fallback={<div className="p-4 text-xs">Cargando editor...</div>}>
+                    <PBHookCodeEditor
+                      value={editorContent}
+                      editable={isStopped}
+                      onChange={(val) => setEditorContent(val)}
+                    />
+                  </Suspense>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Modal para crear archivos
+type NewFileModalProps = {
+  serviceID: string;
+  isStopped: boolean;
+  onCreated: (path: string) => void;
+};
+
+const NewFileModal: FC<NewFileModalProps> = ({ serviceID, isStopped, onCreated }) => {
+  const { closeModal } = useModal();
+  const [folder, setFolder] = useState("pb_public");
+  const [filePath, setFilePath] = useState("");
+
+  const saveMutation = useMutation({
+    mutationFn: filesService.saveFile,
+    onSuccess: (_, variables) => {
+      toast.success("Archivo creado con éxito");
+      onCreated(variables.path);
+      closeModal();
+    },
+    onError: (error) => toast.error(getErrorMessage(error)),
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanPath = filePath.trim();
+    if (!cleanPath) {
+      toast.error("La ruta es obligatoria");
+      return;
+    }
+    const finalPath = `${folder}/${cleanPath.startsWith("/") ? cleanPath.substring(1) : cleanPath}`;
+    saveMutation.mutate({
+      serviceID,
+      path: finalPath,
+      content: "",
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4 text-sm">
+      {!isStopped && (
+        <div className="alert alert-warning text-xs">
+          Debes detener la instancia antes de poder crear un nuevo archivo.
+        </div>
+      )}
+
+      <div className="form-control w-full">
+        <label className="label">
+          <span className="label-text mb-1">Directorio de Origen</span>
+        </label>
+        <select
+          className="select select-bordered select-sm w-full font-mono text-xs"
+          value={folder}
+          onChange={(e) => setFolder(e.target.value)}
+          disabled={!isStopped}
+        >
+          <option value="pb_public">pb_public (Estáticos web)</option>
+          <option value="pb_hooks">pb_hooks (JS Hooks)</option>
+          <option value="pb_migrations">pb_migrations (Migraciones DB)</option>
+          <option value="pb_data">pb_data (Datos internos)</option>
+        </select>
+      </div>
+
+      <div className="form-control w-full">
+        <label className="label">
+          <span className="label-text mb-1">Nombre / Ruta relativa del archivo</span>
+        </label>
+        <input
+          type="text"
+          className="input input-bordered input-sm w-full font-mono text-xs"
+          placeholder="ej: index.html, subcarpeta/styles.css"
+          value={filePath}
+          onChange={(e) => setFilePath(e.target.value)}
+          disabled={!isStopped}
+          required
+        />
+      </div>
+
+      <div className="flex justify-end gap-2 pt-2">
+        <button type="button" className="btn btn-sm btn-ghost" onClick={closeModal}>
+          Cancelar
+        </button>
+        <button
+          type="submit"
+          className="btn btn-sm btn-primary"
+          disabled={!isStopped || saveMutation.isPending || filePath.trim() === ""}
+        >
+          Crear Archivo
+        </button>
+      </div>
+    </form>
+  );
+};

@@ -36,7 +36,7 @@ export const ServiceDetailPage = () => {
   };
 
   const menuItemClass = (section: string) =>
-    `btn btn-ghost shrink-0 justify-start whitespace-nowrap text-left md:w-full ${activeSection === section ? "bg-primary text-primary-content" : ""}`;
+    `btn btn-ghost shrink-0 justify-start whitespace-nowrap text-left w-full ${activeSection === section ? "bg-primary text-primary-content" : ""}`;
 
   if (service_id == null || service_id === "") return <Navigate to={"/"} />;
 
@@ -62,7 +62,7 @@ export const ServiceDetailPage = () => {
       <aside
         className={`${menuOpen ? "block" : "hidden"} w-full border-b border-base-300 bg-base-200 p-2 sm:p-4 md:block md:w-64 md:shrink-0 md:border-b-0 md:border-r`}
       >
-        <ul className="menu menu-horizontal w-full flex-nowrap gap-2 overflow-x-auto p-0 md:menu-vertical md:overflow-visible">
+        <ul className="menu menu-vertical w-full gap-2 p-0 md:overflow-visible">
             <li className="shrink-0 select-none md:mb-4 w-full md:w-auto min-w-0">
               <div className="flex flex-col items-start px-3 py-2 bg-base-300/40 border border-base-300 rounded-lg text-left w-full md:px-4 md:py-3 min-w-0">
                 <div className="w-full flex flex-col items-start min-w-0">

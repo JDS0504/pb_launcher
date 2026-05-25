@@ -9,6 +9,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FileText,
   FolderOpen,
+  Folder,
+  ChevronDown,
+  ChevronRight,
   Play,
   Square,
   Trash2,
@@ -61,6 +64,34 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
   const [editorContent, setEditorContent] = useState("");
   const [originalContent, setOriginalContent] = useState("");
   const [isBinaryFile, setIsBinaryFile] = useState(false);
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+
+  const togglePath = (path: string) => {
+    setExpandedPaths((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+        for (const p of next) {
+          if (p.startsWith(path + "/")) {
+            next.delete(p);
+          }
+        }
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  };
+
+  const isPathVisible = (path: string, expanded: Set<string>): boolean => {
+    const parts = path.split("/");
+    if (parts.length <= 1) return true;
+    for (let i = 1; i < parts.length; i++) {
+      const parent = parts.slice(0, i).join("/");
+      if (!expanded.has(parent)) return false;
+    }
+    return true;
+  };
 
   const filesQuery = useQuery<PBFileEntry[]>({
     queryKey: ["pb-files", service_id],
@@ -271,36 +302,57 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
             {files.length === 0 ? (
               <div className="p-4 text-center text-base-content/50">No hay archivos en la instancia.</div>
             ) : (
-              files.map((f) => {
-                const isSelected = selectedPath === f.path;
-                return (
-                  <button
-                    key={f.path}
-                    type="button"
-                    onClick={() => setSelectedPath(f.path)}
-                    className={`w-full text-left py-1.5 px-2 rounded-lg flex items-center justify-between gap-2 transition-colors ${
-                      isSelected
-                        ? "bg-primary text-primary-content"
-                        : "hover:bg-base-300 text-base-content/90"
-                    }`}
-                  >
-                    <span
-                      className="flex items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap"
-                      style={{ paddingLeft: `${indentFor(f.path)}px` }}
+              files
+                .filter((f) => isPathVisible(f.path, expandedPaths))
+                .map((f) => {
+                  const isSelected = selectedPath === f.path;
+                  return (
+                    <button
+                      key={f.path}
+                      type="button"
+                      onClick={() => {
+                        setSelectedPath(f.path);
+                        if (f.is_dir) {
+                          togglePath(f.path);
+                        }
+                      }}
+                      className={`w-full text-left py-1.5 px-2 rounded-lg flex items-center justify-between gap-2 transition-colors ${
+                        isSelected
+                          ? "bg-primary text-primary-content"
+                          : "hover:bg-base-300 text-base-content/90"
+                      }`}
                     >
-                      {f.is_dir ? (
-                        <FolderOpen className="w-3.5 h-3.5 shrink-0 text-amber-500" />
-                      ) : (
-                        <FileText className="w-3.5 h-3.5 shrink-0" />
-                      )}
-                      <span>{getFileName(f.path)}</span>
-                    </span>
-                    <span className={`text-[10px] opacity-70 shrink-0 ${isSelected ? "text-primary-content" : ""}`}>
-                      {!f.is_dir && formatSize(f.size)}
-                    </span>
-                  </button>
-                );
-              })
+                      <span
+                        className="flex items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap"
+                        style={{ paddingLeft: `${indentFor(f.path)}px` }}
+                      >
+                        {f.is_dir ? (
+                          <>
+                            {expandedPaths.has(f.path) ? (
+                              <ChevronDown className="w-3.5 h-3.5 shrink-0 text-base-content/60" />
+                            ) : (
+                              <ChevronRight className="w-3.5 h-3.5 shrink-0 text-base-content/60" />
+                            )}
+                            {expandedPaths.has(f.path) ? (
+                              <FolderOpen className="w-3.5 h-3.5 shrink-0 text-amber-500" />
+                            ) : (
+                              <Folder className="w-3.5 h-3.5 shrink-0 text-amber-500" />
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <span className="w-3.5 shrink-0" />
+                            <FileText className="w-3.5 h-3.5 shrink-0" />
+                          </>
+                        )}
+                        <span>{getFileName(f.path)}</span>
+                      </span>
+                      <span className={`text-[10px] opacity-70 shrink-0 ${isSelected ? "text-primary-content" : ""}`}>
+                        {!f.is_dir && formatSize(f.size)}
+                      </span>
+                    </button>
+                  );
+                })
             )}
           </div>
         </div>

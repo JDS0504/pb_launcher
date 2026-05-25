@@ -16,7 +16,7 @@ export const ProxyDetailsPage = () => {
   };
 
   const menuItemClass = (section: string) =>
-    `btn btn-ghost shrink-0 justify-start whitespace-nowrap text-left md:w-full ${activeSection === section ? "bg-primary text-primary-content" : ""}`;
+    `btn btn-ghost shrink-0 justify-start whitespace-nowrap text-left w-full ${activeSection === section ? "bg-primary text-primary-content" : ""}`;
 
   if (proxy_id == null || proxy_id === "") return <Navigate to={"/"} />;
   return (
@@ -37,7 +37,7 @@ export const ProxyDetailsPage = () => {
       <aside
         className={`${menuOpen ? "block" : "hidden"} w-full border-b border-base-300 bg-base-200 p-2 sm:p-4 md:block md:w-64 md:shrink-0 md:border-b-0 md:border-r`}
       >
-        <ul className="menu menu-horizontal w-full flex-nowrap gap-2 overflow-x-auto p-0 md:menu-vertical md:overflow-visible">
+        <ul className="menu menu-vertical w-full gap-2 p-0 md:overflow-visible">
             <li>
               <button
                 className={menuItemClass("general")}
