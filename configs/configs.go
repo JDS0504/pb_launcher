@@ -50,6 +50,9 @@ type Config interface {
 	GetInstanceCpuQuota() string
 	GetInstanceMemoryLimit() string
 
+	GetAutoSleepCheckInterval() time.Duration
+	GetAutoSleepIdleTimeout() time.Duration
+
 	GetTlsConfig() TlsConfig
 }
 
@@ -105,6 +108,9 @@ type configs struct {
 
 	InstanceCpuQuota    string `mapstructure:"instance_cpu_quota" yaml:"instance_cpu_quota"`       // default: 20%
 	InstanceMemoryLimit string `mapstructure:"instance_memory_limit" yaml:"instance_memory_limit"` // default: 512M
+
+	AutoSleepCheckInterval string `mapstructure:"autosleep_check_interval" yaml:"autosleep_check_interval"`
+	AutoSleepIdleTimeout   string `mapstructure:"autosleep_idle_timeout" yaml:"autosleep_idle_timeout"`
 
 	Tls tls_configs `mapstructure:"cert" yaml:"cert"`
 }
@@ -232,6 +238,22 @@ func (c *configs) GetInstanceMemoryLimit() string {
 	return c.InstanceMemoryLimit
 }
 
+func (c *configs) GetAutoSleepCheckInterval() time.Duration {
+	raw := c.AutoSleepCheckInterval
+	if raw == "" {
+		return 5 * time.Minute
+	}
+	return parseDurationWithMin(raw, 10*time.Second, "autosleep_check_interval")
+}
+
+func (c *configs) GetAutoSleepIdleTimeout() time.Duration {
+	raw := c.AutoSleepIdleTimeout
+	if raw == "" {
+		return 5 * time.Minute
+	}
+	return parseDurationWithMin(raw, 10*time.Second, "autosleep_idle_timeout")
+}
+
 func (c *configs) GetMinCertificateTtl() time.Duration {
 	return parseDurationWithMin(
 		c.MinCertificateTtl,
@@ -314,6 +336,8 @@ func LoadConfigs(configPath string) (Config, error) {
 	c.AcmeEmail = strings.TrimSpace(c.AcmeEmail)
 	c.InstanceCpuQuota = strings.TrimSpace(c.InstanceCpuQuota)
 	c.InstanceMemoryLimit = strings.TrimSpace(c.InstanceMemoryLimit)
+	c.AutoSleepCheckInterval = strings.TrimSpace(c.AutoSleepCheckInterval)
+	c.AutoSleepIdleTimeout = strings.TrimSpace(c.AutoSleepIdleTimeout)
 
 	if err := is.IPv4.Validate(c.GetBindIPAddress()); err != nil {
 		slog.Error(

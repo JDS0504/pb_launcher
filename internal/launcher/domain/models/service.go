@@ -33,6 +33,8 @@ type Service struct {
 	BootUserEmail     string
 	BootUserPassword  string
 	Deleted           string
+	IP                string
+	Port              string
 }
 
 type Release struct {

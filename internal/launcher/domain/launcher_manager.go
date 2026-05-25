@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path"
@@ -20,8 +22,10 @@ import (
 	"pb_launcher/utils/iouitls"
 	"pb_launcher/utils/networktools"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	version "github.com/hashicorp/go-version"
 )
@@ -42,6 +46,11 @@ type LauncherManager struct {
 	errChan         chan process.ProcessErrorMessage
 	cpuQuota        string
 	memoryLimit     string
+	// Auto-Sleep fields
+	activityMap         map[string]time.Time
+	checkTickerInterval time.Duration
+	idleTimeout         time.Duration
+	stopChan            chan struct{}
 }
 
 func NewLauncherManager(
@@ -68,8 +77,13 @@ func NewLauncherManager(
 		errChan:             make(chan process.ProcessErrorMessage, 10),
 		cpuQuota:            c.GetInstanceCpuQuota(),
 		memoryLimit:         c.GetInstanceMemoryLimit(),
+		activityMap:         make(map[string]time.Time),
+		checkTickerInterval: c.GetAutoSleepCheckInterval(),
+		idleTimeout:         c.GetAutoSleepIdleTimeout(),
+		stopChan:            make(chan struct{}),
 	}
 	go lm.handleServiceErrors()
+	go lm.startAutoSleepTicker()
 	return lm
 }
 
@@ -206,6 +220,12 @@ func (lm *LauncherManager) buildStdoutHandler(serviceID string) iouitls.WriterIn
 }
 
 func (lm *LauncherManager) startService(ctx context.Context, service models.Service) error {
+	lm.rwMtx.Lock()
+	defer lm.rwMtx.Unlock()
+	return lm.startServiceLocked(ctx, service)
+}
+
+func (lm *LauncherManager) startServiceLocked(ctx context.Context, service models.Service) error {
 	if existingProcess, exists := lm.processList[service.ID]; exists {
 		if existingProcess.IsRunning() {
 			return fmt.Errorf("service %s is already running", service.ID)
@@ -273,6 +293,7 @@ func (lm *LauncherManager) startService(ctx context.Context, service models.Serv
 	}
 
 	lm.processList[service.ID] = newProcess
+	lm.activityMap[service.ID] = time.Now()
 
 	if err := lm.repository.MarkServiceRunning(ctx, service.ID, ip, fmt.Sprint(port)); err != nil {
 		slog.Error("failed to update service status to running",
@@ -287,6 +308,12 @@ func (lm *LauncherManager) startService(ctx context.Context, service models.Serv
 }
 
 func (lm *LauncherManager) stopService(ctx context.Context, serviceID string) error {
+	lm.rwMtx.Lock()
+	defer lm.rwMtx.Unlock()
+	return lm.stopServiceLocked(ctx, serviceID)
+}
+
+func (lm *LauncherManager) stopServiceLocked(ctx context.Context, serviceID string) error {
 	existingProcess, exists := lm.processList[serviceID]
 	if !exists {
 		return fmt.Errorf("no running process found for service %s", serviceID)
@@ -301,6 +328,7 @@ func (lm *LauncherManager) stopService(ctx context.Context, serviceID string) er
 	}
 
 	delete(lm.processList, serviceID)
+	delete(lm.activityMap, serviceID)
 
 	if err := lm.repository.MarkServiceStoped(ctx, serviceID); err != nil {
 		slog.Error("failed to mark service as stopped", "serviceID", serviceID, "error", err)
@@ -391,7 +419,7 @@ func (lm *LauncherManager) RecoveryLastState(ctx context.Context) error {
 		if service.Deleted != "" {
 			continue
 		}
-		if err := lm.startService(ctx, service); err != nil {
+		if err := lm.startServiceLocked(ctx, service); err != nil {
 			slog.Error("failed to start service",
 				"serviceID", service.ID,
 				"error", err,
@@ -460,6 +488,8 @@ func (lm *LauncherManager) Dispose() error {
 	lm.rwMtx.Lock()
 	defer lm.rwMtx.Unlock()
 
+	close(lm.stopChan)
+
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var combinedErr error
@@ -486,4 +516,141 @@ func (lm *LauncherManager) Dispose() error {
 	wg.Wait()
 	close(lm.errChan)
 	return combinedErr
+}
+
+func (lm *LauncherManager) WakeupService(ctx context.Context, serviceID string) (string, int, error) {
+	lm.rwMtx.Lock()
+
+	// Si ya está corriendo
+	if proc, exists := lm.processList[serviceID]; exists && proc.IsRunning() {
+		lm.rwMtx.Unlock()
+		service, err := lm.repository.FindService(ctx, serviceID)
+		if err != nil {
+			return "", 0, err
+		}
+		port, _ := strconv.Atoi(service.Port)
+		if err := lm.waitForHealthCheck(ctx, service.IP, service.Port); err != nil {
+			return "", 0, err
+		}
+		return service.IP, port, nil
+	}
+
+	// Cargar el servicio
+	service, err := lm.repository.FindService(ctx, serviceID)
+	if err != nil {
+		lm.rwMtx.Unlock()
+		return "", 0, err
+	}
+	if service.Deleted != "" {
+		lm.rwMtx.Unlock()
+		return "", 0, fmt.Errorf("service is deleted")
+	}
+
+	// Iniciar
+	err = lm.startServiceLocked(ctx, *service)
+	lm.rwMtx.Unlock()
+	if err != nil {
+		return "", 0, err
+	}
+
+	// Leer IP y puerto actuales
+	service, err = lm.repository.FindService(ctx, serviceID)
+	if err != nil {
+		return "", 0, err
+	}
+	port, _ := strconv.Atoi(service.Port)
+	if service.IP == "" || port == 0 {
+		return "", 0, fmt.Errorf("service started but IP/Port not registered")
+	}
+
+	// Esperar al healthcheck
+	if err := lm.waitForHealthCheck(ctx, service.IP, service.Port); err != nil {
+		return "", 0, err
+	}
+
+	return service.IP, port, nil
+}
+
+func (lm *LauncherManager) waitForHealthCheck(ctx context.Context, ip string, portStr string) error {
+	healthURL := fmt.Sprintf("http://%s/api/health", net.JoinHostPort(ip, portStr))
+	client := &http.Client{Timeout: 100 * time.Millisecond}
+
+	maxRetries := 25 // 25 * 40ms = 1000ms max
+	for i := 0; i < maxRetries; i++ {
+		req, err := http.NewRequestWithContext(ctx, "GET", healthURL, nil)
+		if err == nil {
+			resp, err := client.Do(req)
+			if err == nil {
+				resp.Body.Close()
+				if resp.StatusCode == http.StatusOK {
+					return nil
+				}
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(40 * time.Millisecond):
+		}
+	}
+	return fmt.Errorf("timeout waiting for health check at %s", healthURL)
+}
+
+func (lm *LauncherManager) RecordActivity(serviceID string) {
+	lm.rwMtx.Lock()
+	defer lm.rwMtx.Unlock()
+	lm.activityMap[serviceID] = time.Now()
+}
+
+func (lm *LauncherManager) startAutoSleepTicker() {
+	ticker := time.NewTicker(lm.checkTickerInterval)
+	defer ticker.Stop()
+
+	slog.Info("Auto-Sleep ticker started",
+		"checkInterval", lm.checkTickerInterval.String(),
+		"idleTimeout", lm.idleTimeout.String(),
+	)
+
+	for {
+		select {
+		case <-lm.stopChan:
+			slog.Info("Auto-Sleep ticker stopped")
+			return
+		case <-ticker.C:
+			lm.checkAndSuspendInactiveServices()
+		}
+	}
+}
+
+func (lm *LauncherManager) checkAndSuspendInactiveServices() {
+	lm.rwMtx.Lock()
+	var toSuspend []string
+	now := time.Now()
+
+	for id, proc := range lm.processList {
+		if !proc.IsRunning() {
+			continue
+		}
+		lastActive, ok := lm.activityMap[id]
+		if !ok {
+			lm.activityMap[id] = now
+			continue
+		}
+
+		if now.Sub(lastActive) >= lm.idleTimeout {
+			toSuspend = append(toSuspend, id)
+		}
+	}
+	lm.rwMtx.Unlock()
+
+	for _, id := range toSuspend {
+		slog.Info("Suspending inactive service", "serviceID", id, "idleTimeout", lm.idleTimeout.String())
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := lm.stopService(ctx, id); err != nil {
+			slog.Error("failed to auto-sleep service", "serviceID", id, "error", err)
+		} else {
+			slog.Info("Service successfully suspended due to inactivity", "serviceID", id)
+		}
+		cancel()
+	}
 }

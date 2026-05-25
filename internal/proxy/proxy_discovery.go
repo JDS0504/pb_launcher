@@ -25,6 +25,7 @@ type DynamicReverseProxyDiscovery struct {
 	proxyEntryDiscovery *proxydomain.ProxyEntryDiscovery
 	domainDiscovery     *proxydomain.DomainServiceDiscovery
 	installTokenUsecase *launcherdomain.CleanServiceInstallTokenUsecase
+	launcherManager     *launcherdomain.LauncherManager
 	apiDomain           string
 	internalApiAddress  string
 }
@@ -34,6 +35,7 @@ func NewDynamicReverseProxyDiscovery(
 	proxyEntryDiscovery *proxydomain.ProxyEntryDiscovery,
 	domainDiscovery *proxydomain.DomainServiceDiscovery,
 	installTokenUsecase *launcherdomain.CleanServiceInstallTokenUsecase,
+	launcherManager *launcherdomain.LauncherManager,
 	cfg configs.Config,
 	pbConf *apis.ServeConfig) *DynamicReverseProxyDiscovery {
 	return &DynamicReverseProxyDiscovery{
@@ -41,6 +43,7 @@ func NewDynamicReverseProxyDiscovery(
 		proxyEntryDiscovery: proxyEntryDiscovery,
 		domainDiscovery:     domainDiscovery,
 		installTokenUsecase: installTokenUsecase,
+		launcherManager:     launcherManager,
 		apiDomain:           cfg.GetDomain(),
 		internalApiAddress:  pbConf.HttpAddr,
 	}
@@ -116,8 +119,20 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 		if target.Service != nil {
 			service, err := rp.serviceDiscovery.FindRunningServiceByID(ctx, *target.Service)
 			if err != nil {
+				if errors.Is(err, repositories.ErrNotFound) {
+					ip, port, wakeupErr := rp.launcherManager.WakeupService(ctx, *target.Service)
+					if wakeupErr == nil {
+						rp.launcherManager.RecordActivity(*target.Service)
+						return rp.buildReverseProxy(&url.URL{
+							Scheme: "http",
+							Host:   net.JoinHostPort(ip, strconv.Itoa(port)),
+						}), nil
+					}
+					return nil, fmt.Errorf("failed to wake up service %s: %w", *target.Service, wakeupErr)
+				}
 				return nil, fmt.Errorf("service not found for id: %s", *target.Service)
 			}
+			rp.launcherManager.RecordActivity(*target.Service)
 			return rp.buildReverseProxy(&url.URL{
 				Scheme: "http",
 				Host:   net.JoinHostPort(service.IP, strconv.Itoa(service.Port)),
@@ -139,12 +154,22 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 
 	service, err := rp.serviceDiscovery.FindRunningServiceByID(ctx, id)
 	if err == nil {
+		rp.launcherManager.RecordActivity(id)
 		return rp.buildReverseProxy(&url.URL{
 			Scheme: "http",
 			Host:   net.JoinHostPort(service.IP, strconv.Itoa(service.Port)),
 		}), nil
 	}
-	if !errors.Is(err, repositories.ErrNotFound) {
+	if errors.Is(err, repositories.ErrNotFound) {
+		ip, port, wakeupErr := rp.launcherManager.WakeupService(ctx, id)
+		if wakeupErr == nil {
+			rp.launcherManager.RecordActivity(id)
+			return rp.buildReverseProxy(&url.URL{
+				Scheme: "http",
+				Host:   net.JoinHostPort(ip, strconv.Itoa(port)),
+			}), nil
+		}
+	} else {
 		return nil, fmt.Errorf("failed to resolve service by id: %s", id)
 	}
 
