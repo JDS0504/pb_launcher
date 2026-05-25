@@ -724,3 +724,11 @@ func (lm *LauncherManager) checkAndSuspendInactiveServices() {
 		cancel()
 	}
 }
+
+// IsServiceRunning comprueba de forma síncrona si el servicio está activo en memoria y corriendo.
+func (lm *LauncherManager) IsServiceRunning(serviceID string) bool {
+	lm.rwMtx.RLock()
+	defer lm.rwMtx.RUnlock()
+	proc, exists := lm.processList[serviceID]
+	return exists && proc.IsRunning()
+}

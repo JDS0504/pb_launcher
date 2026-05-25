@@ -92,6 +92,22 @@ const LogsView: FC<LogsViewProps> = ({ service_id }) => {
   const [logs, setLogs] = useState<ServiceLog[]>([]);
   const [connected, setConnectionState] = useState<boolean>(true);
   const containerRef = useRef<HTMLDivElement>(null);
+  const shouldScrollToBottomRef = useRef<boolean>(true);
+
+  // Efecto reactivo: React ejecuta esto justo después de aplicar los cambios de logs al DOM
+  useEffect(() => {
+    if (containerRef.current && shouldScrollToBottomRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    }
+  }, [logs]);
+
+  const handleScroll = () => {
+    if (!containerRef.current) return;
+    const { scrollTop, clientHeight, scrollHeight } = containerRef.current;
+    // Si el usuario sube a más de 30px del fondo, desactiva el auto-scroll automático.
+    // Si vuelve a bajar voluntariamente hasta abajo, lo reactiva.
+    shouldScrollToBottomRef.current = scrollTop + clientHeight >= scrollHeight - 30;
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -104,14 +120,8 @@ const LogsView: FC<LogsViewProps> = ({ service_id }) => {
       .then(initLogs => {
         if (!isActive) return;
         const safeInitLogs = Array.isArray(initLogs) ? initLogs : [];
+        shouldScrollToBottomRef.current = true; // Forzar scroll abajo al inicializar
         setLogs(safeInitLogs);
-        if (safeInitLogs.length > 0) {
-          setTimeout(() => {
-            if (containerRef.current) {
-              containerRef.current.scrollTop = containerRef.current.scrollHeight;
-            }
-          }, 50);
-        }
       })
       .catch(() => {
         // ignorar error de abort en carga inicial
@@ -129,30 +139,22 @@ const LogsView: FC<LogsViewProps> = ({ service_id }) => {
         if (!isActive) return;
 
         const safeLogs = Array.isArray(newLogs) ? newLogs : [];
-        let shouldScrollToBottom = false;
 
         if (containerRef.current) {
           const { scrollTop, clientHeight, scrollHeight } = containerRef.current;
-          // Si está a menos de 30px del fondo, asumimos que quiere auto-scroll
-          shouldScrollToBottom = scrollTop + clientHeight >= scrollHeight - 30;
+          // Decidir si deberíamos hacer scroll al fondo según la posición actual
+          shouldScrollToBottomRef.current = scrollTop + clientHeight >= scrollHeight - 30;
         }
 
         setLogs(prev => {
           const merged = mergeLogsUnique(prev, safeLogs);
           // Si antes estaba vacío y ahora tiene elementos, forzar auto-scroll
           if (prev.length === 0 && merged.length > 0) {
-            shouldScrollToBottom = true;
+            shouldScrollToBottomRef.current = true;
           }
           return merged;
         });
 
-        if (shouldScrollToBottom) {
-          setTimeout(() => {
-            if (containerRef.current) {
-              containerRef.current.scrollTop = containerRef.current.scrollHeight;
-            }
-          }, 50);
-        }
         setConnectionState(true);
       } catch (err) {
         // Si el componente ya se desmontó o el signal fue abortado, ignorar
@@ -191,6 +193,7 @@ const LogsView: FC<LogsViewProps> = ({ service_id }) => {
         style={{ height: viewHeight - 270 }}
         className="text-base-content overflow-y-auto font-mono text-sm"
         ref={containerRef}
+        onScroll={handleScroll}
       >
         <div className="whitespace-pre-wrap space-y-1">
           {logs.map(log => (

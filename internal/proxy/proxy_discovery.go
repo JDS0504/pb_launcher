@@ -137,26 +137,34 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 			return nil, fmt.Errorf("no target found for domain: %s", host)
 		}
 		if target.Service != nil {
-			service, err := rp.serviceDiscovery.FindRunningServiceByID(ctx, *target.Service)
-			if err != nil {
-				if errors.Is(err, repositories.ErrNotFound) {
-					ip, port, wakeupErr := rp.launcherManager.WakeupService(ctx, *target.Service)
-					if wakeupErr == nil {
-						rp.launcherManager.RecordActivity(*target.Service)
-						return rp.buildReverseProxy(&url.URL{
-							Scheme: "http",
-							Host:   net.JoinHostPort(ip, strconv.Itoa(port)),
-						}), nil
-					}
-					return nil, fmt.Errorf("failed to wake up service %s: %w", *target.Service, wakeupErr)
-				}
-				return nil, fmt.Errorf("service not found for id: %s", *target.Service)
+			serviceID := *target.Service
+			service, err := rp.serviceDiscovery.FindRunningServiceByID(ctx, serviceID)
+			
+			// Si no hay error en BD y el servicio realmente corre en memoria
+			if err == nil && rp.launcherManager.IsServiceRunning(serviceID) {
+				rp.launcherManager.RecordActivity(serviceID)
+				return rp.buildReverseProxy(&url.URL{
+					Scheme: "http",
+					Host:   net.JoinHostPort(service.IP, strconv.Itoa(service.Port)),
+				}), nil
 			}
-			rp.launcherManager.RecordActivity(*target.Service)
-			return rp.buildReverseProxy(&url.URL{
-				Scheme: "http",
-				Host:   net.JoinHostPort(service.IP, strconv.Itoa(service.Port)),
-			}), nil
+
+			// Si no corre en memoria, o no está marcado en ejecución en BD, lo despertamos
+			if errors.Is(err, repositories.ErrNotFound) || (err == nil && !rp.launcherManager.IsServiceRunning(serviceID)) {
+				ip, port, wakeupErr := rp.launcherManager.WakeupService(ctx, serviceID)
+				if wakeupErr == nil {
+					rp.launcherManager.RecordActivity(serviceID)
+					_ = rp.serviceDiscovery.InvalidateServiceCacheByID(serviceID)
+					return rp.buildReverseProxy(&url.URL{
+						Scheme: "http",
+						Host:   net.JoinHostPort(ip, strconv.Itoa(port)),
+					}), nil
+				}
+				return nil, fmt.Errorf("failed to wake up service %s: %w", serviceID, wakeupErr)
+			}
+			if err != nil {
+				return nil, fmt.Errorf("service not found for id: %s", serviceID)
+			}
 		}
 		if target.ProxyEntry != nil {
 			entry, err := rp.proxyEntryDiscovery.FindEnabledProxyEntryByID(ctx, *target.ProxyEntry)
@@ -173,23 +181,26 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 	}
 
 	service, err := rp.serviceDiscovery.FindRunningServiceByID(ctx, id)
-	if err == nil {
+	if err == nil && rp.launcherManager.IsServiceRunning(id) {
 		rp.launcherManager.RecordActivity(id)
 		return rp.buildReverseProxy(&url.URL{
 			Scheme: "http",
 			Host:   net.JoinHostPort(service.IP, strconv.Itoa(service.Port)),
 		}), nil
 	}
-	if errors.Is(err, repositories.ErrNotFound) {
+
+	// Si no corre en memoria, o no está marcado en ejecución en BD
+	if errors.Is(err, repositories.ErrNotFound) || (err == nil && !rp.launcherManager.IsServiceRunning(id)) {
 		ip, port, wakeupErr := rp.launcherManager.WakeupService(ctx, id)
 		if wakeupErr == nil {
 			rp.launcherManager.RecordActivity(id)
+			_ = rp.serviceDiscovery.InvalidateServiceCacheByID(id)
 			return rp.buildReverseProxy(&url.URL{
 				Scheme: "http",
 				Host:   net.JoinHostPort(ip, strconv.Itoa(port)),
 			}), nil
 		}
-	} else {
+	} else if err != nil {
 		return nil, fmt.Errorf("failed to resolve service by id: %s", id)
 	}
 
