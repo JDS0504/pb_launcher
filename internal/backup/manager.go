@@ -283,6 +283,21 @@ func (m *Manager) DeleteSnapshot(ctx context.Context, serviceID string, snapshot
 	return nil
 }
 
+func (m *Manager) GetSnapshotFile(ctx context.Context, serviceID string, snapshotID string) (*BackupFile, error) {
+	snapshot, err := m.findSnapshot(ctx, serviceID, snapshotID)
+	if err != nil {
+		return nil, err
+	}
+	service, err := m.serviceRepo.FindService(ctx, serviceID)
+	if err != nil {
+		return nil, err
+	}
+	return &BackupFile{
+		Path:     snapshot.Path,
+		Filename: fmt.Sprintf("%s-%s-snapshot.zip", sanitizeFilename(service.Name), snapshot.ID),
+	}, nil
+}
+
 func (m *Manager) findSnapshot(ctx context.Context, serviceID string, snapshotID string) (*SnapshotInfo, error) {
 	snapshotID = strings.TrimSpace(snapshotID)
 	if snapshotID == "" || strings.Contains(snapshotID, "/") || strings.Contains(snapshotID, "..") {

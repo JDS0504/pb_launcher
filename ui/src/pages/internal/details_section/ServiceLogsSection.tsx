@@ -1,9 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FC } from "react";
 import { serviceService, type ServiceLog, type ServiceDto } from "../../../services/services";
-import { useViewportHeight } from "../../../hooks/useViewportHeight";
 import classNames from "classnames";
-import { Play, RotateCw, Square } from "lucide-react";
+import { Play, RotateCw, Square, Download } from "lucide-react";
 import toast from "react-hot-toast";
 import { getErrorMessage } from "../../../utils/errors";
 import { useConfirmModal } from "../../../hooks/useConfirmModal";
@@ -46,36 +45,56 @@ export const ServiceLogsSection: FC<Props> = ({ service_id, service }) => {
   const isPending = status === "pending";
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+    <div className="space-y-4 min-w-0">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="text-sm text-base-content/70">
           Status: <span className="font-medium capitalize">{status}</span>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            className="btn btn-sm btn-success gap-2"
-            disabled={isRunning || isPending || commandMutation.isPending}
-            onClick={() => executeCommand("start")}
+          <div
+            title={
+              isRunning || isPending
+                ? "El servicio ya está en ejecución"
+                : undefined
+            }
           >
-            <Play className="w-4 h-4" />
-            Start
-          </button>
-          <button
-            className="btn btn-sm btn-warning gap-2"
-            disabled={!isRunning || commandMutation.isPending}
-            onClick={() => executeCommand("restart")}
+            <button
+              className="btn btn-sm btn-success gap-2"
+              disabled={isRunning || isPending || commandMutation.isPending}
+              onClick={() => executeCommand("start")}
+            >
+              <Play className="w-4 h-4" />
+              Start
+            </button>
+          </div>
+          <div
+            title={
+              !isRunning ? "El servicio no está en ejecución" : undefined
+            }
           >
-            <RotateCw className="w-4 h-4" />
-            Restart
-          </button>
-          <button
-            className="btn btn-sm btn-error gap-2"
-            disabled={!isRunning || commandMutation.isPending}
-            onClick={() => executeCommand("stop")}
+            <button
+              className="btn btn-sm btn-warning gap-2"
+              disabled={!isRunning || commandMutation.isPending}
+              onClick={() => executeCommand("restart")}
+            >
+              <RotateCw className="w-4 h-4" />
+              Restart
+            </button>
+          </div>
+          <div
+            title={
+              !isRunning ? "El servicio no está en ejecución" : undefined
+            }
           >
-            <Square className="w-4 h-4" />
-            Stop
-          </button>
+            <button
+              className="btn btn-sm btn-error gap-2"
+              disabled={!isRunning || commandMutation.isPending}
+              onClick={() => executeCommand("stop")}
+            >
+              <Square className="w-4 h-4" />
+              Stop
+            </button>
+          </div>
         </div>
       </div>
       <LogsView service_id={service_id} />
@@ -87,14 +106,15 @@ type LogsViewProps = {
   service_id: string;
 };
 
+type StreamFilter = "all" | "stdout" | "stderr";
+
 const LogsView: FC<LogsViewProps> = ({ service_id }) => {
-  const viewHeight = useViewportHeight();
   const [logs, setLogs] = useState<ServiceLog[]>([]);
   const [connected, setConnectionState] = useState<boolean>(true);
+  const [streamFilter, setStreamFilter] = useState<StreamFilter>("all");
   const containerRef = useRef<HTMLDivElement>(null);
   const shouldScrollToBottomRef = useRef<boolean>(true);
 
-  // Efecto reactivo: React ejecuta esto justo después de aplicar los cambios de logs al DOM
   useEffect(() => {
     if (containerRef.current && shouldScrollToBottomRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
@@ -104,8 +124,6 @@ const LogsView: FC<LogsViewProps> = ({ service_id }) => {
   const handleScroll = () => {
     if (!containerRef.current) return;
     const { scrollTop, clientHeight, scrollHeight } = containerRef.current;
-    // Si el usuario sube a más de 30px del fondo, desactiva el auto-scroll automático.
-    // Si vuelve a bajar voluntariamente hasta abajo, lo reactiva.
     shouldScrollToBottomRef.current = scrollTop + clientHeight >= scrollHeight - 30;
   };
 
@@ -114,13 +132,12 @@ const LogsView: FC<LogsViewProps> = ({ service_id }) => {
     let isActive = true;
     let timeoutId: NodeJS.Timeout;
 
-    // Carga inicial de logs históricos
     serviceService
       .fetchServiceLogs(controller.signal, service_id, -1)
       .then(initLogs => {
         if (!isActive) return;
         const safeInitLogs = Array.isArray(initLogs) ? initLogs : [];
-        shouldScrollToBottomRef.current = true; // Forzar scroll abajo al inicializar
+        shouldScrollToBottomRef.current = true;
         setLogs(safeInitLogs);
       })
       .catch(() => {
@@ -135,20 +152,17 @@ const LogsView: FC<LogsViewProps> = ({ service_id }) => {
           10,
         );
 
-        // Verificar isActive antes de cualquier setState
         if (!isActive) return;
 
         const safeLogs = Array.isArray(newLogs) ? newLogs : [];
 
         if (containerRef.current) {
           const { scrollTop, clientHeight, scrollHeight } = containerRef.current;
-          // Decidir si deberíamos hacer scroll al fondo según la posición actual
           shouldScrollToBottomRef.current = scrollTop + clientHeight >= scrollHeight - 30;
         }
 
         setLogs(prev => {
           const merged = mergeLogsUnique(prev, safeLogs);
-          // Si antes estaba vacío y ahora tiene elementos, forzar auto-scroll
           if (prev.length === 0 && merged.length > 0) {
             shouldScrollToBottomRef.current = true;
           }
@@ -157,9 +171,7 @@ const LogsView: FC<LogsViewProps> = ({ service_id }) => {
 
         setConnectionState(true);
       } catch (err) {
-        // Si el componente ya se desmontó o el signal fue abortado, ignorar
         if (!isActive) return;
-        // Solo loguear errores reales, no aborts
         if (err instanceof Error && err.name !== "AbortError") {
           console.warn("Logs fetch error:", err);
         }
@@ -171,7 +183,6 @@ const LogsView: FC<LogsViewProps> = ({ service_id }) => {
       }
     };
 
-    // Primera iteración con delay
     timeoutId = setTimeout(fetchLoop, 2000);
 
     return () => {
@@ -181,31 +192,86 @@ const LogsView: FC<LogsViewProps> = ({ service_id }) => {
     };
   }, [service_id]);
 
+  const filteredLogs = streamFilter === "all"
+    ? logs
+    : logs.filter(l => l.stream === streamFilter);
+
+  const handleExport = () => {
+    const text = logs
+      .map(l => `[${l.stream.toUpperCase()}] ${l.message}`)
+      .join("\n");
+    const blob = new Blob([text], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `logs-${service_id}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return (
-    <div style={{ height: viewHeight - 270 }} className="relative">
+    <div className="space-y-2 min-w-0">
+      {/* Controles de filtro y exportar */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-1">
+          {(["all", "stdout", "stderr"] as StreamFilter[]).map(f => (
+            <button
+              key={f}
+              className={classNames("btn btn-xs", {
+                "btn-neutral": streamFilter === f,
+                "btn-ghost": streamFilter !== f,
+              })}
+              onClick={() => setStreamFilter(f)}
+            >
+              {f === "all" ? "Todos" : f}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <div
+            className={classNames("w-2 h-2 rounded-full", {
+              "bg-green-500": connected,
+              "bg-red-500": !connected,
+            })}
+            title={connected ? "Conectado" : "Sin conexión"}
+          />
+          <button
+            className="btn btn-xs btn-ghost gap-1"
+            onClick={handleExport}
+            disabled={logs.length === 0}
+            title="Descargar logs como .txt"
+          >
+            <Download className="w-3 h-3" />
+            Exportar
+          </button>
+        </div>
+      </div>
+
+      {/* Contenedor de logs con altura responsiva */}
       <div
-        className={classNames("w-4 h-4 rounded-full absolute top-0 right-0", {
-          "bg-green-600": connected,
-          "bg-red-500": !connected,
-        })}
-      />
-      <div
-        style={{ height: viewHeight - 270 }}
-        className="text-base-content overflow-y-auto font-mono text-sm"
+        className="text-base-content overflow-y-auto font-mono text-sm bg-base-300/40 rounded-lg p-3 min-h-[200px] max-h-[calc(100vh-340px)]"
         ref={containerRef}
         onScroll={handleScroll}
       >
         <div className="whitespace-pre-wrap space-y-1">
-          {logs.map(log => (
-            <div
-              key={log.id}
-              className={
-                log.stream === "stderr" ? "text-error" : "text-success"
-              }
-            >
-              {log.message}
-            </div>
-          ))}
+          {filteredLogs.length === 0 ? (
+            <span className="text-base-content/40 text-xs">
+              {logs.length === 0 ? "Sin logs disponibles..." : "Sin logs para el filtro seleccionado."}
+            </span>
+          ) : (
+            filteredLogs.map(log => (
+              <div
+                key={log.id}
+                className={
+                  log.stream === "stderr" ? "text-error" : "text-success"
+                }
+              >
+                {log.message}
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>

@@ -136,6 +136,33 @@ export const backupService = {
     return json as { service_id: string };
   },
 
+  downloadSnapshot: async (serviceID: string, snapshotID: string) => {
+    const url = joinUrls(
+      pb.baseURL,
+      `/x-api/services/${serviceID}/snapshots/${snapshotID}/download`,
+    );
+    const response = await fetch(url, {
+      headers: { Authorization: pb.authStore.token },
+    });
+    if (!response.ok) {
+      const json = await response.json().catch(() => null);
+      throw new HttpError(
+        response.status,
+        json?.message || "Failed to download snapshot",
+        json,
+      );
+    }
+    const blob = await response.blob();
+    const downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = parseFilename(response.headers.get("content-disposition"));
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(downloadUrl);
+  },
+
   deleteSnapshot: async (data: { serviceID: string; snapshotID: string }) => {
     const url = joinUrls(
       pb.baseURL,

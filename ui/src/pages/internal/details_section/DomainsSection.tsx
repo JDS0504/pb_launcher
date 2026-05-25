@@ -147,7 +147,7 @@ export const DomainsSection: FC<Props> = ({
           </button>
         </div>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 min-w-0">
         <DomainCard
           readonly
           url={formatUrl(
@@ -171,6 +171,21 @@ export const DomainsSection: FC<Props> = ({
           />
         ))}
       </div>
+
+      {(domainsQuery.data ?? []).length === 0 && (
+        <div className="rounded-lg border border-dashed border-base-300 p-6 text-center space-y-2">
+          <p className="text-sm text-base-content/60">
+            Solo está activo el dominio del sistema. Puedes añadir dominios personalizados con SSL.
+          </p>
+          <button
+            className="btn btn-sm btn-primary gap-2"
+            onClick={openCreateModal}
+          >
+            <Plus className="w-4 h-4" />
+            Añadir dominio personalizado
+          </button>
+        </div>
+      )}
     </div>
   );
 };

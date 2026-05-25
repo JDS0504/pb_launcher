@@ -105,6 +105,17 @@ func RegisterRoutes(app *pocketbase.PocketBase, manager *Manager) {
 			return e.JSON(http.StatusOK, map[string]string{"service_id": serviceID})
 		}).Bind(apis.RequireAuth())
 
+		se.Router.GET("/x-api/services/{service_id}/snapshots/{snapshot_id}/download", func(e *core.RequestEvent) error {
+			snapshot, err := manager.GetSnapshotFile(e.Request.Context(), e.Request.PathValue("service_id"), e.Request.PathValue("snapshot_id"))
+			if err != nil {
+				return e.BadRequestError("failed to find snapshot", err)
+			}
+			e.Response.Header().Set("Content-Type", "application/zip")
+			e.Response.Header().Set("Content-Disposition", `attachment; filename="`+snapshot.Filename+`"`)
+			http.ServeFile(e.Response, e.Request, snapshot.Path)
+			return nil
+		}).Bind(apis.RequireAuth())
+
 		se.Router.DELETE("/x-api/services/{service_id}/snapshots/{snapshot_id}", func(e *core.RequestEvent) error {
 			if err := manager.DeleteSnapshot(e.Request.Context(), e.Request.PathValue("service_id"), e.Request.PathValue("snapshot_id")); err != nil {
 				return e.BadRequestError("failed to delete snapshot", err)

@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Camera, RotateCcw, Trash2 } from "lucide-react";
+import { Camera, Download, RotateCcw, Trash2 } from "lucide-react";
 import type { FC } from "react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
@@ -47,6 +47,13 @@ export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
       toast.success("Snapshot restored as a new instance");
       navigate(`/services/${data.service_id}`);
     },
+    onError: error => toast.error(getErrorMessage(error)),
+  });
+
+  const downloadMutation = useMutation({
+    mutationFn: ({ serviceID, snapshotID }: { serviceID: string; snapshotID: string }) =>
+      backupService.downloadSnapshot(serviceID, snapshotID),
+    onSuccess: () => toast.success("Snapshot descargado"),
     onError: error => toast.error(getErrorMessage(error)),
   });
 
@@ -119,25 +126,29 @@ export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
   const canCreate = service?.status === "stopped";
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div className="text-sm text-base-content/70">
+    <div className="space-y-4 min-w-0">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+        <div className="text-sm text-base-content/70 max-w-prose">
           Snapshots are local point-in-time ZIP copies. Creating a snapshot requires
           the service to be stopped. Restoring creates a new instance.
         </div>
-        <button
-          className="btn btn-sm btn-primary gap-2"
-          disabled={!canCreate || createMutation.isPending}
-          onClick={createSnapshot}
+        <div
           title={
             canCreate
-              ? "Create snapshot"
-              : "Stop the service before creating a snapshot"
+              ? undefined
+              : "Detén el servicio antes de crear un snapshot"
           }
+          className="shrink-0"
         >
-          <Camera className="w-4 h-4" />
-          Create snapshot
-        </button>
+          <button
+            className="btn btn-sm btn-primary gap-2 w-full sm:w-auto"
+            disabled={!canCreate || createMutation.isPending}
+            onClick={createSnapshot}
+          >
+            <Camera className="w-4 h-4" />
+            Create snapshot
+          </button>
+        </div>
       </div>
 
       {!canCreate && (
@@ -147,51 +158,75 @@ export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
       )}
 
       {snapshots.length === 0 ? (
-        <div className="text-sm text-base-content/70">No snapshots yet.</div>
+        <div className="rounded-lg border border-dashed border-base-300 p-6 text-center">
+          <p className="text-sm text-base-content/60">No snapshots yet. Stop the service and create your first snapshot.</p>
+        </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="table table-sm">
+        <div className="overflow-x-auto rounded-lg">
+          <table className="table table-sm w-full">
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Version</th>
-                <th>Created</th>
-                <th>Size</th>
+                <th className="hidden sm:table-cell">Version</th>
+                <th className="hidden md:table-cell">Created</th>
+                <th className="hidden sm:table-cell">Size</th>
                 <th className="text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {snapshots.map(snapshot => (
                 <tr key={snapshot.id}>
-                  <td>
-                    <div className="font-medium">{snapshot.name}</div>
-                    <div className="text-xs text-base-content/60">{snapshot.id}</div>
+                  <td className="min-w-0">
+                    <div className="font-medium truncate max-w-[160px]">{snapshot.name}</div>
+                    <div className="text-xs text-base-content/60 sm:hidden">
+                      {snapshot.version} · {formatSize(snapshot.size)}
+                    </div>
+                    <div className="text-xs text-base-content/40 md:hidden hidden sm:block">
+                      {new Date(snapshot.created_at).toLocaleDateString()}
+                    </div>
                   </td>
-                  <td>{snapshot.version}</td>
-                  <td className="whitespace-nowrap">
+                  <td className="hidden sm:table-cell whitespace-nowrap">{snapshot.version}</td>
+                  <td className="hidden md:table-cell whitespace-nowrap">
                     {new Date(snapshot.created_at).toLocaleString()}
                   </td>
-                  <td>{formatSize(snapshot.size)}</td>
+                  <td className="hidden sm:table-cell whitespace-nowrap">{formatSize(snapshot.size)}</td>
                   <td>
-                    <div className="flex justify-end gap-2">
-                      <button
-                        className="btn btn-xs btn-ghost gap-1"
-                        disabled={restoreMutation.isPending}
-                        onClick={() => restoreSnapshot(snapshot)}
-                        title="Restore as new instance"
-                      >
-                        <RotateCcw className="w-4 h-4" />
-                        Restore
-                      </button>
-                      <button
-                        className="btn btn-xs btn-ghost gap-1 text-error"
-                        disabled={deleteMutation.isPending}
-                        onClick={() => deleteSnapshot(snapshot)}
-                        title="Delete snapshot"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        Delete
-                      </button>
+                    <div className="flex justify-end gap-1 flex-wrap">
+                      <div title="Descargar snapshot como ZIP">
+                        <button
+                          className="btn btn-xs btn-ghost gap-1"
+                          disabled={downloadMutation.isPending}
+                          onClick={() =>
+                            downloadMutation.mutate({
+                              serviceID: service_id,
+                              snapshotID: snapshot.id,
+                            })
+                          }
+                        >
+                          <Download className="w-4 h-4" />
+                          <span className="hidden sm:inline">Download</span>
+                        </button>
+                      </div>
+                      <div title="Restaurar como nueva instancia">
+                        <button
+                          className="btn btn-xs btn-ghost gap-1"
+                          disabled={restoreMutation.isPending}
+                          onClick={() => restoreSnapshot(snapshot)}
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                          <span className="hidden sm:inline">Restore</span>
+                        </button>
+                      </div>
+                      <div title="Eliminar snapshot">
+                        <button
+                          className="btn btn-xs btn-ghost gap-1 text-error"
+                          disabled={deleteMutation.isPending}
+                          onClick={() => deleteSnapshot(snapshot)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          <span className="hidden sm:inline">Delete</span>
+                        </button>
+                      </div>
                     </div>
                   </td>
                 </tr>
