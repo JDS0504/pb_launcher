@@ -1,6 +1,6 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FC } from "react";
-import { serviceService, type ServiceLog } from "../../../services/services";
+import { serviceService, type ServiceLog, type ServiceDto } from "../../../services/services";
 import { ErrorFallback } from "../../../components/helpers/ErrorFallback";
 import { useViewportHeight } from "../../../hooks/useViewportHeight";
 import classNames from "classnames";
@@ -11,10 +11,13 @@ import { useConfirmModal } from "../../../hooks/useConfirmModal";
 
 type Props = {
   service_id: string;
+  service?: ServiceDto;
 };
 
-export const ServiceLogsSection: FC<Props> = ({ service_id }) => {
+export const ServiceLogsSection: FC<Props> = ({ service_id, service }) => {
   const confirm = useConfirmModal();
+  const queryClient = useQueryClient();
+
   const initLogsQuery = useQuery({
     queryKey: ["services", service_id],
     queryFn: ({ signal }) =>
@@ -22,15 +25,11 @@ export const ServiceLogsSection: FC<Props> = ({ service_id }) => {
     refetchOnMount: true,
   });
 
-  const serviceQuery = useQuery({
-    queryKey: ["services", service_id, "status"],
-    queryFn: () => serviceService.fetchServiceByID(service_id),
-    refetchInterval: 3000,
-  });
-
   const commandMutation = useMutation({
     mutationFn: serviceService.executeServiceCommand,
-    onSuccess: () => setTimeout(() => serviceQuery.refetch()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["services", service_id] });
+    },
     onError: error => toast.error(getErrorMessage(error)),
   });
 
@@ -45,7 +44,7 @@ export const ServiceLogsSection: FC<Props> = ({ service_id }) => {
     commandMutation.mutate({ service_id, action });
   };
 
-  if (initLogsQuery.isFetching || serviceQuery.isLoading) {
+  if (initLogsQuery.isFetching || service == null) {
     return <div className="p-4">Loading...</div>;
   }
 
@@ -57,15 +56,7 @@ export const ServiceLogsSection: FC<Props> = ({ service_id }) => {
       />
     );
 
-  if (serviceQuery.isError)
-    return (
-      <ErrorFallback
-        error={serviceQuery.error}
-        onRetry={() => setTimeout(serviceQuery.refetch)}
-      />
-    );
-
-  const status = serviceQuery.data?.status;
+  const status = service?.status;
   const isRunning = status === "running";
   const isPending = status === "pending";
 

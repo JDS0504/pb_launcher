@@ -1,37 +1,21 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import type { FC } from "react";
-import { ServiceForm } from "../forms/ServiceForm";
-import { Navigate } from "react-router-dom";
 import classNames from "classnames";
-import { serviceService } from "../../../services/services";
-import { ErrorFallback } from "../../../components/helpers/ErrorFallback";
+import { ServiceForm } from "../forms/ServiceForm";
+import type { ServiceDto } from "../../../services/services";
 
 type Props = {
   service_id: string;
+  service?: ServiceDto;
 };
 
-export const GeneralSection: FC<Props> = ({ service_id }) => {
+export const GeneralSection: FC<Props> = ({ service_id, service }) => {
   const queryClient = useQueryClient();
-  const serviceQuery = useQuery({
-    queryKey: ["services", service_id],
-    queryFn: () => serviceService.fetchServiceByID(service_id),
-    refetchOnMount: true,
-  });
 
-  if (serviceQuery.isFetching) {
+  if (service == null) {
     return <div className="p-4">Loading...</div>;
   }
 
-  if (serviceQuery.isError)
-    return (
-      <ErrorFallback
-        error={serviceQuery.error}
-        onRetry={() => setTimeout(serviceQuery.refetch)}
-      />
-    );
-
-  if (serviceQuery.data == null) return <Navigate to={"/"} />;
-  const service = serviceQuery.data;
   const status =
     service.status.charAt(0).toUpperCase() + service.status.slice(1);
 
@@ -47,10 +31,11 @@ export const GeneralSection: FC<Props> = ({ service_id }) => {
       <p
         className={classNames("badge badge-sm absolute -top-2 right-2", {
           "badge-success": service.status === "running",
+          "badge-info": service.status === "sleeping",
           "badge-warning":
             service.status === "pending" || service.status === "idle",
           "badge-error": service.status === "failure",
-          "badge-neutral": !["running", "pending", "idle", "failure"].includes(
+          "badge-neutral": !["running", "pending", "idle", "failure", "sleeping"].includes(
             service.status,
           ),
         })}

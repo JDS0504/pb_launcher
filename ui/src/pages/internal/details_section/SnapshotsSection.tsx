@@ -7,12 +7,13 @@ import { ErrorFallback } from "../../../components/helpers/ErrorFallback";
 import { useModal } from "../../../components/modal/hook";
 import { useConfirmModal } from "../../../hooks/useConfirmModal";
 import { backupService, type SnapshotInfo } from "../../../services/backup";
-import { serviceService } from "../../../services/services";
+import type { ServiceDto } from "../../../services/services";
 import { getErrorMessage } from "../../../utils/errors";
 import { SnapshotNameForm } from "../forms/SnapshotNameForm";
 
 type Props = {
   service_id: string;
+  service?: ServiceDto;
 };
 
 const formatSize = (size: number) => {
@@ -21,14 +22,11 @@ const formatSize = (size: number) => {
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 };
 
-export const SnapshotsSection: FC<Props> = ({ service_id }) => {
+export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
   const navigate = useNavigate();
   const { openModal } = useModal();
   const confirm = useConfirmModal();
-  const serviceQuery = useQuery({
-    queryKey: ["services", service_id],
-    queryFn: () => serviceService.fetchServiceByID(service_id),
-  });
+
   const snapshotsQuery = useQuery({
     queryKey: ["snapshots", service_id],
     queryFn: () => backupService.listSnapshots(service_id),
@@ -105,16 +103,8 @@ export const SnapshotsSection: FC<Props> = ({ service_id }) => {
     deleteMutation.mutate({ serviceID: service_id, snapshotID: snapshot.id });
   };
 
-  if (serviceQuery.isLoading || snapshotsQuery.isLoading) {
+  if (service == null || snapshotsQuery.isLoading) {
     return <div className="p-4">Loading...</div>;
-  }
-  if (serviceQuery.isError) {
-    return (
-      <ErrorFallback
-        error={serviceQuery.error}
-        onRetry={() => setTimeout(serviceQuery.refetch)}
-      />
-    );
   }
   if (snapshotsQuery.isError) {
     return (
@@ -125,7 +115,6 @@ export const SnapshotsSection: FC<Props> = ({ service_id }) => {
     );
   }
 
-  const service = serviceQuery.data;
   const snapshots = snapshotsQuery.data ?? [];
   const canCreate = service?.status === "stopped";
 

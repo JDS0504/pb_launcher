@@ -1,4 +1,4 @@
-import { useMemo, useRef, type FC } from "react";
+import { useRef, type FC } from "react";
 import type { ServiceDto } from "../../../services/services";
 import {
   Copy,
@@ -14,7 +14,7 @@ import classNames from "classnames";
 import { useModal } from "../../../components/modal/hook";
 import { DefaultCredentialsCard } from "./DefaultCredentialsCard";
 import type { ProxyConfigsResponse } from "../../../services/config";
-import { formatUrl } from "../../../utils/url";
+import { useServiceUrls } from "../../../hooks/useServiceUrls";
 import { CopyableField } from "./CopyableField";
 
 type Props = {
@@ -45,29 +45,8 @@ export const ServiceCard: FC<Props> = ({
   refreshData,
 }) => {
   const dropdownRef = useRef<HTMLDivElement>(null);
-
   const { openModal } = useModal();
-
-  const serviceUrls = useMemo((): string[] => {
-    const domains: string[] = [];
-    domains.push(...(service.domains ?? []).map(d => d.domain));
-    if (proxyInfo.base_domain) {
-      domains.push(`${service.id}.${proxyInfo.base_domain}`);
-    }
-    return domains.map(domain => {
-      const customDom = service.domains?.find(d => d.domain === domain);
-      const useHttps = customDom ? customDom.use_https === "yes" : proxyInfo.use_https;
-
-      const urlStr = formatUrl(
-        useHttps ? "https" : "http",
-        domain,
-        useHttps ? proxyInfo.https_port : proxyInfo.http_port,
-      );
-      if (service._pb_install)
-        return `${urlStr}/_/#/pbinstal/${service._pb_install}`;
-      return `${urlStr}/_/`;
-    });
-  }, [proxyInfo, service]);
+  const serviceUrls = useServiceUrls(service, proxyInfo);
 
   const executeAfterBlur = (fn: () => void) => {
     (document.activeElement as HTMLElement)?.blur?.();

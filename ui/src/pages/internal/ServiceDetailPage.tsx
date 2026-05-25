@@ -1,10 +1,10 @@
 import { Navigate, useParams, useSearchParams } from "react-router-dom";
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { MenuIcon, XIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { serviceService } from "../../services/services";
 import { useProxyConfigs } from "../../hooks/useProxyConfigs";
-import { formatUrl } from "../../utils/url";
+import { useServiceUrls } from "../../hooks/useServiceUrls";
 import { GeneralSection } from "./details_section/GeneralSection";
 import { DomainsSection } from "./details_section/DomainsSection";
 import { ServiceLogsSection } from "./details_section/ServiceLogsSection";
@@ -23,32 +23,12 @@ export const ServiceDetailPage = () => {
     queryKey: ["services", service_id],
     queryFn: () => serviceService.fetchServiceByID(service_id || ""),
     enabled: service_id != null && service_id !== "",
+    refetchInterval: 3000,
   });
 
   const service = serviceQuery.data;
   const proxyInfo = useProxyConfigs();
-
-  const serviceUrls = useMemo((): string[] => {
-    if (!service) return [];
-    const domains: string[] = [];
-    domains.push(...(service.domains ?? []).map(d => d.domain));
-    if (proxyInfo.base_domain) {
-      domains.push(`${service.id}.${proxyInfo.base_domain}`);
-    }
-    return domains.map(domain => {
-      const customDom = service.domains?.find(d => d.domain === domain);
-      const useHttps = customDom ? customDom.use_https === "yes" : proxyInfo.use_https;
-
-      const urlStr = formatUrl(
-        useHttps ? "https" : "http",
-        domain,
-        useHttps ? proxyInfo.https_port : proxyInfo.http_port,
-      );
-      if (service._pb_install)
-        return `${urlStr}/_/#/pbinstal/${service._pb_install}`;
-      return `${urlStr}/_/`;
-    });
-  }, [proxyInfo, service]);
+  const serviceUrls = useServiceUrls(service, proxyInfo);
 
   const handleSectionChange = (section: string) => {
     setSearchParams({ section });
@@ -189,7 +169,7 @@ export const ServiceDetailPage = () => {
           <div className="mb-8 ">
             <h3 className="text-lg font-semibold mb-6">General</h3>
             <div className="rounded-box bg-base-200 p-3 sm:p-4 md:py-6">
-              <GeneralSection service_id={service_id} />
+              <GeneralSection service={service} service_id={service_id} />
             </div>
           </div>
         )}
@@ -211,7 +191,7 @@ export const ServiceDetailPage = () => {
           <div className="mb-8">
             <h3 className="text-lg font-semibold mb-6">Logs</h3>
             <div className="rounded-box bg-base-200 p-3 sm:p-4">
-              <ServiceLogsSection service_id={service_id} />
+              <ServiceLogsSection service={service} service_id={service_id} />
             </div>
           </div>
         )}
@@ -229,7 +209,7 @@ export const ServiceDetailPage = () => {
           <div className="mb-8">
             <h3 className="text-lg font-semibold mb-6">Snapshots</h3>
             <div className="rounded-box bg-base-200 p-3 sm:p-4">
-              <SnapshotsSection service_id={service_id} />
+              <SnapshotsSection service={service} service_id={service_id} />
             </div>
           </div>
         )}
@@ -238,7 +218,7 @@ export const ServiceDetailPage = () => {
           <div className="mb-8">
             <h3 className="text-lg font-semibold mb-6">Files</h3>
             <div className="rounded-box bg-base-200 p-3 sm:p-4">
-              <FileManagerSection service_id={service_id} />
+              <FileManagerSection service={service} service_id={service_id} />
             </div>
           </div>
         )}

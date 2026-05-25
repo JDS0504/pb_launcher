@@ -5,7 +5,7 @@ import {
   useState,
   type FC,
 } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FileText,
   FolderOpen,
@@ -20,13 +20,14 @@ import {
 import toast from "react-hot-toast";
 import { ErrorFallback } from "../../../components/helpers/ErrorFallback";
 import { filesService, type PBFileEntry } from "../../../services/files";
-import { serviceService } from "../../../services/services";
+import { serviceService, type ServiceDto } from "../../../services/services";
 import { getErrorMessage } from "../../../utils/errors";
 import { useModal } from "../../../components/modal/hook";
 import { useConfirmModal } from "../../../hooks/useConfirmModal";
 
 type Props = {
   service_id: string;
+  service?: ServiceDto;
 };
 
 const PBHookCodeEditor = lazy(() =>
@@ -51,20 +52,15 @@ const getFileName = (path: string) => {
   return parts[parts.length - 1];
 };
 
-export const FileManagerSection: FC<Props> = ({ service_id }) => {
+export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
   const { openModal } = useModal();
   const confirm = useConfirmModal();
+  const queryClient = useQueryClient();
 
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [editorContent, setEditorContent] = useState("");
   const [originalContent, setOriginalContent] = useState("");
   const [isBinaryFile, setIsBinaryFile] = useState(false);
-
-  const serviceQuery = useQuery({
-    queryKey: ["services", service_id],
-    queryFn: () => serviceService.fetchServiceByID(service_id),
-    refetchInterval: 3000,
-  });
 
   const filesQuery = useQuery<PBFileEntry[]>({
     queryKey: ["pb-files", service_id],
@@ -116,7 +112,7 @@ export const FileManagerSection: FC<Props> = ({ service_id }) => {
     mutationFn: serviceService.executeServiceCommand,
     onSuccess: (_, variables) => {
       toast.success(`Comando '${variables.action}' enviado con éxito`);
-      setTimeout(() => serviceQuery.refetch());
+      queryClient.invalidateQueries({ queryKey: ["services", service_id] });
     },
     onError: error => toast.error(getErrorMessage(error)),
   });
@@ -141,14 +137,12 @@ export const FileManagerSection: FC<Props> = ({ service_id }) => {
     onError: error => toast.error(getErrorMessage(error)),
   });
 
-  if (serviceQuery.isError) {
-    return <ErrorFallback error={serviceQuery.error} onRetry={serviceQuery.refetch} />;
+  if (service == null) {
+    return <div className="p-4">Loading...</div>;
   }
   if (filesQuery.isError) {
     return <ErrorFallback error={filesQuery.error} onRetry={filesQuery.refetch} />;
   }
-
-  const service = serviceQuery.data;
   const isStopped = service?.status === "stopped";
   const hasChanges = editorContent !== originalContent;
 

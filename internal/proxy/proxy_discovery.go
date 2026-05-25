@@ -69,8 +69,23 @@ func (rp *DynamicReverseProxyDiscovery) extractID(host string) (string, error) {
 }
 
 func (rp *DynamicReverseProxyDiscovery) proxyErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
-	slog.Error("proxy error", "error", err)
-	http.Error(w, "upstream error", http.StatusBadGateway)
+	slog.Error("proxy error", "error", err, "host", r.Host, "path", r.URL.Path)
+
+	statusCode := http.StatusBadGateway
+	message := "upstream error: the service is temporarily unavailable"
+
+	var netErr *net.OpError
+	if errors.As(err, &netErr) {
+		if netErr.Op == "dial" {
+			statusCode = http.StatusServiceUnavailable
+			message = "service unavailable: the instance is not running or is starting up"
+		} else if netErr.Timeout() {
+			statusCode = http.StatusGatewayTimeout
+			message = "gateway timeout: the service took too long to respond"
+		}
+	}
+
+	http.Error(w, message, statusCode)
 }
 
 const superusersEndpoint = "/api/collections/_superusers/records"
