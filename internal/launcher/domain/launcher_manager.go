@@ -732,3 +732,16 @@ func (lm *LauncherManager) IsServiceRunning(serviceID string) bool {
 	proc, exists := lm.processList[serviceID]
 	return exists && proc.IsRunning()
 }
+
+// GetActiveInstancesCount devuelve el recuento exacto de procesos de servicios activos en memoria.
+func (lm *LauncherManager) GetActiveInstancesCount() int {
+	lm.rwMtx.RLock()
+	defer lm.rwMtx.RUnlock()
+	count := 0
+	for _, proc := range lm.processList {
+		if proc.IsRunning() {
+			count++
+		}
+	}
+	return count
+}

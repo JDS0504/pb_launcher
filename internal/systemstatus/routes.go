@@ -2,27 +2,19 @@ package systemstatus
 
 import (
 	"net/http"
+	launcherdomain "pb_launcher/internal/launcher/domain"
 
-	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
 )
 
 // RegisterRoutes registers the /x-api/system/status route in PocketBase
-func RegisterRoutes(app *pocketbase.PocketBase) {
+func RegisterRoutes(app *pocketbase.PocketBase, launcherManager *launcherdomain.LauncherManager) {
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		se.Router.GET("/x-api/system/status", func(e *core.RequestEvent) error {
-			// Query number of active instances running currently
-			var activeInstances int
-			err := app.DB().
-				Select("count(*)").
-				From("services").
-				Where(dbx.HashExp{"status": "running", "deleted": ""}).
-				Row(&activeInstances)
-			if err != nil {
-				activeInstances = 0
-			}
+			// Get number of active instances running currently in memory
+			activeInstances := launcherManager.GetActiveInstancesCount()
 
 			// Collect system metrics with "." representing the primary storage partition
 			status, err := CollectStatus(".")
