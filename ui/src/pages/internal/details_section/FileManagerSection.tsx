@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { ErrorFallback } from "../../../components/helpers/ErrorFallback";
-import { filesService } from "../../../services/files";
+import { filesService, type PBFileEntry } from "../../../services/files";
 import { serviceService } from "../../../services/services";
 import { getErrorMessage } from "../../../utils/errors";
 import { useModal } from "../../../components/modal/hook";
@@ -66,29 +66,35 @@ export const FileManagerSection: FC<Props> = ({ service_id }) => {
     refetchInterval: 3000,
   });
 
-  const filesQuery = useQuery({
+  const filesQuery = useQuery<PBFileEntry[]>({
     queryKey: ["pb-files", service_id],
     queryFn: () => filesService.fetchFiles(service_id),
   });
 
+  const files = filesQuery.data ?? [];
+  const selectedFile = files.find(f => f.path === selectedPath);
+  const isDirSelected = selectedFile?.is_dir === true;
+
   const fileContentQuery = useQuery({
     queryKey: ["pb-file-content", service_id, selectedPath],
     queryFn: () => filesService.readFile(service_id, selectedPath || ""),
-    enabled: selectedPath != null && !isBinaryFile,
+    enabled: selectedPath != null && !isBinaryFile && !isDirSelected,
   });
 
   useEffect(() => {
     if (selectedPath) {
       const isBinary =
+        !isDirSelected && (
         selectedPath.endsWith(".db") ||
         selectedPath.endsWith(".png") ||
         selectedPath.endsWith(".jpg") ||
         selectedPath.endsWith(".jpeg") ||
         selectedPath.endsWith(".gif") ||
         selectedPath.endsWith(".ico") ||
-        selectedPath.endsWith(".zip");
+        selectedPath.endsWith(".zip")
+        );
       setIsBinaryFile(isBinary);
-      if (isBinary) {
+      if (isBinary || isDirSelected) {
         setEditorContent("");
         setOriginalContent("");
       }
@@ -97,14 +103,14 @@ export const FileManagerSection: FC<Props> = ({ service_id }) => {
       setEditorContent("");
       setOriginalContent("");
     }
-  }, [selectedPath]);
+  }, [selectedPath, isDirSelected]);
 
   useEffect(() => {
-    if (fileContentQuery.data && !isBinaryFile) {
+    if (fileContentQuery.data && !isBinaryFile && !isDirSelected) {
       setEditorContent(fileContentQuery.data.content);
       setOriginalContent(fileContentQuery.data.content);
     }
-  }, [fileContentQuery.data, isBinaryFile]);
+  }, [fileContentQuery.data, isBinaryFile, isDirSelected]);
 
   const commandMutation = useMutation({
     mutationFn: serviceService.executeServiceCommand,
@@ -143,7 +149,6 @@ export const FileManagerSection: FC<Props> = ({ service_id }) => {
   }
 
   const service = serviceQuery.data;
-  const files = filesQuery.data ?? [];
   const isStopped = service?.status === "stopped";
   const hasChanges = editorContent !== originalContent;
 
@@ -289,15 +294,15 @@ export const FileManagerSection: FC<Props> = ({ service_id }) => {
                       className="flex items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap"
                       style={{ paddingLeft: `${indentFor(f.path)}px` }}
                     >
-                      {f.path.includes("/") ? (
-                        <FileText className="w-3.5 h-3.5 shrink-0" />
+                      {f.is_dir ? (
+                        <FolderOpen className="w-3.5 h-3.5 shrink-0 text-amber-500" />
                       ) : (
-                        <FolderOpen className="w-3.5 h-3.5 shrink-0" />
+                        <FileText className="w-3.5 h-3.5 shrink-0" />
                       )}
                       <span>{getFileName(f.path)}</span>
                     </span>
                     <span className={`text-[10px] opacity-70 shrink-0 ${isSelected ? "text-primary-content" : ""}`}>
-                      {formatSize(f.size)}
+                      {!f.is_dir && formatSize(f.size)}
                     </span>
                   </button>
                 );
@@ -337,15 +342,17 @@ export const FileManagerSection: FC<Props> = ({ service_id }) => {
                     Borrar
                   </button>
 
-                  <button
-                    type="button"
-                    className="btn btn-xs btn-primary gap-1"
-                    disabled={!isStopped || !hasChanges || saveMutation.isPending || isBinaryFile}
-                    onClick={handleSave}
-                  >
-                    <Save className="w-3 h-3" />
-                    Guardar
-                  </button>
+                  {!isDirSelected && (
+                    <button
+                      type="button"
+                      className="btn btn-xs btn-primary gap-1"
+                      disabled={!isStopped || !hasChanges || saveMutation.isPending || isBinaryFile}
+                      onClick={handleSave}
+                    >
+                      <Save className="w-3 h-3" />
+                      Guardar
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -354,8 +361,8 @@ export const FileManagerSection: FC<Props> = ({ service_id }) => {
                 <div className="alert alert-error rounded-none text-xs flex gap-2 py-2">
                   <AlertTriangle className="w-4 h-4 shrink-0 text-error-content" />
                   <div>
-                    <span className="font-semibold">ADVERTENCIA CRÍTICA:</span> Este archivo pertenece a{" "}
-                    <span className="font-mono">pb_data</span> o es una base de datos binaria. Modificarlo o escribir sobre él puede{" "}
+                    <span className="font-semibold">ADVERTENCIA CRÍTICA:</span> Este archivo/carpeta pertenece a{" "}
+                    <span className="font-mono">pb_data</span> o contiene datos binarios. Modificarlo o escribir sobre él puede{" "}
                     <span className="font-semibold">CORROMPER</span> o romper tu base de datos de PocketBase de forma permanente. Procede con extremo cuidado.
                   </div>
                 </div>
@@ -381,7 +388,13 @@ export const FileManagerSection: FC<Props> = ({ service_id }) => {
 
               {/* Área del Editor de Código */}
               <div className="flex-1 overflow-hidden min-h-0 bg-base-100">
-                {isBinaryFile ? (
+                {isDirSelected ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-center p-6 text-base-content/60 space-y-2">
+                    <FolderOpen className="w-12 h-12 text-amber-500 stroke-1" />
+                    <p className="font-semibold text-sm">Directorio seleccionado ({getFileName(selectedPath)})</p>
+                    <p className="text-xs max-w-md">Para agregar nuevos archivos dentro de este directorio o sus subcarpetas, haz clic en el botón de la barra superior <span className="font-semibold text-primary">"Nuevo Archivo"</span>.</p>
+                  </div>
+                ) : isBinaryFile ? (
                   <div className="w-full h-full flex flex-col items-center justify-center text-center p-6 text-base-content/60 space-y-2">
                     <AlertTriangle className="w-10 h-10 text-error" />
                     <p className="font-semibold text-sm">Este es un archivo binario o base de datos ({getFileName(selectedPath)})</p>

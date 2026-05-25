@@ -17,6 +17,7 @@ type FileEntry struct {
 	Path      string    `json:"path"`
 	Size      int64     `json:"size"`
 	UpdatedAt time.Time `json:"updated_at"`
+	IsDir     bool      `json:"is_dir"`
 }
 
 type FileContent struct {
@@ -64,16 +65,13 @@ func (m *Manager) List(ctx context.Context, serviceID string) ([]FileEntry, erro
 
 	for _, sub := range allowedDirs {
 		targetDir := filepath.Join(baseDir, sub)
-		if _, err := os.Stat(targetDir); err != nil {
-			continue // Si el subdirectorio no existe, simplemente pasamos
+		if _, err := os.Stat(targetDir); os.IsNotExist(err) {
+			_ = os.MkdirAll(targetDir, 0755)
 		}
 
 		err := filepath.WalkDir(targetDir, func(path string, d os.DirEntry, err error) error {
 			if err != nil {
 				return err
-			}
-			if d.IsDir() {
-				return nil
 			}
 			relPath, err := safeRel(baseDir, path)
 			if err != nil {
@@ -87,6 +85,7 @@ func (m *Manager) List(ctx context.Context, serviceID string) ([]FileEntry, erro
 				Path:      filepath.ToSlash(relPath),
 				Size:      info.Size(),
 				UpdatedAt: info.ModTime(),
+				IsDir:     d.IsDir(),
 			})
 			return nil
 		})

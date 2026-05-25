@@ -6,6 +6,7 @@ export type PBFileEntry = {
   path: string;
   size: number;
   updated_at: string;
+  is_dir?: boolean;
 };
 
 export type PBFileContent = {
