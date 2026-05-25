@@ -241,7 +241,7 @@ func (c *configs) GetInstanceMemoryLimit() string {
 func (c *configs) GetAutoSleepCheckInterval() time.Duration {
 	raw := c.AutoSleepCheckInterval
 	if raw == "" {
-		return 5 * time.Minute
+		return 3 * time.Minute
 	}
 	return parseDurationWithMin(raw, 10*time.Second, "autosleep_check_interval")
 }
@@ -249,7 +249,7 @@ func (c *configs) GetAutoSleepCheckInterval() time.Duration {
 func (c *configs) GetAutoSleepIdleTimeout() time.Duration {
 	raw := c.AutoSleepIdleTimeout
 	if raw == "" {
-		return 3 * time.Minute
+		return 1 * time.Minute
 	}
 	return parseDurationWithMin(raw, 10*time.Second, "autosleep_idle_timeout")
 }

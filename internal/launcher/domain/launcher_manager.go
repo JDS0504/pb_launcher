@@ -353,10 +353,12 @@ func (lm *LauncherManager) stopService(ctx context.Context, serviceID string) er
 func (lm *LauncherManager) stopProcessOnlyLocked(serviceID string) error {
 	existingProcess, exists := lm.processList[serviceID]
 	if !exists {
-		return fmt.Errorf("no running process found for service %s", serviceID)
+		return nil
 	}
 	if !existingProcess.IsRunning() {
-		return fmt.Errorf("process for service %s is not currently running", serviceID)
+		delete(lm.processList, serviceID)
+		delete(lm.activityMap, serviceID)
+		return nil
 	}
 
 	if err := existingProcess.Stop(); err != nil {

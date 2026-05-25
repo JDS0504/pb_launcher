@@ -45,5 +45,5 @@ instance_memory_limit: 256M
 
 # Auto-Sleep settings
 # Las instancias de PocketBase se suspenderán automáticamente tras el tiempo de inactividad especificado.
-autosleep_check_interval: 5m
-autosleep_idle_timeout: 3m
+autosleep_check_interval: 3m
+autosleep_idle_timeout: 1m
