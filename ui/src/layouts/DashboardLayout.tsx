@@ -1,6 +1,6 @@
 import { useMemo, type PropsWithChildren } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { History, Server, Waypoints, User, LogOut, Settings } from "lucide-react";
+import { History, Server, Waypoints, User, LogOut, Settings, Activity } from "lucide-react";
 import { useConfirmModal } from "../hooks/useConfirmModal";
 import { authService } from "../services/auth";
 import { useViewportHeight } from "../hooks/useViewportHeight";
@@ -18,6 +18,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
     if (pathname === "/proxy" || pathname.startsWith("/proxy/")) return "proxy";
     if (pathname === "/operations") return "operations";
     if (pathname === "/settings") return "settings";
+    if (pathname === "/status") return "status";
     return "<none>";
   }, [pathname]);
 
@@ -93,6 +94,19 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
               <History className="w-4 h-4" />
               <span className="hidden sm:inline">Operations</span>
             </NavLink>
+
+            <NavLink
+              to="/status"
+              className={classNames(
+                "btn btn-sm btn-ghost shrink-0 gap-2 text-base-content transition-colors",
+                {
+                  "bg-base-200 text-primary": selected === "status",
+                },
+              )}
+            >
+              <Activity className="w-4 h-4" />
+              <span className="hidden sm:inline">Status</span>
+            </NavLink>
           </nav>
           <div className="dropdown dropdown-end shrink-0">
             <label tabIndex={0} className="btn btn-sm btn-ghost gap-2 px-2 sm:px-3">
@@ -103,6 +117,12 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
               tabIndex={0}
               className="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-48 mt-2 z-[1]"
             >
+              <li>
+                <NavLink to="/status" onClick={closeDropdown}>
+                  <Activity className="w-4 h-4" />
+                  Status
+                </NavLink>
+              </li>
               <li>
                 <NavLink to="/settings" onClick={closeDropdown}>
                   <Settings className="w-4 h-4" />

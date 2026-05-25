@@ -121,7 +121,7 @@ export const serviceService = {
   ].join(","),
 
   fetchServiceByID: async (serviceID: string): Promise<ServiceDto> => {
-    const [service, commands] = await Promise.all([
+    const [service, commands, domains] = await Promise.all([
       pb
         .collection(SERVICES_COLLECTION)
         .getOne<
@@ -136,6 +136,8 @@ export const serviceService = {
         fields: "service",
         filter: `status="pending"&&service="${serviceID}"`,
       }),
+
+      domainsService.fetchAllByServiceID(serviceID),
     ]);
     return {
       id: service.id,
@@ -148,10 +150,11 @@ export const serviceService = {
       restart_policy: service.restart_policy,
       error_message: service.error_message,
       created: service.created,
-        repository: service.expand.release.expand.repository.name,
-        repository_id: service.expand.release.expand.repository.id,
-        release_id: service.expand.release.id,
-        release_version: service.expand.release.version,
+      repository: service.expand.release.expand.repository.name,
+      repository_id: service.expand.release.expand.repository.id,
+      release_id: service.expand.release.id,
+      release_version: service.expand.release.version,
+      domains: domains,
     };
   },
 

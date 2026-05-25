@@ -41,6 +41,7 @@ export const GeneralSection: FC<Props> = ({ service_id }) => {
         record={service}
         onSaveRecord={() => {
           queryClient.invalidateQueries({ queryKey: ["services", service_id] });
+          queryClient.invalidateQueries({ queryKey: ["services"] });
         }}
       />
       <p

@@ -9,7 +9,7 @@ import {
   domainsService,
   type DomainDto,
 } from "../../../services/services_domain";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ErrorFallback } from "../../../components/helpers/ErrorFallback";
 import { getErrorMessage } from "../../../utils/errors";
 import toast from "react-hot-toast";
@@ -26,6 +26,7 @@ export const DomainsSection: FC<Props> = ({
   proxy_id,
   url_route_suffix,
 }) => {
+  const queryClient = useQueryClient();
   const confirm = useConfirmModal();
   const { openModal } = useModal();
   const proxy = useProxyConfigs();
@@ -46,6 +47,14 @@ export const DomainsSection: FC<Props> = ({
     },
   });
 
+  const handleSuccess = () => {
+    domainsQuery.refetch();
+    if (service_id) {
+      queryClient.invalidateQueries({ queryKey: ["services", service_id] });
+    }
+    queryClient.invalidateQueries({ queryKey: ["services"] });
+  };
+
   const proxyDomain = useMemo((): DomainDto => {
     const strid = service_id !== "" ? service_id : proxy_id;
     return {
@@ -62,7 +71,7 @@ export const DomainsSection: FC<Props> = ({
       <DomainForm
         service_id={service_id}
         proxy_id={proxy_id}
-        onSaveRecord={() => setTimeout(domainsQuery.refetch)}
+        onSaveRecord={handleSuccess}
         use_https={proxy.use_https ? "yes" : "no"}
         width={360}
       />,
@@ -79,7 +88,7 @@ export const DomainsSection: FC<Props> = ({
         proxy_id={proxy_id}
         width={360}
         record={record}
-        onSaveRecord={() => setTimeout(domainsQuery.refetch)}
+        onSaveRecord={handleSuccess}
         use_https={proxy.use_https ? "yes" : "no"}
       />,
       {
@@ -90,7 +99,7 @@ export const DomainsSection: FC<Props> = ({
 
   const deleteMutation = useMutation({
     mutationFn: domainsService.deleteDomain,
-    onSuccess: () => setTimeout(() => domainsQuery.refetch()),
+    onSuccess: handleSuccess,
     onError: error => toast.error(getErrorMessage(error)),
   });
 
@@ -106,7 +115,7 @@ export const DomainsSection: FC<Props> = ({
 
   const requestSSLCertificate = useMutation({
     mutationFn: domainsService.createSSLRequest,
-    onSuccess: () => setTimeout(() => domainsQuery.refetch()),
+    onSuccess: handleSuccess,
     onError: error => toast.error(getErrorMessage(error)),
   });
 
