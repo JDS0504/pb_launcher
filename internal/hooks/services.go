@@ -2,21 +2,60 @@ package hooks
 
 import (
 	"errors"
+	"fmt"
 	"pb_launcher/collections"
+	"pb_launcher/configs"
 	"pb_launcher/internal/proxy/domain"
+	"regexp"
 	"slices"
+	"strings"
 
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
+	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
 )
 
+var slugRegex = regexp.MustCompile(`[^a-z0-9]+`)
+
+func sanitizeToSlug(name string) string {
+	slug := strings.ToLower(name)
+	slug = slugRegex.ReplaceAllString(slug, "-")
+	slug = strings.Trim(slug, "-")
+	return slug
+}
+
 func AddServiceHooks(app *pocketbase.PocketBase,
 	serviceDiscovery *domain.ServiceDiscovery,
+	cnf configs.Config,
 ) {
 	app.OnRecordCreateRequest(collections.Services).
 		BindFunc(func(e *core.RecordRequestEvent) error {
 			if e.Auth == nil {
 				return errors.New("unauthorized: no auth record found")
+			}
+
+			name := e.Record.GetString("name")
+			slug := sanitizeToSlug(name)
+			if slug == "" {
+				return apis.NewBadRequestError("el nombre del servicio no es válido", nil)
+			}
+
+			domainBase := cnf.GetDomain()
+			parts := strings.SplitN(domainBase, ".", 2)
+			rootDomain := domainBase
+			if len(parts) > 1 {
+				rootDomain = parts[1]
+			}
+			friendlyDomain := fmt.Sprintf("%s.%s", slug, rootDomain)
+
+			existing, err := e.App.FindFirstRecordByFilter(
+				collections.ServicesDomains,
+				"domain = {:domain}",
+				dbx.Params{"domain": friendlyDomain},
+			)
+			if err == nil && existing != nil {
+				return apis.NewBadRequestError(fmt.Sprintf("el nombre '%s' no está disponible porque el dominio '%s' ya está en uso", name, friendlyDomain), nil)
 			}
 
 			restart_policy := e.Record.GetString("restart_policy")
@@ -74,6 +113,30 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 		if e.Record.GetString("status") == "restoring" {
 			return e.Next()
 		}
+
+		name := e.Record.GetString("name")
+		slug := sanitizeToSlug(name)
+		domainBase := cnf.GetDomain()
+		parts := strings.SplitN(domainBase, ".", 2)
+		rootDomain := domainBase
+		if len(parts) > 1 {
+			rootDomain = parts[1]
+		}
+		friendlyDomain := fmt.Sprintf("%s.%s", slug, rootDomain)
+
+		domainCollection, err := e.App.FindCachedCollectionByNameOrId(collections.ServicesDomains)
+		if err != nil {
+			return err
+		}
+		domainRecord := core.NewRecord(domainCollection)
+		domainRecord.Set("domain", friendlyDomain)
+		domainRecord.Set("service", e.Record.Id)
+		domainRecord.Set("use_https", "yes")
+
+		if err := e.App.Save(domainRecord); err != nil {
+			return err
+		}
+
 		comandCollection, err := e.App.FindCachedCollectionByNameOrId(collections.ServicesComands)
 		if err != nil {
 			return err
@@ -102,3 +165,4 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 		})
 
 }
+
