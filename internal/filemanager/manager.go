@@ -126,7 +126,7 @@ func (m *Manager) ReadFile(ctx context.Context, serviceID string, targetPath str
 	return &FileContent{Path: filepath.ToSlash(relPath), Content: string(data)}, nil
 }
 
-func (m *Manager) SaveFile(ctx context.Context, serviceID string, targetPath string, content string) error {
+func (m *Manager) SaveFileBytes(ctx context.Context, serviceID string, targetPath string, data []byte) error {
 	service, err := m.serviceRepo.FindService(ctx, serviceID)
 	if err != nil {
 		return err
@@ -146,12 +146,16 @@ func (m *Manager) SaveFile(ctx context.Context, serviceID string, targetPath str
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
 		return err
 	}
-	if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(fullPath, data, 0644); err != nil {
 		m.logger.Error(ctx, service.ID, "file_save", err.Error(), map[string]any{"path": filepath.ToSlash(relPath)})
 		return err
 	}
 	m.logger.Success(ctx, service.ID, "file_save", "Archivo guardado exitosamente", map[string]any{"path": filepath.ToSlash(relPath)})
 	return nil
+}
+
+func (m *Manager) SaveFile(ctx context.Context, serviceID string, targetPath string, content string) error {
+	return m.SaveFileBytes(ctx, serviceID, targetPath, []byte(content))
 }
 
 func (m *Manager) DeleteFile(ctx context.Context, serviceID string, targetPath string) error {

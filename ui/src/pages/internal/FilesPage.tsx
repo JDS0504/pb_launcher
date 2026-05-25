@@ -17,6 +17,7 @@ import {
   Save,
   Plus,
   AlertTriangle,
+  Upload,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { ErrorFallback } from "../../components/helpers/ErrorFallback";
@@ -25,6 +26,8 @@ import { serviceService, type ServiceDto } from "../../services/services";
 import { getErrorMessage } from "../../utils/errors";
 import { useModal } from "../../components/modal/hook";
 import { useConfirmModal } from "../../hooks/useConfirmModal";
+import { NewFileModal } from "./components/NewFileModal";
+import { UploadFilesModal } from "./components/UploadFilesModal";
 
 const PBHookCodeEditor = lazy(() =>
   import("./details_section/PBHookCodeEditor").then((module) => ({
@@ -367,6 +370,20 @@ export const FilesPage = () => {
     );
   };
 
+  const openUploadFilesModal = (service: ServiceDto) => {
+    const isSvcStopped = service.status === "stopped";
+    openModal(
+      <UploadFilesModal
+        serviceID={service.id}
+        isStopped={isSvcStopped}
+        onUploaded={() => {
+          queryClient.invalidateQueries({ queryKey: ["pb-files", service.id] });
+        }}
+      />,
+      { title: `Subir Archivos a ${service.name}`, width: 480 }
+    );
+  };
+
   const showDbWarning =
     selectedFile?.path?.endsWith(".db") || selectedFile?.path?.includes("pb_data");
 
@@ -398,7 +415,7 @@ export const FilesPage = () => {
                     onSelectFile={(svc, path) => setSelectedFile({ service: svc, path })}
                   />
                   {expandedServices.has(service.id) && (
-                    <div className="pl-4 pr-1 py-1">
+                    <div className="pl-4 pr-1 py-1 flex flex-col gap-1">
                       <button
                         type="button"
                         onClick={() => openNewFileModal(service)}
@@ -407,6 +424,15 @@ export const FilesPage = () => {
                       >
                         <Plus className="w-3 h-3" />
                         Nuevo Archivo en esta instancia
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openUploadFilesModal(service)}
+                        className="btn btn-xs btn-ghost gap-1.5 w-full justify-start text-[10px] opacity-75 hover:opacity-100"
+                        disabled={service.status !== "stopped"}
+                      >
+                        <Upload className="w-3 h-3" />
+                        Subir Archivos
                       </button>
                     </div>
                   )}
@@ -531,95 +557,4 @@ export const FilesPage = () => {
   );
 };
 
-// Modal para crear archivos
-type NewFileModalProps = {
-  serviceID: string;
-  isStopped: boolean;
-  onCreated: (path: string) => void;
-};
 
-const NewFileModal: FC<NewFileModalProps> = ({ serviceID, isStopped, onCreated }) => {
-  const { closeModal } = useModal();
-  const [folder, setFolder] = useState("pb_public");
-  const [filePath, setFilePath] = useState("");
-
-  const saveMutation = useMutation({
-    mutationFn: filesService.saveFile,
-    onSuccess: (_, variables) => {
-      toast.success("Archivo creado con éxito");
-      onCreated(variables.path);
-      closeModal();
-    },
-    onError: (error) => toast.error(getErrorMessage(error)),
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanPath = filePath.trim();
-    if (!cleanPath) {
-      toast.error("La ruta es obligatoria");
-      return;
-    }
-    const finalPath = `${folder}/${cleanPath.startsWith("/") ? cleanPath.substring(1) : cleanPath}`;
-    saveMutation.mutate({
-      serviceID,
-      path: finalPath,
-      content: "",
-    });
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4 text-sm">
-      {!isStopped && (
-        <div className="alert alert-warning text-xs">
-          Debes detener la instancia antes de poder crear un nuevo archivo.
-        </div>
-      )}
-
-      <div className="form-control w-full">
-        <label className="label">
-          <span className="label-text mb-1">Directorio de Origen</span>
-        </label>
-        <select
-          className="select select-bordered select-sm w-full font-mono text-xs"
-          value={folder}
-          onChange={(e) => setFolder(e.target.value)}
-          disabled={!isStopped}
-        >
-          <option value="pb_public">pb_public (Estáticos web)</option>
-          <option value="pb_hooks">pb_hooks (JS Hooks)</option>
-          <option value="pb_migrations">pb_migrations (Migraciones DB)</option>
-          <option value="pb_data">pb_data (Datos internos)</option>
-        </select>
-      </div>
-
-      <div className="form-control w-full">
-        <label className="label">
-          <span className="label-text mb-1">Nombre / Ruta relativa del archivo</span>
-        </label>
-        <input
-          type="text"
-          className="input input-bordered input-sm w-full font-mono text-xs"
-          placeholder="ej: index.html, subcarpeta/styles.css"
-          value={filePath}
-          onChange={(e) => setFilePath(e.target.value)}
-          disabled={!isStopped}
-          required
-        />
-      </div>
-
-      <div className="flex justify-end gap-2 pt-2">
-        <button type="button" className="btn btn-sm btn-ghost" onClick={closeModal}>
-          Cancelar
-        </button>
-        <button
-          type="submit"
-          className="btn btn-sm btn-primary"
-          disabled={!isStopped || saveMutation.isPending || filePath.trim() === ""}
-        >
-          Crear Archivo
-        </button>
-      </div>
-    </form>
-  );
-};

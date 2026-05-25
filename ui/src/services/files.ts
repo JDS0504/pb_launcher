@@ -74,6 +74,36 @@ export const filesService = {
     }
   },
 
+  uploadFiles: async (
+    serviceID: string,
+    destPath: string,
+    files: File[],
+  ): Promise<void> => {
+    const url = joinUrls(pb.baseURL, `/x-api/services/${serviceID}/files/upload`);
+    const formData = new FormData();
+    formData.append("path", destPath);
+    for (const file of files) {
+      formData.append("files", file);
+    }
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: pb.authStore.token,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const json = await response.json().catch(() => null);
+      throw new HttpError(
+        response.status,
+        json?.message || "Failed to upload files",
+        json,
+      );
+    }
+  },
+
   deleteFile: async (data: { serviceID: string; path: string }) => {
     const url = joinUrls(
       pb.baseURL,

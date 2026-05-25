@@ -1,7 +1,10 @@
 package filemanager
 
 import (
+	"fmt"
+	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/pocketbase/pocketbase"
@@ -42,6 +45,48 @@ func RegisterRoutes(app *pocketbase.PocketBase, manager *Manager) {
 			if err := manager.SaveFile(e.Request.Context(), e.Request.PathValue("service_id"), body.Path, body.Content); err != nil {
 				return e.BadRequestError("failed to save file", err)
 			}
+			return e.NoContent(http.StatusOK)
+		}).Bind(apis.RequireAuth())
+
+		se.Router.POST("/x-api/services/{service_id}/files/upload", func(e *core.RequestEvent) error {
+			if err := e.Request.ParseMultipartForm(50 << 20); err != nil {
+				return e.BadRequestError("failed to parse multipart form", err)
+			}
+
+			destPath := strings.TrimSpace(e.Request.FormValue("path"))
+			if destPath == "" {
+				destPath = "pb_public"
+			}
+
+			multipartForm := e.Request.MultipartForm
+			if multipartForm == nil {
+				return e.BadRequestError("multipart form is empty", nil)
+			}
+
+			files := multipartForm.File["files"]
+			if len(files) == 0 {
+				return e.BadRequestError("no files provided", nil)
+			}
+
+			for _, fh := range files {
+				file, err := fh.Open()
+				if err != nil {
+					return e.BadRequestError(fmt.Sprintf("failed to open file %s", fh.Filename), err)
+				}
+				defer file.Close()
+
+				data, err := io.ReadAll(file)
+				if err != nil {
+					return e.BadRequestError(fmt.Sprintf("failed to read file content for %s", fh.Filename), err)
+				}
+
+				targetFilePath := filepath.ToSlash(filepath.Join(destPath, fh.Filename))
+
+				if err := manager.SaveFileBytes(e.Request.Context(), e.Request.PathValue("service_id"), targetFilePath, data); err != nil {
+					return e.BadRequestError(fmt.Sprintf("failed to save file %s: %v", fh.Filename, err), err)
+				}
+			}
+
 			return e.NoContent(http.StatusOK)
 		}).Bind(apis.RequireAuth())
 

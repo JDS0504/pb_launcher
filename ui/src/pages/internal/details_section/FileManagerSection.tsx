@@ -19,6 +19,7 @@ import {
   Plus,
   RefreshCw,
   AlertTriangle,
+  Upload,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { ErrorFallback } from "../../../components/helpers/ErrorFallback";
@@ -27,6 +28,8 @@ import { serviceService, type ServiceDto } from "../../../services/services";
 import { getErrorMessage } from "../../../utils/errors";
 import { useModal } from "../../../components/modal/hook";
 import { useConfirmModal } from "../../../hooks/useConfirmModal";
+import { NewFileModal } from "../components/NewFileModal";
+import { UploadFilesModal } from "../components/UploadFilesModal";
 
 type Props = {
   service_id: string;
@@ -220,6 +223,19 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
     );
   };
 
+  const openUploadFilesModal = () => {
+    openModal(
+      <UploadFilesModal
+        serviceID={service_id}
+        isStopped={isStopped}
+        onUploaded={() => {
+          filesQuery.refetch();
+        }}
+      />,
+      { title: "Subir Archivos", width: 480 }
+    );
+  };
+
   // Determinar advertencias
   const showDbWarning = selectedPath?.endsWith(".db") || selectedPath?.includes("pb_data");
 
@@ -285,6 +301,16 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
           >
             <Plus className="w-4 h-4" />
             Nuevo Archivo
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-sm btn-primary gap-1.5"
+            disabled={!isStopped}
+            onClick={openUploadFilesModal}
+          >
+            <Upload className="w-4 h-4" />
+            Subir Archivos
           </button>
         </div>
       </div>
@@ -470,95 +496,4 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
   );
 };
 
-// Modal para crear archivos
-type NewFileModalProps = {
-  serviceID: string;
-  isStopped: boolean;
-  onCreated: (path: string) => void;
-};
 
-const NewFileModal: FC<NewFileModalProps> = ({ serviceID, isStopped, onCreated }) => {
-  const { closeModal } = useModal();
-  const [folder, setFolder] = useState("pb_public");
-  const [filePath, setFilePath] = useState("");
-
-  const saveMutation = useMutation({
-    mutationFn: filesService.saveFile,
-    onSuccess: (_, variables) => {
-      toast.success("Archivo creado con éxito");
-      onCreated(variables.path);
-      closeModal();
-    },
-    onError: error => toast.error(getErrorMessage(error)),
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanPath = filePath.trim();
-    if (!cleanPath) {
-      toast.error("La ruta es obligatoria");
-      return;
-    }
-    const finalPath = `${folder}/${cleanPath.startsWith("/") ? cleanPath.substring(1) : cleanPath}`;
-    saveMutation.mutate({
-      serviceID,
-      path: finalPath,
-      content: "",
-    });
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4 text-sm">
-      {!isStopped && (
-        <div className="alert alert-warning text-xs">
-          Debes detener la instancia antes de poder crear un nuevo archivo.
-        </div>
-      )}
-
-      <div className="form-control w-full">
-        <label className="label">
-          <span className="label-text mb-1">Directorio de Origen</span>
-        </label>
-        <select
-          className="select select-bordered select-sm w-full font-mono"
-          value={folder}
-          onChange={(e) => setFolder(e.target.value)}
-          disabled={!isStopped}
-        >
-          <option value="pb_public">pb_public (Estáticos web)</option>
-          <option value="pb_hooks">pb_hooks (JS Hooks)</option>
-          <option value="pb_migrations">pb_migrations (Migraciones DB)</option>
-          <option value="pb_data">pb_data (Datos internos)</option>
-        </select>
-      </div>
-
-      <div className="form-control w-full">
-        <label className="label">
-          <span className="label-text mb-1">Nombre / Ruta relativa del archivo</span>
-        </label>
-        <input
-          type="text"
-          className="input input-bordered input-sm w-full font-mono text-xs"
-          placeholder="ej: index.html, subcarpeta/styles.css, main.pb.js"
-          value={filePath}
-          onChange={(e) => setFilePath(e.target.value)}
-          disabled={!isStopped}
-          required
-        />
-      </div>
-
-      <div className="flex justify-end gap-2 pt-2">
-        <button type="button" className="btn btn-sm btn-ghost" onClick={closeModal}>
-          Cancelar
-        </button>
-        <button
-          type="submit"
-          className="btn btn-sm btn-primary"
-          disabled={!isStopped || saveMutation.isPending || filePath.trim() === ""}
-        >
-          Crear Archivo
-        </button>
-      </div>
-    </form>
-  );
-};
