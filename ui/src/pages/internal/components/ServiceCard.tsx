@@ -2,8 +2,8 @@ import { useMemo, useRef, type FC } from "react";
 import type { ServiceDto } from "../../../services/services";
 import {
   Copy,
+  Eye,
   MoreVertical,
-  Pencil,
   Power,
   Save,
   ShieldAlert,
@@ -251,7 +251,7 @@ export const ServiceCard: FC<Props> = ({
             className="btn btn-sm btn-outline btn-primary w-full flex items-center gap-2"
             onClick={onDetails}
           >
-            <Pencil className="w-4 h-4" />
+            <Eye className="w-4 h-4" />
             Details
           </button>
         </div>
