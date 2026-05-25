@@ -18,6 +18,8 @@ import {
   Plus,
   AlertTriangle,
   Upload,
+  Download,
+  Search,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { ErrorFallback } from "../../components/helpers/ErrorFallback";
@@ -28,6 +30,8 @@ import { useModal } from "../../components/modal/hook";
 import { useConfirmModal } from "../../hooks/useConfirmModal";
 import { NewFileModal } from "./components/NewFileModal";
 import { UploadFilesModal } from "./components/UploadFilesModal";
+import { NewFolderModal } from "./components/NewFolderModal";
+import { RenameModal } from "./components/RenameModal";
 
 const PBHookCodeEditor = lazy(() =>
   import("./details_section/PBHookCodeEditor").then((module) => ({
@@ -59,6 +63,7 @@ type ServiceFileTreeProps = {
   selectedServiceId?: string;
   selectedPath: string | null;
   onSelectFile: (service: ServiceDto, path: string) => void;
+  searchQuery: string;
 };
 
 const ServiceFileTree: FC<ServiceFileTreeProps> = ({
@@ -68,13 +73,16 @@ const ServiceFileTree: FC<ServiceFileTreeProps> = ({
   selectedServiceId,
   selectedPath,
   onSelectFile,
+  searchQuery,
 }) => {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+
+  const showFiles = isExpanded || searchQuery.trim() !== "";
 
   const filesQuery = useQuery<PBFileEntry[]>({
     queryKey: ["pb-files", service.id],
     queryFn: () => filesService.fetchFiles(service.id),
-    enabled: isExpanded,
+    enabled: showFiles,
   });
 
   const togglePath = (path: string) => {
@@ -105,7 +113,9 @@ const ServiceFileTree: FC<ServiceFileTreeProps> = ({
   };
 
   const files = filesQuery.data ?? [];
-  const visibleFiles = files.filter((f) => isPathVisible(f.path, expandedPaths));
+  const visibleFiles = searchQuery.trim() !== ""
+    ? files.filter(f => getFileName(f.path).toLowerCase().includes(searchQuery.toLowerCase()))
+    : files.filter((f) => isPathVisible(f.path, expandedPaths));
 
   return (
     <div className="space-y-0.5">
@@ -143,7 +153,7 @@ const ServiceFileTree: FC<ServiceFileTreeProps> = ({
       </button>
 
       {/* Árbol de archivos interno */}
-      {isExpanded && (
+      {showFiles && (
         <div className="pl-2 border-l border-base-300/60 ml-3.5 space-y-0.5">
           {filesQuery.isLoading ? (
             <div className="p-2 text-[10px] text-base-content/50 italic animate-pulse">Cargando archivos...</div>
@@ -221,6 +231,101 @@ export const FilesPage = () => {
   const [originalContent, setOriginalContent] = useState("");
   const [isBinaryFile, setIsBinaryFile] = useState(false);
   const [expandedServices, setExpandedServices] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [imagePreviewUrl, setImagePreviewUrl] = useState("");
+
+  const isImageFile = (path: string) => {
+    const ext = path.toLowerCase().split('.').pop();
+    return ["png", "jpg", "jpeg", "gif", "ico", "svg", "webp"].includes(ext || "");
+  };
+
+  useEffect(() => {
+    let url = "";
+    if (selectedFile && isImageFile(selectedFile.path)) {
+      filesService.downloadFile(selectedFile.service.id, selectedFile.path)
+        .then(blob => {
+          url = URL.createObjectURL(blob);
+          setImagePreviewUrl(url);
+        })
+        .catch(() => {
+          setImagePreviewUrl("");
+        });
+    } else {
+      setImagePreviewUrl("");
+    }
+    return () => {
+      if (url) {
+        URL.revokeObjectURL(url);
+      }
+    };
+  }, [selectedFile]);
+
+  const handleDownload = async () => {
+    if (!selectedFile) return;
+    try {
+      const blob = await filesService.downloadFile(selectedFile.service.id, selectedFile.path);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = getFileName(selectedFile.path);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Error al descargar el archivo");
+    }
+  };
+
+  const openRenameModal = () => {
+    if (!selectedFile) return;
+    const isSvcStopped = selectedFile.service.status === "stopped";
+    openModal(
+      <RenameModal
+        serviceID={selectedFile.service.id}
+        isStopped={isSvcStopped}
+        currentPath={selectedFile.path}
+        onRenamed={(newPath) => {
+          queryClient.invalidateQueries({ queryKey: ["pb-files", selectedFile.service.id] });
+          setSelectedFile({ ...selectedFile, path: newPath });
+        }}
+      />,
+      { title: "Renombrar / Mover", width: 450 }
+    );
+  };
+
+  const openNewFolderModal = (service: ServiceDto) => {
+    const isSvcStopped = service.status === "stopped";
+    openModal(
+      <NewFolderModal
+        serviceID={service.id}
+        isStopped={isSvcStopped}
+        onCreated={() => {
+          queryClient.invalidateQueries({ queryKey: ["pb-files", service.id] });
+        }}
+      />,
+      { title: `Nueva Carpeta en ${service.name}`, width: 450 }
+    );
+  };
+
+  const unzipMutation = useMutation({
+    mutationFn: filesService.extractZip,
+    onSuccess: () => {
+      toast.success("Archivo ZIP extraído con éxito");
+      if (selectedFile) {
+        queryClient.invalidateQueries({ queryKey: ["pb-files", selectedFile.service.id] });
+      }
+    },
+    onError: (error) => toast.error(getErrorMessage(error)),
+  });
+
+  const handleExtractZip = () => {
+    if (!selectedFile) return;
+    unzipMutation.mutate({
+      serviceID: selectedFile.service.id,
+      path: selectedFile.path,
+    });
+  };
 
   // Consulta global de servicios (instancias)
   const servicesQuery = useQuery<ServiceDto[]>({
@@ -398,6 +503,20 @@ export const FilesPage = () => {
             <span className="badge badge-sm badge-neutral">{services.length} instancias</span>
           </div>
 
+          {/* Buscador de archivos en tiempo real */}
+          <div className="p-2 border-b border-base-300 bg-base-100">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-base-content/40" />
+              <input
+                type="text"
+                className="input input-xs input-bordered w-full pl-8 font-mono text-[11px]"
+                placeholder="Buscar archivos..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+          </div>
+
           <div className="flex-1 overflow-y-auto p-2 space-y-1 font-mono text-xs">
             {servicesQuery.isLoading ? (
               <div className="p-4 text-center text-base-content/50 animate-pulse">Cargando instancias...</div>
@@ -413,6 +532,7 @@ export const FilesPage = () => {
                     selectedServiceId={selectedFile?.service.id}
                     selectedPath={selectedFile?.path || null}
                     onSelectFile={(svc, path) => setSelectedFile({ service: svc, path })}
+                    searchQuery={searchQuery}
                   />
                   {expandedServices.has(service.id) && (
                     <div className="pl-4 pr-1 py-1 flex flex-col gap-1">
@@ -424,6 +544,15 @@ export const FilesPage = () => {
                       >
                         <Plus className="w-3 h-3" />
                         Nuevo Archivo en esta instancia
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openNewFolderModal(service)}
+                        className="btn btn-xs btn-ghost gap-1 w-full justify-start text-[10px] opacity-75 hover:opacity-100"
+                        disabled={service.status !== "stopped"}
+                      >
+                        <Plus className="w-3 h-3" />
+                        Nueva Carpeta
                       </button>
                       <button
                         type="button"
@@ -462,7 +591,38 @@ export const FilesPage = () => {
                   </span>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-1.5">
+                  {!isDirSelected && (
+                    <button
+                      type="button"
+                      className="btn btn-xs btn-neutral gap-1"
+                      onClick={handleDownload}
+                    >
+                      <Download className="w-3 h-3" />
+                      Descargar
+                    </button>
+                  )}
+
+                  {selectedFile.path.toLowerCase().endsWith(".zip") && (
+                    <button
+                      type="button"
+                      className="btn btn-xs btn-warning gap-1"
+                      disabled={!isStopped || unzipMutation.isPending}
+                      onClick={handleExtractZip}
+                    >
+                      {unzipMutation.isPending ? "Extrayendo..." : "Descomprimir"}
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    className="btn btn-xs btn-neutral gap-1"
+                    disabled={!isStopped}
+                    onClick={openRenameModal}
+                  >
+                    Renombrar
+                  </button>
+
                   <button
                     type="button"
                     className="btn btn-xs btn-error gap-1"
@@ -473,11 +633,11 @@ export const FilesPage = () => {
                     Borrar
                   </button>
 
-                  {!isDirSelected && (
+                  {!isDirSelected && !isBinaryFile && !isImageFile(selectedFile.path) && (
                     <button
                       type="button"
                       className="btn btn-xs btn-primary gap-1"
-                      disabled={!isStopped || !hasChanges || saveMutation.isPending || isBinaryFile}
+                      disabled={!isStopped || !hasChanges || saveMutation.isPending}
                       onClick={handleSave}
                     >
                       <Save className="w-3 h-3" />
@@ -525,7 +685,15 @@ export const FilesPage = () => {
                   <div className="w-full h-full flex flex-col items-center justify-center text-center p-6 text-base-content/60 space-y-2">
                     <FolderOpen className="w-12 h-12 text-amber-500 stroke-1" />
                     <p className="font-semibold text-sm">Directorio seleccionado ({getFileName(selectedFile.path)})</p>
-                    <p className="text-xs max-w-md">Para agregar nuevos archivos dentro de esta carpeta, usa el botón "Nuevo Archivo en esta instancia" del explorador lateral.</p>
+                    <p className="text-xs max-w-md">Para agregar nuevos archivos dentro de esta carpeta, usa el botón "Nuevo Archivo" o "Nueva Carpeta" del explorador lateral.</p>
+                  </div>
+                ) : imagePreviewUrl ? (
+                  <div className="w-full h-full flex items-center justify-center p-6 bg-base-300 overflow-auto">
+                    <img
+                      src={imagePreviewUrl}
+                      alt={getFileName(selectedFile.path)}
+                      className="max-w-full max-h-full object-contain rounded-lg shadow-xl border border-base-300"
+                    />
                   </div>
                 ) : isBinaryFile ? (
                   <div className="w-full h-full flex flex-col items-center justify-center text-center p-6 text-base-content/60 space-y-2">

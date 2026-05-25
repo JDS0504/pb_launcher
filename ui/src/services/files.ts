@@ -104,6 +104,80 @@ export const filesService = {
     }
   },
 
+  downloadFile: async (serviceID: string, path: string): Promise<Blob> => {
+    const url = joinUrls(
+      pb.baseURL,
+      `/x-api/services/${serviceID}/files/download?path=${encodeURIComponent(path)}`,
+    );
+    const response = await fetch(url, {
+      headers: { Authorization: pb.authStore.token },
+    });
+    if (!response.ok) {
+      throw new Error("Failed to download file");
+    }
+    return response.blob();
+  },
+
+  createFolder: async (data: { serviceID: string; path: string }) => {
+    const url = joinUrls(pb.baseURL, `/x-api/services/${data.serviceID}/files/folder`);
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: pb.authStore.token,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ path: data.path }),
+    });
+    if (!response.ok) {
+      const json = await response.json().catch(() => null);
+      throw new HttpError(
+        response.status,
+        json?.message || "Failed to create folder",
+        json,
+      );
+    }
+  },
+
+  renameFile: async (data: { serviceID: string; oldPath: string; newPath: string }) => {
+    const url = joinUrls(pb.baseURL, `/x-api/services/${data.serviceID}/files/rename`);
+    const response = await fetch(url, {
+      method: "PATCH",
+      headers: {
+        Authorization: pb.authStore.token,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ old_path: data.oldPath, new_path: data.newPath }),
+    });
+    if (!response.ok) {
+      const json = await response.json().catch(() => null);
+      throw new HttpError(
+        response.status,
+        json?.message || "Failed to rename file",
+        json,
+      );
+    }
+  },
+
+  extractZip: async (data: { serviceID: string; path: string }) => {
+    const url = joinUrls(pb.baseURL, `/x-api/services/${data.serviceID}/files/unzip`);
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: pb.authStore.token,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ path: data.path }),
+    });
+    if (!response.ok) {
+      const json = await response.json().catch(() => null);
+      throw new HttpError(
+        response.status,
+        json?.message || "Failed to extract zip file",
+        json,
+      );
+    }
+  },
+
   deleteFile: async (data: { serviceID: string; path: string }) => {
     const url = joinUrls(
       pb.baseURL,

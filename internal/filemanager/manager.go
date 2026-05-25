@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"pb_launcher/configs"
+	"pb_launcher/helpers/unzip"
 	"pb_launcher/internal/launcher/domain/models"
 	"pb_launcher/internal/launcher/domain/repositories"
 	"pb_launcher/internal/operationlog"
@@ -270,4 +271,103 @@ func cleanEmptyParents(base string, dir string) {
 		}
 		dir = filepath.Dir(dirAbs)
 	}
+}
+
+func (m *Manager) GetSafeFilePath(ctx context.Context, serviceID string, targetPath string) (string, error) {
+	if _, err := m.serviceRepo.FindService(ctx, serviceID); err != nil {
+		return "", err
+	}
+	relPath, err := validateFilePath(targetPath)
+	if err != nil {
+		return "", err
+	}
+	return safeJoin(m.serviceDir(serviceID), relPath)
+}
+
+func (m *Manager) CreateDirectory(ctx context.Context, serviceID string, targetPath string) error {
+	service, err := m.serviceRepo.FindService(ctx, serviceID)
+	if err != nil {
+		return err
+	}
+	if service.Status != models.Stopped {
+		return fmt.Errorf("el servicio debe estar detenido para poder crear carpetas")
+	}
+	relPath, err := validateFilePath(targetPath)
+	if err != nil {
+		return err
+	}
+	fullPath, err := safeJoin(m.serviceDir(serviceID), relPath)
+	if err != nil {
+		return err
+	}
+	return os.MkdirAll(fullPath, 0755)
+}
+
+func (m *Manager) RenameFile(ctx context.Context, serviceID string, oldPath string, newPath string) error {
+	service, err := m.serviceRepo.FindService(ctx, serviceID)
+	if err != nil {
+		return err
+	}
+	if service.Status != models.Stopped {
+		return fmt.Errorf("el servicio debe estar detenido para poder mover/renombrar archivos")
+	}
+	relOld, err := validateFilePath(oldPath)
+	if err != nil {
+		return err
+	}
+	relNew, err := validateFilePath(newPath)
+	if err != nil {
+		return err
+	}
+	fullOld, err := safeJoin(m.serviceDir(serviceID), relOld)
+	if err != nil {
+		return err
+	}
+	fullNew, err := safeJoin(m.serviceDir(serviceID), relNew)
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(fullNew), 0755); err != nil {
+		return err
+	}
+	if err := os.Rename(fullOld, fullNew); err != nil {
+		return err
+	}
+
+	cleanEmptyParents(m.serviceDir(serviceID), filepath.Dir(fullOld))
+	return nil
+}
+
+func (m *Manager) ExtractZip(ctx context.Context, serviceID string, zipPath string) error {
+	service, err := m.serviceRepo.FindService(ctx, serviceID)
+	if err != nil {
+		return err
+	}
+	if service.Status != models.Stopped {
+		return fmt.Errorf("el servicio debe estar detenido para poder extraer archivos ZIP")
+	}
+	relPath, err := validateFilePath(zipPath)
+	if err != nil {
+		return err
+	}
+	if !strings.HasSuffix(strings.ToLower(relPath), ".zip") {
+		return fmt.Errorf("el archivo seleccionado no es un ZIP válido")
+	}
+
+	fullZipPath, err := safeJoin(m.serviceDir(serviceID), relPath)
+	if err != nil {
+		return err
+	}
+
+	destDir := filepath.Dir(fullZipPath)
+	uz := unzip.NewUnzip()
+	_, err = uz.Extract(fullZipPath, destDir)
+	if err != nil {
+		m.logger.Error(ctx, service.ID, "file_unzip", err.Error(), map[string]any{"path": filepath.ToSlash(relPath)})
+		return err
+	}
+
+	m.logger.Success(ctx, service.ID, "file_unzip", "Archivo ZIP extraído exitosamente", map[string]any{"path": filepath.ToSlash(relPath)})
+	return nil
 }

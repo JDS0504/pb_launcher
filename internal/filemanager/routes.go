@@ -90,6 +90,58 @@ func RegisterRoutes(app *pocketbase.PocketBase, manager *Manager) {
 			return e.NoContent(http.StatusOK)
 		}).Bind(apis.RequireAuth())
 
+		se.Router.GET("/x-api/services/{service_id}/files/download", func(e *core.RequestEvent) error {
+			filePath := strings.TrimSpace(e.Request.URL.Query().Get("path"))
+			fullPath, err := manager.GetSafeFilePath(e.Request.Context(), e.Request.PathValue("service_id"), filePath)
+			if err != nil {
+				return e.BadRequestError("failed to download file", err)
+			}
+			fileName := filepath.Base(fullPath)
+			e.Response.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", fileName))
+			http.ServeFile(e.Response, e.Request, fullPath)
+			return nil
+		}).Bind(apis.RequireAuth())
+
+		se.Router.POST("/x-api/services/{service_id}/files/folder", func(e *core.RequestEvent) error {
+			var body struct {
+				Path string `json:"path"`
+			}
+			if err := e.BindBody(&body); err != nil {
+				return e.BadRequestError("invalid JSON body", err)
+			}
+			if err := manager.CreateDirectory(e.Request.Context(), e.Request.PathValue("service_id"), body.Path); err != nil {
+				return e.BadRequestError("failed to create directory", err)
+			}
+			return e.NoContent(http.StatusOK)
+		}).Bind(apis.RequireAuth())
+
+		se.Router.PATCH("/x-api/services/{service_id}/files/rename", func(e *core.RequestEvent) error {
+			var body struct {
+				OldPath string `json:"old_path"`
+				NewPath string `json:"new_path"`
+			}
+			if err := e.BindBody(&body); err != nil {
+				return e.BadRequestError("invalid JSON body", err)
+			}
+			if err := manager.RenameFile(e.Request.Context(), e.Request.PathValue("service_id"), body.OldPath, body.NewPath); err != nil {
+				return e.BadRequestError("failed to rename file", err)
+			}
+			return e.NoContent(http.StatusOK)
+		}).Bind(apis.RequireAuth())
+
+		se.Router.POST("/x-api/services/{service_id}/files/unzip", func(e *core.RequestEvent) error {
+			var body struct {
+				Path string `json:"path"`
+			}
+			if err := e.BindBody(&body); err != nil {
+				return e.BadRequestError("invalid JSON body", err)
+			}
+			if err := manager.ExtractZip(e.Request.Context(), e.Request.PathValue("service_id"), body.Path); err != nil {
+				return e.BadRequestError("failed to extract zip", err)
+			}
+			return e.NoContent(http.StatusOK)
+		}).Bind(apis.RequireAuth())
+
 		se.Router.DELETE("/x-api/services/{service_id}/files", func(e *core.RequestEvent) error {
 			if err := manager.DeleteFile(
 				e.Request.Context(),

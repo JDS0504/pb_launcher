@@ -20,6 +20,8 @@ import {
   RefreshCw,
   AlertTriangle,
   Upload,
+  Download,
+  Search,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { ErrorFallback } from "../../../components/helpers/ErrorFallback";
@@ -30,6 +32,8 @@ import { useModal } from "../../../components/modal/hook";
 import { useConfirmModal } from "../../../hooks/useConfirmModal";
 import { NewFileModal } from "../components/NewFileModal";
 import { UploadFilesModal } from "../components/UploadFilesModal";
+import { NewFolderModal } from "../components/NewFolderModal";
+import { RenameModal } from "../components/RenameModal";
 
 type Props = {
   service_id: string;
@@ -68,6 +72,98 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
   const [originalContent, setOriginalContent] = useState("");
   const [isBinaryFile, setIsBinaryFile] = useState(false);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [imagePreviewUrl, setImagePreviewUrl] = useState("");
+
+  const isImageFile = (path: string) => {
+    const ext = path.toLowerCase().split('.').pop();
+    return ["png", "jpg", "jpeg", "gif", "ico", "svg", "webp"].includes(ext || "");
+  };
+
+  useEffect(() => {
+    let url = "";
+    if (selectedPath && isImageFile(selectedPath)) {
+      filesService.downloadFile(service_id, selectedPath)
+        .then(blob => {
+          url = URL.createObjectURL(blob);
+          setImagePreviewUrl(url);
+        })
+        .catch(() => {
+          setImagePreviewUrl("");
+        });
+    } else {
+      setImagePreviewUrl("");
+    }
+    return () => {
+      if (url) {
+        URL.revokeObjectURL(url);
+      }
+    };
+  }, [selectedPath, service_id]);
+
+  const handleDownload = async () => {
+    if (!selectedPath) return;
+    try {
+      const blob = await filesService.downloadFile(service_id, selectedPath);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = getFileName(selectedPath);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Error al descargar el archivo");
+    }
+  };
+
+  const openRenameModal = () => {
+    if (!selectedPath) return;
+    openModal(
+      <RenameModal
+        serviceID={service_id}
+        isStopped={isStopped}
+        currentPath={selectedPath}
+        onRenamed={(newPath) => {
+          filesQuery.refetch().then(() => {
+            setSelectedPath(newPath);
+          });
+        }}
+      />,
+      { title: "Renombrar / Mover", width: 450 }
+    );
+  };
+
+  const openNewFolderModal = () => {
+    openModal(
+      <NewFolderModal
+        serviceID={service_id}
+        isStopped={isStopped}
+        onCreated={() => {
+          filesQuery.refetch();
+        }}
+      />,
+      { title: "Nueva Carpeta", width: 450 }
+    );
+  };
+
+  const unzipMutation = useMutation({
+    mutationFn: filesService.extractZip,
+    onSuccess: () => {
+      toast.success("Archivo ZIP extraído con éxito");
+      filesQuery.refetch();
+    },
+    onError: (error) => toast.error(getErrorMessage(error)),
+  });
+
+  const handleExtractZip = () => {
+    if (!selectedPath) return;
+    unzipMutation.mutate({
+      serviceID: service_id,
+      path: selectedPath,
+    });
+  };
 
   const togglePath = (path: string) => {
     setExpandedPaths((prev) => {
@@ -307,6 +403,16 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
             type="button"
             className="btn btn-sm btn-primary gap-1.5"
             disabled={!isStopped}
+            onClick={openNewFolderModal}
+          >
+            <Plus className="w-4 h-4" />
+            Nueva Carpeta
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-sm btn-primary gap-1.5"
+            disabled={!isStopped}
             onClick={openUploadFilesModal}
           >
             <Upload className="w-4 h-4" />
@@ -324,13 +430,28 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
             <span className="badge badge-sm badge-neutral">{files.length} archivos</span>
           </div>
 
+          {/* Buscador de archivos en tiempo real */}
+          <div className="p-2 border-b border-base-300 bg-base-100">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-base-content/40" />
+              <input
+                type="text"
+                className="input input-xs input-bordered w-full pl-8 font-mono text-[11px]"
+                placeholder="Buscar archivos..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+          </div>
+
           <div className="flex-1 overflow-y-auto p-2 space-y-1 font-mono text-xs">
             {files.length === 0 ? (
               <div className="p-4 text-center text-base-content/50">No hay archivos en la instancia.</div>
             ) : (
-              files
-                .filter((f) => isPathVisible(f.path, expandedPaths))
-                .map((f) => {
+              (searchQuery.trim() !== ""
+                ? files.filter(f => getFileName(f.path).toLowerCase().includes(searchQuery.toLowerCase()))
+                : files.filter((f) => isPathVisible(f.path, expandedPaths))
+              ).map((f) => {
                   const isSelected = selectedPath === f.path;
                   return (
                     <button
@@ -403,7 +524,38 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
                   {selectedPath}
                 </span>
 
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-1.5">
+                  {!isDirSelected && (
+                    <button
+                      type="button"
+                      className="btn btn-xs btn-neutral gap-1"
+                      onClick={handleDownload}
+                    >
+                      <Download className="w-3 h-3" />
+                      Descargar
+                    </button>
+                  )}
+
+                  {selectedPath.toLowerCase().endsWith(".zip") && (
+                    <button
+                      type="button"
+                      className="btn btn-xs btn-warning gap-1"
+                      disabled={!isStopped || unzipMutation.isPending}
+                      onClick={handleExtractZip}
+                    >
+                      {unzipMutation.isPending ? "Extrayendo..." : "Descomprimir"}
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    className="btn btn-xs btn-neutral gap-1"
+                    disabled={!isStopped}
+                    onClick={openRenameModal}
+                  >
+                    Renombrar
+                  </button>
+
                   <button
                     type="button"
                     className="btn btn-xs btn-error gap-1"
@@ -414,11 +566,11 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
                     Borrar
                   </button>
 
-                  {!isDirSelected && (
+                  {!isDirSelected && !isBinaryFile && !isImageFile(selectedPath) && (
                     <button
                       type="button"
                       className="btn btn-xs btn-primary gap-1"
-                      disabled={!isStopped || !hasChanges || saveMutation.isPending || isBinaryFile}
+                      disabled={!isStopped || !hasChanges || saveMutation.isPending}
                       onClick={handleSave}
                     >
                       <Save className="w-3 h-3" />
@@ -464,7 +616,15 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
                   <div className="w-full h-full flex flex-col items-center justify-center text-center p-6 text-base-content/60 space-y-2">
                     <FolderOpen className="w-12 h-12 text-amber-500 stroke-1" />
                     <p className="font-semibold text-sm">Directorio seleccionado ({getFileName(selectedPath)})</p>
-                    <p className="text-xs max-w-md">Para agregar nuevos archivos dentro de este directorio o sus subcarpetas, haz clic en el botón de la barra superior <span className="font-semibold text-primary">"Nuevo Archivo"</span>.</p>
+                    <p className="text-xs max-w-md">Para agregar nuevos archivos o carpetas, usa los botones de la barra superior <span className="font-semibold text-primary">"Nuevo Archivo"</span> o <span className="font-semibold text-primary">"Nueva Carpeta"</span>.</p>
+                  </div>
+                ) : imagePreviewUrl ? (
+                  <div className="w-full h-full flex items-center justify-center p-6 bg-base-300 overflow-auto">
+                    <img
+                      src={imagePreviewUrl}
+                      alt={getFileName(selectedPath)}
+                      className="max-w-full max-h-full object-contain rounded-lg shadow-xl border border-base-300"
+                    />
                   </div>
                 ) : isBinaryFile ? (
                   <div className="w-full h-full flex flex-col items-center justify-center text-center p-6 text-base-content/60 space-y-2">
