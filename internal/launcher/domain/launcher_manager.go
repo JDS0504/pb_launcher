@@ -51,6 +51,9 @@ type LauncherManager struct {
 	checkTickerInterval time.Duration
 	idleTimeout         time.Duration
 	stopChan            chan struct{}
+	// Callback invocado cuando una instancia se suspende o detiene.
+	// Permite que el proxy invalide su cache sin generar una dependencia circular.
+	onServiceDeactivated func(serviceID string)
 }
 
 func NewLauncherManager(
@@ -85,6 +88,22 @@ func NewLauncherManager(
 	go lm.handleServiceErrors()
 	go lm.startAutoSleepTicker()
 	return lm
+}
+
+// SetOnServiceDeactivated registra un callback que se llama cuando una
+// instancia se suspende (auto-sleep) o se detiene manualmente.
+// Se usa para que el proxy invalide su cache de ServiceDiscovery.
+func (lm *LauncherManager) SetOnServiceDeactivated(fn func(serviceID string)) {
+	lm.rwMtx.Lock()
+	defer lm.rwMtx.Unlock()
+	lm.onServiceDeactivated = fn
+}
+
+// notifyDeactivated invoca el callback si está configurado (sin lock; llamar solo con lock ya adquirido o en goroutine propia).
+func (lm *LauncherManager) notifyDeactivated(serviceID string) {
+	if lm.onServiceDeactivated != nil {
+		go lm.onServiceDeactivated(serviceID)
+	}
 }
 
 func (lm *LauncherManager) handleServiceErrors() {

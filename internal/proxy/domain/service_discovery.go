@@ -26,12 +26,12 @@ func init() {
 func NewServiceDiscovery(repo repositories.ServiceRepository) (*ServiceDiscovery, error) {
 
 	cache, err := bigcache.New(context.Background(), bigcache.Config{
-		Shards:           256,              // increases parallelism
-		LifeWindow:       15 * time.Minute, // cache entries live longer
-		CleanWindow:      30 * time.Minute, // less frequent cleanup
-		MaxEntrySize:     512,              // supports moderately sized payloads
+		Shards:           256,
+		LifeWindow:       45 * time.Second, // debe ser << autosleep_idle_timeout para no reiniciar el timer de inactividad
+		CleanWindow:      2 * time.Minute,
+		MaxEntrySize:     512,
 		Verbose:          false,
-		HardMaxCacheSize: 128, // ~128 MB max cache size
+		HardMaxCacheSize: 128,
 		StatsEnabled:     false,
 	})
 	if err != nil {
