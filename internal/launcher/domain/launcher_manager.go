@@ -748,6 +748,19 @@ func (lm *LauncherManager) GetActiveInstancesCount() int {
 	return count
 }
 
+// GetRunningInstancesPIDs devuelve un mapa con los ID de servicio y sus PIDs activos.
+func (lm *LauncherManager) GetRunningInstancesPIDs() map[string]int {
+	lm.rwMtx.RLock()
+	defer lm.rwMtx.RUnlock()
+	pids := make(map[string]int)
+	for id, proc := range lm.processList {
+		if proc.IsRunning() {
+			pids[id] = proc.GetPID()
+		}
+	}
+	return pids
+}
+
 // FindServiceForCli busca y devuelve el modelo de servicio para CLI de forma segura.
 func (lm *LauncherManager) FindServiceForCli(ctx context.Context, serviceID string) (*models.Service, error) {
 	return lm.repository.FindService(ctx, serviceID)

@@ -1,11 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { statusService } from "../../services/status";
 import { serviceService } from "../../services/services";
-import { Cpu, HardDrive, Server, Activity, RefreshCcw, Power, Terminal } from "lucide-react";
+import { Cpu, HardDrive, Server, Activity, Power } from "lucide-react";
 import classNames from "classnames";
 import React from "react";
-import { useModal } from "../../components/modal/hook";
-import { ShellModal } from "./components/ShellModal";
 
 const formatBytes = (bytes: number, decimals = 2) => {
   if (!bytes) return "0 B";
@@ -32,7 +30,6 @@ const formatUptime = (seconds: number) => {
 };
 
 export const StatusPage = () => {
-  const { openModal } = useModal();
   const statusQuery = useQuery({
     queryKey: ["system_status"],
     queryFn: statusService.fetchSystemStatus,
@@ -108,34 +105,6 @@ export const StatusPage = () => {
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Estado del Servidor</h2>
           <p className="text-sm text-base-content/60">Monitoreo de recursos de hardware en tiempo real.</p>
-        </div>
-      <div className="flex items-center gap-2">
-          <button
-            id="btn-open-shell"
-            onClick={() =>
-              openModal(<ShellModal />, {
-                title: "Shell Interactiva del Servidor (Admin)",
-                width: "min(98vw, 1200px)",
-                closeOnBackdropClick: false,
-              })
-            }
-            className="btn btn-sm btn-neutral gap-2"
-            title="Abrir shell interactiva del servidor"
-          >
-            <Terminal className="w-4 h-4 text-primary" />
-            Shell
-          </button>
-          <button
-            onClick={() => { statusQuery.refetch(); servicesQuery.refetch(); }}
-            className="btn btn-sm btn-ghost gap-2"
-          >
-            <RefreshCcw
-              className={classNames("w-4 h-4", {
-                "animate-spin": statusQuery.isFetching || servicesQuery.isFetching,
-              })}
-            />
-            {statusQuery.isFetching || servicesQuery.isFetching ? "Actualizando..." : "Actualizado"}
-          </button>
         </div>
       </div>
 
@@ -265,24 +234,30 @@ export const StatusPage = () => {
                     <th>ID</th>
                     <th>Puerto asignado</th>
                     <th className="text-right">Versión Activa</th>
-                    <th className="text-right text-success">Límite de RAM</th>
-                    <th className="text-right text-info">Cuota de CPU</th>
+                    <th className="text-right text-success">Uso / Límite de RAM</th>
+                    <th className="text-right text-info">Uso / Cuota de CPU</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {runningServices.map(service => (
-                    <tr key={service.id} className="hover:bg-base-200/35">
-                      <td className="font-bold text-primary">{service.name}</td>
-                      <td className="opacity-60">{service.id}</td>
-                      <td>
-                        <span className="badge badge-sm badge-neutral font-mono">{service.port || "N/A"}</span>
-                      </td>
-                      <td className="text-right font-semibold">v{service.release_version}</td>
-                      {/* Límite predeterminado configurado en config.yml o ninguno si no se restringe */}
-                      <td className="text-right text-success font-semibold">256 MB</td>
-                      <td className="text-right text-info font-semibold">20 %</td>
-                    </tr>
-                  ))}
+                  {runningServices.map(service => {
+                    const stats = data.instances_stats?.[service.id];
+                    return (
+                      <tr key={service.id} className="hover:bg-base-200/35">
+                        <td className="font-bold text-primary">{service.name}</td>
+                        <td className="opacity-60">{service.id}</td>
+                        <td>
+                          <span className="badge badge-sm badge-neutral font-mono">{service.port || "N/A"}</span>
+                        </td>
+                        <td className="text-right font-semibold">v{service.release_version}</td>
+                        <td className="text-right text-success font-semibold">
+                          {stats ? `${formatBytes(stats.memory_bytes)}` : "0 B"} / 256 MB
+                        </td>
+                        <td className="text-right text-info font-semibold">
+                          {stats ? `${stats.cpu_percent.toFixed(1)}%` : "0.0%"} / 20%
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -29,11 +29,17 @@ export type HostInfo = {
   active_instances: number;
 };
 
+export type InstanceStats = {
+  cpu_percent: number;
+  memory_bytes: number;
+};
+
 export type SystemStatus = {
   cpu: CPUInfo;
   ram: RAMInfo;
   disk: DiskInfo;
   host: HostInfo;
+  instances_stats?: Record<string, InstanceStats>;
 };
 
 export const statusService = {

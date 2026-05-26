@@ -31,10 +31,17 @@ type HostInfo struct {
 	ActiveInstances int    `json:"active_instances"`
 }
 
+// InstanceStats representa el consumo real de recursos de una instancia en ejecución
+type InstanceStats struct {
+	CPUPercent  float64 `json:"cpu_percent"`
+	MemoryBytes uint64  `json:"memory_bytes"`
+}
+
 // SystemStatus is the unified metrics payload
 type SystemStatus struct {
-	CPU  CPUInfo  `json:"cpu"`
-	RAM  RAMInfo  `json:"ram"`
-	Disk DiskInfo `json:"disk"`
-	Host HostInfo `json:"host"`
+	CPU            CPUInfo                  `json:"cpu"`
+	RAM            RAMInfo                  `json:"ram"`
+	Disk           DiskInfo                 `json:"disk"`
+	Host           HostInfo                 `json:"host"`
+	InstancesStats map[string]InstanceStats `json:"instances_stats"`
 }
