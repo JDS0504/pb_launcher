@@ -19,7 +19,6 @@ import (
 	"pb_launcher/internal/launcher/domain/repositories"
 	"pb_launcher/internal/launcher/domain/services"
 	"pb_launcher/internal/operationlog"
-	"pb_launcher/utils/processstats"
 	"pb_launcher/utils/iouitls"
 	"pb_launcher/utils/networktools"
 	"regexp"
@@ -687,15 +686,6 @@ func (lm *LauncherManager) suspendService(ctx context.Context, serviceID string)
 }
 
 func (lm *LauncherManager) suspendServiceLocked(ctx context.Context, serviceID string) error {
-	var cpuPercent float64
-	var memoryBytes uint64
-	if proc, exists := lm.processList[serviceID]; exists && proc.IsRunning() {
-		pid := proc.GetPID()
-		stats := processstats.GetProcessStats(pid)
-		cpuPercent = stats.CPUPercent
-		memoryBytes = stats.MemoryBytes
-	}
-
 	if err := lm.stopProcessOnlyLocked(serviceID); err != nil {
 		slog.Error("failed to stop existing process for suspension", "serviceID", serviceID, "error", err)
 		return err
@@ -705,11 +695,7 @@ func (lm *LauncherManager) suspendServiceLocked(ctx context.Context, serviceID s
 		slog.Error("failed to mark service as sleeping", "serviceID", serviceID, "error", err)
 	}
 
-	metadata := map[string]any{
-		"cpu_percent":  cpuPercent,
-		"memory_bytes": memoryBytes,
-	}
-	lm.operationLogger.Success(ctx, serviceID, "sleep", "service suspended due to inactivity (auto-sleep)", metadata)
+	lm.operationLogger.Success(ctx, serviceID, "sleep", "service suspended due to inactivity (auto-sleep)", nil)
 
 	lm.notifyDeactivated(serviceID)
 	return nil
