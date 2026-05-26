@@ -231,11 +231,11 @@ export const StatusPage = () => {
                 <thead>
                   <tr className="bg-base-200/50">
                     <th>Nombre de Instancia</th>
+                    <th className="text-right text-success">Uso de RAM</th>
+                    <th className="text-right text-info">Uso de CPU</th>
                     <th>ID</th>
                     <th>Puerto asignado</th>
                     <th className="text-right">Versión Activa</th>
-                    <th className="text-right text-success">Uso / Límite de RAM</th>
-                    <th className="text-right text-info">Uso / Cuota de CPU</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -244,17 +244,17 @@ export const StatusPage = () => {
                     return (
                       <tr key={service.id} className="hover:bg-base-200/35">
                         <td className="font-bold text-primary">{service.name}</td>
+                        <td className="text-right text-success font-semibold">
+                          {stats ? formatBytes(stats.memory_bytes) : "0 B"}
+                        </td>
+                        <td className="text-right text-info font-semibold">
+                          {stats ? `${stats.cpu_percent.toFixed(1)}%` : "0.0%"}
+                        </td>
                         <td className="opacity-60">{service.id}</td>
                         <td>
                           <span className="badge badge-sm badge-neutral font-mono">{service.port || "N/A"}</span>
                         </td>
                         <td className="text-right font-semibold">v{service.release_version}</td>
-                        <td className="text-right text-success font-semibold">
-                          {stats ? `${formatBytes(stats.memory_bytes)}` : "0 B"} / 256 MB
-                        </td>
-                        <td className="text-right text-info font-semibold">
-                          {stats ? `${stats.cpu_percent.toFixed(1)}%` : "0.0%"} / 20%
-                        </td>
                       </tr>
                     );
                   })}
