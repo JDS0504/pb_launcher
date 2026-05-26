@@ -754,7 +754,7 @@ func (lm *LauncherManager) GetRunningInstancesPIDs() map[string]int {
 	defer lm.rwMtx.RUnlock()
 	pids := make(map[string]int)
 	for id, proc := range lm.processList {
-		if proc.IsRunning() {
+		if proc != nil && proc.IsRunning() {
 			pids[id] = proc.GetPID()
 		}
 	}

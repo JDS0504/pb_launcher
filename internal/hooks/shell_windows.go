@@ -53,6 +53,31 @@ func handleShellSession(conn *websocket.Conn) {
 	var closeOnce sync.Once
 	closeDone := func() { closeOnce.Do(func() { close(done) }) }
 
+	// Configurar pong handler para reiniciar plazos de lectura
+	conn.SetPongHandler(func(string) error {
+		conn.SetReadDeadline(time.Now().Add(shellSessionTimeout))
+		return nil
+	})
+
+	// Enviar pings periódicos para evitar desconexiones por inactividad de proxies
+	pingTicker := time.NewTicker(30 * time.Second)
+	defer pingTicker.Stop()
+
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case <-pingTicker.C:
+				conn.SetWriteDeadline(time.Now().Add(shellWriteTimeout))
+				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+					closeDone()
+					return
+				}
+			}
+		}
+	}()
+
 	var wg sync.WaitGroup
 
 	// stdout -> WebSocket
