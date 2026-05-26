@@ -422,7 +422,7 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
       </div>
 
       {/* Contenedor Principal: Árbol lateral + Editor */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-[65vh]">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-[calc(100vh-18rem)] min-h-[400px]">
         {/* Árbol de Archivos (Col 4) */}
         <div className="lg:col-span-4 flex flex-col bg-base-200 border border-base-300 rounded-xl overflow-hidden h-full">
           <div className="p-3 bg-base-300 font-semibold text-xs uppercase tracking-wider border-b border-base-300 flex justify-between items-center">

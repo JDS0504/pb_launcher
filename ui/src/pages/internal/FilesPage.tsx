@@ -20,6 +20,9 @@ import {
   Upload,
   Download,
   Search,
+  RefreshCw,
+  Play,
+  Square,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { ErrorFallback } from "../../components/helpers/ErrorFallback";
@@ -436,6 +439,10 @@ export const FilesPage = () => {
   const isStopped = activeService?.status === "stopped";
   const hasChanges = editorContent !== originalContent;
 
+  const handleStartService = (serviceId: string) => {
+    commandMutation.mutate({ service_id: serviceId, action: "start" });
+  };
+
   const handleStopService = (serviceId: string) => {
     commandMutation.mutate({ service_id: serviceId, action: "stop" });
   };
@@ -464,16 +471,17 @@ export const FilesPage = () => {
     const isSvcStopped = service.status === "stopped";
     openModal(
       <NewFileModal
-        serviceID={service.id}
-        isStopped={isSvcStopped}
-        onCreated={(newPath) => {
-          queryClient.invalidateQueries({ queryKey: ["pb-files", service.id] });
-          setSelectedFile({ service, path: newPath });
-        }}
+          serviceID={service.id}
+          isStopped={isSvcStopped}
+          onCreated={(newPath) => {
+            queryClient.invalidateQueries({ queryKey: ["pb-files", service.id] });
+            setSelectedFile({ service, path: newPath });
+          }}
       />,
       { title: `Nuevo Archivo en ${service.name}`, width: 450 }
     );
   };
+
 
   const openUploadFilesModal = (service: ServiceDto) => {
     const isSvcStopped = service.status === "stopped";
@@ -495,16 +503,31 @@ export const FilesPage = () => {
   return (
     <div className="space-y-4">
       {/* Contenedor Principal */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-[75vh]">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-[calc(100vh-8rem)] min-h-[500px]">
         {/* Explorador de Archivos Global (Col 4) */}
-        <div className="lg:col-span-4 flex flex-col bg-base-200 border border-base-300 rounded-xl overflow-hidden h-full">
-          <div className="p-3 bg-base-300 font-semibold text-xs uppercase tracking-wider border-b border-base-300 flex justify-between items-center">
+        <div className="lg:col-span-4 flex flex-col bg-base-200 border border-base-300 rounded-xl overflow-hidden h-full min-h-0">
+          <div className="p-3 bg-base-300 font-semibold text-xs uppercase tracking-wider border-b border-base-300 flex justify-between items-center shrink-0">
             <span>Archivos de Instancias</span>
-            <span className="badge badge-sm badge-neutral">{services.length} instancias</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  queryClient.invalidateQueries({ queryKey: ["services"] });
+                  if (selectedFile) {
+                    queryClient.invalidateQueries({ queryKey: ["pb-files", selectedFile.service.id] });
+                  }
+                }}
+                className="btn btn-xs btn-ghost btn-circle"
+                title="Actualizar todo"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
+              <span className="badge badge-sm badge-neutral">{services.length} instancias</span>
+            </div>
           </div>
 
           {/* Buscador de archivos en tiempo real */}
-          <div className="p-2 border-b border-base-300 bg-base-100">
+          <div className="p-2 border-b border-base-300 bg-base-100 shrink-0">
             <div className="relative">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-base-content/40" />
               <input
@@ -517,62 +540,99 @@ export const FilesPage = () => {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-2 space-y-1 font-mono text-xs">
+          <div className="flex-1 overflow-y-auto p-2 space-y-1 font-mono text-xs min-h-0">
             {servicesQuery.isLoading ? (
               <div className="p-4 text-center text-base-content/50 animate-pulse">Cargando instancias...</div>
             ) : services.length === 0 ? (
               <div className="p-4 text-center text-base-content/50">No hay instancias configuradas.</div>
             ) : (
-              services.map((service) => (
-                <div key={service.id} className="space-y-0.5">
-                  <ServiceFileTree
-                    service={service}
-                    isExpanded={expandedServices.has(service.id)}
-                    onToggleExpand={() => toggleServiceExpand(service.id)}
-                    selectedServiceId={selectedFile?.service.id}
-                    selectedPath={selectedFile?.path || null}
-                    onSelectFile={(svc, path) => setSelectedFile({ service: svc, path })}
-                    searchQuery={searchQuery}
-                  />
-                  {expandedServices.has(service.id) && (
-                    <div className="pl-4 pr-1 py-1 flex flex-col gap-1">
-                      <button
-                        type="button"
-                        onClick={() => openNewFileModal(service)}
-                        className="btn btn-xs btn-ghost gap-1 w-full justify-start text-[10px] opacity-75 hover:opacity-100"
-                        disabled={service.status !== "stopped"}
-                      >
-                        <Plus className="w-3 h-3" />
-                        Nuevo Archivo en esta instancia
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openNewFolderModal(service)}
-                        className="btn btn-xs btn-ghost gap-1 w-full justify-start text-[10px] opacity-75 hover:opacity-100"
-                        disabled={service.status !== "stopped"}
-                      >
-                        <Plus className="w-3 h-3" />
-                        Nueva Carpeta
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openUploadFilesModal(service)}
-                        className="btn btn-xs btn-ghost gap-1.5 w-full justify-start text-[10px] opacity-75 hover:opacity-100"
-                        disabled={service.status !== "stopped"}
-                      >
-                        <Upload className="w-3 h-3" />
-                        Subir Archivos
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))
+              services.map((service) => {
+                const isServiceStopped = service.status === "stopped";
+                return (
+                  <div key={service.id} className="space-y-0.5 border border-base-300/40 rounded-lg p-1 bg-base-100/50">
+                    <ServiceFileTree
+                      service={service}
+                      isExpanded={expandedServices.has(service.id)}
+                      onToggleExpand={() => toggleServiceExpand(service.id)}
+                      selectedServiceId={selectedFile?.service.id}
+                      selectedPath={selectedFile?.path || null}
+                      onSelectFile={(svc, path) => setSelectedFile({ service: svc, path })}
+                      searchQuery={searchQuery}
+                    />
+                    {expandedServices.has(service.id) && (
+                      <div className="pl-4 pr-1 py-1 flex flex-col gap-1 border-t border-base-300/30 mt-1">
+                        {/* Botones de Control de la Instancia */}
+                        <div className="flex gap-1 mb-1">
+                          {isServiceStopped ? (
+                            <button
+                              type="button"
+                              onClick={() => handleStartService(service.id)}
+                              className="btn btn-xs btn-success gap-1 flex-1 text-[9px] h-6 min-h-6"
+                              disabled={commandMutation.isPending || service.status === "pending"}
+                            >
+                              <Play className="w-2.5 h-2.5 fill-current" />
+                              Iniciar
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleStopService(service.id)}
+                              className="btn btn-xs btn-error gap-1 flex-1 text-[9px] h-6 min-h-6"
+                              disabled={commandMutation.isPending || service.status === "pending"}
+                            >
+                              <Square className="w-2.5 h-2.5 fill-current" />
+                              Detener
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => queryClient.invalidateQueries({ queryKey: ["pb-files", service.id] })}
+                            className="btn btn-xs btn-neutral gap-1 text-[9px] h-6 min-h-6"
+                            title="Recargar archivos de esta instancia"
+                          >
+                            <RefreshCw className="w-2.5 h-2.5" />
+                            Recargar
+                          </button>
+                        </div>
+                        {/* Botones de operaciones de archivos */}
+                        <button
+                          type="button"
+                          onClick={() => openNewFileModal(service)}
+                          className="btn btn-xs btn-ghost gap-1 w-full justify-start text-[10px] h-6 min-h-6 opacity-75 hover:opacity-100"
+                          disabled={!isServiceStopped}
+                        >
+                          <Plus className="w-3 h-3 text-primary" />
+                          Nuevo Archivo
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openNewFolderModal(service)}
+                          className="btn btn-xs btn-ghost gap-1 w-full justify-start text-[10px] h-6 min-h-6 opacity-75 hover:opacity-100"
+                          disabled={!isServiceStopped}
+                        >
+                          <Plus className="w-3 h-3 text-secondary" />
+                          Nueva Carpeta
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openUploadFilesModal(service)}
+                          className="btn btn-xs btn-ghost gap-1.5 w-full justify-start text-[10px] h-6 min-h-6 opacity-75 hover:opacity-100"
+                          disabled={!isServiceStopped}
+                        >
+                          <Upload className="w-3 h-3 text-info" />
+                          Subir Archivos
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
 
         {/* Editor de Código (Col 8) */}
-        <div className="lg:col-span-8 flex flex-col bg-base-200 border border-base-300 rounded-xl overflow-hidden h-full">
+        <div className="lg:col-span-8 flex flex-col bg-base-200 border border-base-300 rounded-xl overflow-hidden h-full min-h-0">
           {selectedFile == null ? (
             <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-base-content/60 space-y-2">
               <FolderOpen className="w-12 h-12 stroke-1 text-base-content/40" />
