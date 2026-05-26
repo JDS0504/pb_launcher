@@ -53,6 +53,22 @@ func (rp *DynamicReverseProxy) shouldSkipTimeout(r *http.Request) bool {
 }
 
 func (rp *DynamicReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Manejar peticiones preflight (OPTIONS) para CORS
+	if r.Method == http.MethodOptions {
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		} else {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		}
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin, X-No-Timeout")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Max-Age", "1728000")
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), rp.timeout)
 	defer cancel()
 	cleanHost := strings.Split(r.Host, ":")[0]

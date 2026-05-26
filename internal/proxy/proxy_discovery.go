@@ -96,6 +96,12 @@ func (rp *DynamicReverseProxyDiscovery) proxyErrorHandler(w http.ResponseWriter,
 const superusersEndpoint = "/api/collections/_superusers/records"
 
 func (rp *DynamicReverseProxyDiscovery) proxyModifyResponse(r *http.Response) error {
+	origin := r.Request.Header.Get("Origin")
+	if origin != "" {
+		r.Header.Set("Access-Control-Allow-Origin", origin)
+		r.Header.Set("Access-Control-Allow-Credentials", "true")
+	}
+
 	if r.Request.Method == http.MethodPost &&
 		strings.HasPrefix(r.Request.URL.Path, superusersEndpoint) &&
 		r.StatusCode == 200 {
