@@ -561,39 +561,6 @@ export const FilesPage = () => {
                     />
                     {expandedServices.has(service.id) && (
                       <div className="pl-4 pr-1 py-1 flex flex-col gap-1 border-t border-base-300/30 mt-1">
-                        {/* Botones de Control de la Instancia */}
-                        <div className="flex gap-1 mb-1">
-                          {isServiceStopped ? (
-                            <button
-                              type="button"
-                              onClick={() => handleStartService(service.id)}
-                              className="btn btn-xs btn-success gap-1 flex-1 text-[9px] h-6 min-h-6"
-                              disabled={commandMutation.isPending || service.status === "pending"}
-                            >
-                              <Play className="w-2.5 h-2.5 fill-current" />
-                              Iniciar
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleStopService(service.id)}
-                              className="btn btn-xs btn-error gap-1 flex-1 text-[9px] h-6 min-h-6"
-                              disabled={commandMutation.isPending || service.status === "pending"}
-                            >
-                              <Square className="w-2.5 h-2.5 fill-current" />
-                              Detener
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => queryClient.invalidateQueries({ queryKey: ["pb-files", service.id] })}
-                            className="btn btn-xs btn-neutral gap-1 text-[9px] h-6 min-h-6"
-                            title="Recargar archivos de esta instancia"
-                          >
-                            <RefreshCw className="w-2.5 h-2.5" />
-                            Recargar
-                          </button>
-                        </div>
                         {/* Botones de operaciones de archivos */}
                         <button
                           type="button"
@@ -651,7 +618,46 @@ export const FilesPage = () => {
                   </span>
                 </div>
 
-                <div className="flex flex-wrap gap-1.5">
+                 <div className="flex flex-wrap gap-1.5">
+                  {/* Botones de Control de Servicio e Instancia */}
+                  {activeService && (
+                    <>
+                      {activeService.status === "stopped" ? (
+                        <button
+                          type="button"
+                          onClick={() => handleStartService(activeService.id)}
+                          className="btn btn-xs btn-success gap-1"
+                          disabled={commandMutation.isPending || (activeService.status as string) === "pending"}
+                        >
+                          <Play className="w-2.5 h-2.5 fill-current" />
+                          Iniciar Servicio
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleStopService(activeService.id)}
+                          className="btn btn-xs btn-error gap-1"
+                          disabled={commandMutation.isPending || (activeService.status as string) === "pending"}
+                        >
+                          <Square className="w-2.5 h-2.5 fill-current" />
+                          Detener Servicio
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          queryClient.invalidateQueries({ queryKey: ["pb-files", activeService.id] });
+                          queryClient.invalidateQueries({ queryKey: ["services"] });
+                        }}
+                        className="btn btn-xs btn-neutral gap-1"
+                        title="Recargar archivos de esta instancia"
+                      >
+                        <RefreshCw className="w-2.5 h-2.5" />
+                        Recargar
+                      </button>
+                    </>
+                  )}
+
                   {!isDirSelected && (
                     <button
                       type="button"

@@ -1,6 +1,6 @@
 import { Navigate, useParams, useSearchParams } from "react-router-dom";
 import { useState } from "react";
-import { MenuIcon, XIcon, Copy, Check, ExternalLink } from "lucide-react";
+import { MenuIcon, XIcon, Copy, Check, ExternalLink, Terminal } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { serviceService } from "../../services/services";
 import { useProxyConfigs } from "../../hooks/useProxyConfigs";
@@ -11,6 +11,8 @@ import { ServiceLogsSection } from "./details_section/ServiceLogsSection";
 import { OperationHistorySection } from "./details_section/OperationHistorySection";
 import { FileManagerSection } from "./details_section/FileManagerSection";
 import { SnapshotsSection } from "./details_section/SnapshotsSection";
+import { useModal } from "../../components/modal/hook";
+import { CLIConsoleModal } from "./components/CLIConsoleModal";
 
 const useCopyUrl = () => {
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
@@ -23,6 +25,7 @@ const useCopyUrl = () => {
 };
 
 export const ServiceDetailPage = () => {
+  const { openModal } = useModal();
   const { service_id } = useParams<{ service_id: string }>();
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -143,10 +146,31 @@ export const ServiceDetailPage = () => {
                       className="btn btn-xs btn-outline btn-primary gap-1 w-full mt-1"
                       title="Abrir PocketBase Admin en nueva pestaña"
                     >
-                      <ExternalLink className="w-3 h-3" />
+                      <ExternalLink className="w-3.5 h-3.5" />
                       Abrir Admin
                     </a>
                   )}
+
+                  {/* Botón Consola CLI */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (service) {
+                        openModal(
+                          <CLIConsoleModal
+                            serviceId={service.id}
+                            serviceName={service.name}
+                          />,
+                          { title: "Consola Interactiva PocketBase (CLI)", width: 700 }
+                        );
+                      }
+                    }}
+                    className="btn btn-xs btn-neutral gap-1 w-full mt-1"
+                    title="Ejecutar comandos interactivos del ejecutable de PocketBase de esta instancia"
+                  >
+                    <Terminal className="w-3.5 h-3.5 text-primary" />
+                    Consola CLI
+                  </button>
                 </div>
               )}
             </div>

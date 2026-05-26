@@ -337,95 +337,11 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
 
   return (
     <div className="space-y-4">
-      {/* Barra de control rápido de Estado */}
-      <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl bg-base-300 border border-base-200">
-        <div className="flex items-center gap-3">
-          <span className="font-semibold text-sm">Estado de la Instancia:</span>
-          <span
-            className={`badge font-semibold text-xs py-2.5 px-3 uppercase ${
-              service?.status === "running"
-                ? "badge-success text-success-content"
-                : service?.status === "sleeping"
-                ? "badge-info text-info-content"
-                : service?.status === "pending"
-                ? "badge-warning text-warning-content animate-pulse"
-                : "badge-error text-error-content"
-            }`}
-          >
-            {service?.status}
-          </span>
-        </div>
-
-        <div className="flex gap-2">
-          {!isStopped ? (
-            <button
-              type="button"
-              className="btn btn-sm btn-error gap-1.5"
-              onClick={handleStopService}
-              disabled={commandMutation.isPending || service?.status === "pending"}
-            >
-              <Square className="w-3.5 h-3.5 fill-current" />
-              Detener Servicio
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="btn btn-sm btn-success gap-1.5"
-              onClick={handleStartService}
-              disabled={commandMutation.isPending || service?.status === "pending"}
-            >
-              <Play className="w-3.5 h-3.5 fill-current" />
-              Iniciar Servicio
-            </button>
-          )}
-
-          <button
-            type="button"
-            className="btn btn-sm btn-ghost gap-1.5"
-            onClick={() => filesQuery.refetch()}
-            disabled={filesQuery.isFetching}
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${filesQuery.isFetching ? "animate-spin" : ""}`} />
-            Actualizar Lista
-          </button>
-
-          <button
-            type="button"
-            className="btn btn-sm btn-primary gap-1.5"
-            disabled={!isStopped}
-            onClick={openNewFileModal}
-          >
-            <Plus className="w-4 h-4" />
-            Nuevo Archivo
-          </button>
-
-          <button
-            type="button"
-            className="btn btn-sm btn-primary gap-1.5"
-            disabled={!isStopped}
-            onClick={openNewFolderModal}
-          >
-            <Plus className="w-4 h-4" />
-            Nueva Carpeta
-          </button>
-
-          <button
-            type="button"
-            className="btn btn-sm btn-primary gap-1.5"
-            disabled={!isStopped}
-            onClick={openUploadFilesModal}
-          >
-            <Upload className="w-4 h-4" />
-            Subir Archivos
-          </button>
-        </div>
-      </div>
-
       {/* Contenedor Principal: Árbol lateral + Editor */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-[calc(100vh-18rem)] min-h-[400px]">
         {/* Árbol de Archivos (Col 4) */}
-        <div className="lg:col-span-4 flex flex-col bg-base-200 border border-base-300 rounded-xl overflow-hidden h-full">
-          <div className="p-3 bg-base-300 font-semibold text-xs uppercase tracking-wider border-b border-base-300 flex justify-between items-center">
+        <div className="lg:col-span-4 flex flex-col bg-base-200 border border-base-300 rounded-xl overflow-hidden h-full min-h-0">
+          <div className="p-3 bg-base-300 font-semibold text-xs uppercase tracking-wider border-b border-base-300 flex justify-between items-center shrink-0">
             <span>Explorador de Archivos</span>
             <span className="badge badge-sm badge-neutral">{files.length} archivos</span>
           </div>
@@ -502,10 +418,41 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
                 })
             )}
           </div>
+
+          {/* Botones de operaciones de archivos al fondo de la lista lateral */}
+          <div className="p-2 border-t border-base-300 bg-base-100 flex flex-col gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={openNewFileModal}
+              className="btn btn-xs btn-ghost gap-1 w-full justify-start text-[10px] h-6 min-h-6 opacity-75 hover:opacity-100"
+              disabled={!isStopped}
+            >
+              <Plus className="w-3 h-3 text-primary" />
+              Nuevo Archivo
+            </button>
+            <button
+              type="button"
+              onClick={openNewFolderModal}
+              className="btn btn-xs btn-ghost gap-1 w-full justify-start text-[10px] h-6 min-h-6 opacity-75 hover:opacity-100"
+              disabled={!isStopped}
+            >
+              <Plus className="w-3 h-3 text-secondary" />
+              Nueva Carpeta
+            </button>
+            <button
+              type="button"
+              onClick={openUploadFilesModal}
+              className="btn btn-xs btn-ghost gap-1.5 w-full justify-start text-[10px] h-6 min-h-6 opacity-75 hover:opacity-100"
+              disabled={!isStopped}
+            >
+              <Upload className="w-3 h-3 text-info" />
+              Subir Archivos
+            </button>
+          </div>
         </div>
 
         {/* Editor de Código (Col 8) */}
-        <div className="lg:col-span-8 flex flex-col bg-base-200 border border-base-300 rounded-xl overflow-hidden h-full">
+        <div className="lg:col-span-8 flex flex-col bg-base-200 border border-base-300 rounded-xl overflow-hidden h-full min-h-0">
           {selectedPath == null ? (
             <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-base-content/60 space-y-2">
               <FolderOpen className="w-12 h-12 stroke-1 text-base-content/40" />
@@ -525,6 +472,41 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
                 </span>
 
                 <div className="flex flex-wrap gap-1.5">
+                  {/* Botones de Control de Servicio e Instancia */}
+                  {!isStopped ? (
+                    <button
+                      type="button"
+                      onClick={handleStopService}
+                      className="btn btn-xs btn-error gap-1"
+                      disabled={commandMutation.isPending || service?.status === "pending"}
+                    >
+                      <Square className="w-2.5 h-2.5 fill-current" />
+                      Detener Servicio
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleStartService}
+                      className="btn btn-xs btn-success gap-1"
+                      disabled={commandMutation.isPending || service?.status === "pending"}
+                    >
+                      <Play className="w-2.5 h-2.5 fill-current" />
+                      Iniciar Servicio
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      filesQuery.refetch();
+                      queryClient.invalidateQueries({ queryKey: ["services", service_id] });
+                    }}
+                    className="btn btn-xs btn-neutral gap-1"
+                    title="Recargar archivos de esta instancia"
+                  >
+                    <RefreshCw className="w-2.5 h-2.5" />
+                    Recargar
+                  </button>
+
                   {!isDirSelected && (
                     <button
                       type="button"

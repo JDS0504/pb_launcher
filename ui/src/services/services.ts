@@ -23,6 +23,8 @@ interface _Service {
 
   restart_policy: string;
   error_message: string;
+  ip: string;
+  port: number;
 
   created: string;
 
@@ -112,6 +114,8 @@ export const serviceService = {
     "last_started",
     "restart_policy",
     "error_message",
+    "ip",
+    "port",
     "created",
     "release",
         "expand.release.id",
@@ -149,6 +153,8 @@ export const serviceService = {
       last_started: service.last_started,
       restart_policy: service.restart_policy,
       error_message: service.error_message,
+      ip: service.ip ?? "",
+      port: service.port ?? 0,
       created: service.created,
       repository: service.expand.release.expand.repository.name,
       repository_id: service.expand.release.expand.repository.id,
@@ -187,6 +193,8 @@ export const serviceService = {
         last_started: s.last_started,
         restart_policy: s.restart_policy,
         error_message: s.error_message,
+        ip: s.ip ?? "",
+        port: s.port ?? 0,
         created: s.created,
         repository: s.expand.release.expand.repository.name,
         repository_id: s.expand.release.expand.repository.id,

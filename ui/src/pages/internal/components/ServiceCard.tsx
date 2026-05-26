@@ -9,6 +9,7 @@ import {
   ShieldAlert,
   Trash2,
   Upload,
+  Terminal,
 } from "lucide-react";
 import classNames from "classnames";
 import { useModal } from "../../../components/modal/hook";
@@ -16,6 +17,7 @@ import { DefaultCredentialsCard } from "./DefaultCredentialsCard";
 import type { ProxyConfigsResponse } from "../../../services/config";
 import { useServiceUrls } from "../../../hooks/useServiceUrls";
 import { CopyableField } from "./CopyableField";
+import { CLIConsoleModal } from "./CLIConsoleModal";
 
 type Props = {
   proxyInfo: ProxyConfigsResponse;
@@ -193,26 +195,44 @@ export const ServiceCard: FC<Props> = ({
             <span className="font-medium">Version:</span>
             <span>{`${service.repository} v${service.release_version}`}</span>
           </div>
-          <div className="flex justify-between">
+          <div className="flex justify-between items-center">
             <span className="font-medium">Status:</span>
-            <span
-              className={classNames("badge badge-sm", {
-                "badge-success": service.status === "running",
-                "badge-info": service.status === "sleeping",
-                "badge-warning":
-                  service.status === "pending" || service.status === "idle",
-                "badge-error": service.status === "failure",
-                "badge-neutral": ![
-                  "running",
-                  "pending",
-                  "idle",
-                  "failure",
-                  "sleeping",
-                ].includes(service.status),
-              })}
-            >
-              {service.status.charAt(0).toUpperCase() + service.status.slice(1)}
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span
+                className={classNames("badge badge-sm", {
+                  "badge-success": service.status === "running",
+                  "badge-info": service.status === "sleeping",
+                  "badge-warning":
+                    service.status === "pending" || service.status === "idle",
+                  "badge-error": service.status === "failure",
+                  "badge-neutral": ![
+                    "running",
+                    "pending",
+                    "idle",
+                    "failure",
+                    "sleeping",
+                  ].includes(service.status),
+                })}
+              >
+                {service.status.charAt(0).toUpperCase() + service.status.slice(1)}
+              </span>
+              <button
+                type="button"
+                className="btn btn-xs btn-ghost btn-circle text-primary"
+                title="Consola Interactiva PocketBase (CLI)"
+                onClick={() => {
+                  openModal(
+                    <CLIConsoleModal
+                      serviceId={service.id}
+                      serviceName={service.name}
+                    />,
+                    { title: "Consola Interactiva PocketBase (CLI)", width: 700 }
+                  );
+                }}
+              >
+                <Terminal className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
 
           <div className="flex justify-between">

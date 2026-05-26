@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { statusService } from "../../services/status";
-import { Cpu, HardDrive, Server, Activity, RefreshCcw } from "lucide-react";
+import { serviceService } from "../../services/services";
+import { Cpu, HardDrive, Server, Activity, RefreshCcw, Power } from "lucide-react";
 import classNames from "classnames";
 import React from "react";
 
@@ -35,6 +36,12 @@ export const StatusPage = () => {
     refetchInterval: 3000,
   });
 
+  const servicesQuery = useQuery({
+    queryKey: ["services"],
+    queryFn: serviceService.fetchAllServices,
+    refetchInterval: 3000,
+  });
+
   const getStatusColor = (percent: number) => {
     if (percent < 70) return "text-success border-success/30 bg-success/5";
     if (percent < 85) return "text-warning border-warning/30 bg-warning/5";
@@ -47,7 +54,7 @@ export const StatusPage = () => {
     return "text-error";
   };
 
-  if (statusQuery.isLoading) {
+  if (statusQuery.isLoading || servicesQuery.isLoading) {
     return (
       <div className="flex h-[50vh] w-full items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -58,7 +65,7 @@ export const StatusPage = () => {
     );
   }
 
-  if (statusQuery.isError) {
+  if (statusQuery.isError || servicesQuery.isError) {
     return (
       <div className="alert alert-error shadow-lg">
         <div>
@@ -75,10 +82,10 @@ export const StatusPage = () => {
               d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
             />
           </svg>
-          <span>Error al cargar las métricas: {statusQuery.error?.message}</span>
+          <span>Error al cargar métricas de estado.</span>
         </div>
         <div className="flex-none">
-          <button onClick={() => statusQuery.refetch()} className="btn btn-sm btn-ghost">
+          <button onClick={() => { statusQuery.refetch(); servicesQuery.refetch(); }} className="btn btn-sm btn-ghost">
             Reintentar
           </button>
         </div>
@@ -87,6 +94,9 @@ export const StatusPage = () => {
   }
 
   const data = statusQuery.data;
+  const services = servicesQuery.data ?? [];
+  const runningServices = services.filter(s => s.status === "running");
+
   if (!data) return null;
 
   return (
@@ -97,15 +107,15 @@ export const StatusPage = () => {
           <p className="text-sm text-base-content/60">Monitoreo de recursos de hardware en tiempo real.</p>
         </div>
         <button
-          onClick={() => statusQuery.refetch()}
+          onClick={() => { statusQuery.refetch(); servicesQuery.refetch(); }}
           className="btn btn-sm btn-ghost gap-2"
         >
           <RefreshCcw
             className={classNames("w-4 h-4", {
-              "animate-spin": statusQuery.isFetching,
+              "animate-spin": statusQuery.isFetching || servicesQuery.isFetching,
             })}
           />
-          {statusQuery.isFetching ? "Actualizando..." : "Actualizado"}
+          {statusQuery.isFetching || servicesQuery.isFetching ? "Actualizando..." : "Actualizado"}
         </button>
       </div>
 
@@ -212,33 +222,74 @@ export const StatusPage = () => {
         </div>
       </div>
 
-      {/* System Host Information */}
-      <div className="card border bg-base-100 shadow-sm p-5">
+      {/* Instancias Corriendo con límites de recursos */}
+      <div className="card border bg-base-100 shadow-sm p-4 md:p-5">
+        <div className="card-body p-0 min-w-0">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="font-bold text-sm uppercase tracking-wider text-base-content/65 flex items-center gap-2">
+              <Power className="w-4 h-4 text-success" /> Instancias Activas
+            </h3>
+            <span className="badge badge-sm badge-success font-semibold">{runningServices.length} Activas</span>
+          </div>
+
+          {runningServices.length === 0 ? (
+            <div className="p-6 text-center text-xs text-base-content/50 bg-base-200/40 rounded-lg border border-dashed border-base-300">
+              No hay instancias PocketBase activas en memoria actualmente.
+            </div>
+          ) : (
+            <div className="overflow-x-auto min-w-0">
+              <table className="table table-xs w-full text-xs font-mono">
+                <thead>
+                  <tr className="bg-base-200/50">
+                    <th>Nombre de Instancia</th>
+                    <th>ID</th>
+                    <th>Puerto asignado</th>
+                    <th className="text-right">Versión Activa</th>
+                    <th className="text-right text-success">Límite de RAM</th>
+                    <th className="text-right text-info">Cuota de CPU</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {runningServices.map(service => (
+                    <tr key={service.id} className="hover:bg-base-200/35">
+                      <td className="font-bold text-primary">{service.name}</td>
+                      <td className="opacity-60">{service.id}</td>
+                      <td>
+                        <span className="badge badge-sm badge-neutral font-mono">{service.port || "N/A"}</span>
+                      </td>
+                      <td className="text-right font-semibold">v{service.release_version}</td>
+                      {/* Límite predeterminado configurado en config.yml o ninguno si no se restringe */}
+                      <td className="text-right text-success font-semibold">256 MB</td>
+                      <td className="text-right text-info font-semibold">20 %</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* System Host Information (Compactado) */}
+      <div className="card border bg-base-100 shadow-sm p-4 md:p-5">
         <div className="card-body p-0">
-          <h3 className="font-bold text-sm uppercase tracking-wider text-base-content/65 mb-4 flex items-center gap-2">
-            <Server className="w-4 h-4 text-primary" /> Información del Host
+          <h3 className="font-bold text-xs uppercase tracking-wider text-base-content/65 mb-3 flex items-center gap-2">
+            <Server className="w-3.5 h-3.5 text-base-content/60" /> Servidor Host
           </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 select-none">
-            <div className="flex flex-col gap-1 p-3 bg-base-200/50 rounded-lg border border-base-200">
-              <span className="text-[10px] uppercase font-bold text-base-content/50">Sistema Operativo</span>
-              <span className="text-sm font-bold capitalize text-primary">{data.host.os}</span>
+          <div className="flex flex-wrap gap-4 text-xs font-mono text-base-content/75 bg-base-200/30 p-3 rounded-lg border border-base-200">
+            <div>
+              <span className="text-base-content/40 uppercase font-bold mr-1">OS:</span>
+              <span className="font-bold text-primary">{data.host.os}</span>
             </div>
-            <div className="flex flex-col gap-1 p-3 bg-base-200/50 rounded-lg border border-base-200">
-              <span className="text-[10px] uppercase font-bold text-base-content/50">Distribución / Plataforma</span>
-              <span className="text-sm font-bold text-base-content truncate" title={data.host.platform}>
-                {data.host.platform}
-              </span>
+            <div className="hidden sm:inline-block opacity-25">|</div>
+            <div>
+              <span className="text-base-content/40 uppercase font-bold mr-1">Plataforma:</span>
+              <span className="font-semibold">{data.host.platform}</span>
             </div>
-            <div className="flex flex-col gap-1 p-3 bg-base-200/50 rounded-lg border border-base-200">
-              <span className="text-[10px] uppercase font-bold text-base-content/50">Uptime del Servidor</span>
-              <span className="text-sm font-bold text-base-content">{formatUptime(data.host.uptime_seconds)}</span>
-            </div>
-            <div className="flex flex-col gap-1 p-3 bg-base-200/50 rounded-lg border border-base-200">
-              <span className="text-[10px] uppercase font-bold text-base-content/50">Instancias Activas (PB)</span>
-              <span className="text-sm font-bold text-secondary flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-success animate-pulse inline-block"></span>
-                {data.host.active_instances} corriendo
-              </span>
+            <div className="opacity-25">|</div>
+            <div>
+              <span className="text-base-content/40 uppercase font-bold mr-1">Uptime:</span>
+              <span className="font-semibold text-secondary">{formatUptime(data.host.uptime_seconds)}</span>
             </div>
           </div>
         </div>

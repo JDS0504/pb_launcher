@@ -747,3 +747,19 @@ func (lm *LauncherManager) GetActiveInstancesCount() int {
 	}
 	return count
 }
+
+// FindServiceForCli busca y devuelve el modelo de servicio para CLI de forma segura.
+func (lm *LauncherManager) FindServiceForCli(ctx context.Context, serviceID string) (*models.Service, error) {
+	return lm.repository.FindService(ctx, serviceID)
+}
+
+// FindBinaryPath busca o descarga el binario del servicio de forma segura y DRY.
+func (lm *LauncherManager) FindBinaryPath(ctx context.Context, service models.Service) (string, error) {
+	return lm.findOrDownloadBinary(ctx, service)
+}
+
+// BuildServiceArgs expone buildArgs públicamente bajo un nombre descriptivo y DRY.
+func (lm *LauncherManager) BuildServiceArgs(serviceID string) ([]string, error) {
+	return lm.buildArgs(serviceID)
+}
+
