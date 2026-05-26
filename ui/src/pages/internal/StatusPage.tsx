@@ -230,12 +230,12 @@ export const StatusPage = () => {
               <table className="table table-xs w-full text-xs font-mono">
                 <thead>
                   <tr className="bg-base-200/50">
-                    <th>Nombre de Instancia</th>
-                    <th className="text-right text-success">Uso de RAM</th>
-                    <th className="text-right text-info">Uso de CPU</th>
-                    <th>ID</th>
-                    <th>Puerto asignado</th>
-                    <th className="text-right">Versión Activa</th>
+                    <th>Instancia</th>
+                    <th className="text-right text-success">RAM</th>
+                    <th className="text-right text-info">CPU</th>
+                    <th className="hidden sm:table-cell">ID</th>
+                    <th className="hidden sm:table-cell">Puerto</th>
+                    <th className="text-right hidden sm:table-cell">Versión</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -243,18 +243,20 @@ export const StatusPage = () => {
                     const stats = data.instances_stats?.[service.id];
                     return (
                       <tr key={service.id} className="hover:bg-base-200/35">
-                        <td className="font-bold text-primary">{service.name}</td>
-                        <td className="text-right text-success font-semibold">
+                        <td className="font-bold text-primary max-w-[100px] truncate" title={service.name}>
+                          {service.name}
+                        </td>
+                        <td className="text-right text-success font-semibold whitespace-nowrap">
                           {stats ? formatBytes(stats.memory_bytes) : "0 B"}
                         </td>
-                        <td className="text-right text-info font-semibold">
+                        <td className="text-right text-info font-semibold whitespace-nowrap">
                           {stats ? `${stats.cpu_percent.toFixed(1)}%` : "0.0%"}
                         </td>
-                        <td className="opacity-60">{service.id}</td>
-                        <td>
+                        <td className="opacity-60 hidden sm:table-cell">{service.id}</td>
+                        <td className="hidden sm:table-cell">
                           <span className="badge badge-sm badge-neutral font-mono">{service.port || "N/A"}</span>
                         </td>
-                        <td className="text-right font-semibold">v{service.release_version}</td>
+                        <td className="text-right font-semibold hidden sm:table-cell">v{service.release_version}</td>
                       </tr>
                     );
                   })}

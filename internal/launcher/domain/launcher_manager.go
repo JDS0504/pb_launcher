@@ -19,6 +19,7 @@ import (
 	"pb_launcher/internal/launcher/domain/repositories"
 	"pb_launcher/internal/launcher/domain/services"
 	"pb_launcher/internal/operationlog"
+	"pb_launcher/utils/processstats"
 	"pb_launcher/utils/iouitls"
 	"pb_launcher/utils/networktools"
 	"regexp"
@@ -599,6 +600,7 @@ func (lm *LauncherManager) WakeupService(ctx context.Context, serviceID string) 
 	}
 
 	// Iniciar
+	wasSleeping := service.Status == models.Sleeping
 	err = lm.startServiceLocked(ctx, *service)
 	lm.rwMtx.Unlock()
 	if err != nil {
@@ -618,6 +620,10 @@ func (lm *LauncherManager) WakeupService(ctx context.Context, serviceID string) 
 	// Esperar al healthcheck
 	if err := lm.waitForHealthCheck(ctx, service.IP, service.Port); err != nil {
 		return "", 0, err
+	}
+
+	if wasSleeping {
+		lm.operationLogger.Success(ctx, serviceID, "wakeup", "service woken up by incoming request", nil)
 	}
 
 	return service.IP, port, nil
@@ -681,6 +687,15 @@ func (lm *LauncherManager) suspendService(ctx context.Context, serviceID string)
 }
 
 func (lm *LauncherManager) suspendServiceLocked(ctx context.Context, serviceID string) error {
+	var cpuPercent float64
+	var memoryBytes uint64
+	if proc, exists := lm.processList[serviceID]; exists && proc.IsRunning() {
+		pid := proc.GetPID()
+		stats := processstats.GetProcessStats(pid)
+		cpuPercent = stats.CPUPercent
+		memoryBytes = stats.MemoryBytes
+	}
+
 	if err := lm.stopProcessOnlyLocked(serviceID); err != nil {
 		slog.Error("failed to stop existing process for suspension", "serviceID", serviceID, "error", err)
 		return err
@@ -689,6 +704,12 @@ func (lm *LauncherManager) suspendServiceLocked(ctx context.Context, serviceID s
 	if err := lm.repository.MarkServiceSleeping(ctx, serviceID); err != nil {
 		slog.Error("failed to mark service as sleeping", "serviceID", serviceID, "error", err)
 	}
+
+	metadata := map[string]any{
+		"cpu_percent":  cpuPercent,
+		"memory_bytes": memoryBytes,
+	}
+	lm.operationLogger.Success(ctx, serviceID, "sleep", "service suspended due to inactivity (auto-sleep)", metadata)
 
 	lm.notifyDeactivated(serviceID)
 	return nil

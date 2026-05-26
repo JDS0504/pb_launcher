@@ -157,30 +157,30 @@ export const ServicesPage = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex gap-2 w-full sm:max-w-md">
-          <input
-            type="text"
-            placeholder="Search service..."
-            className="input input-sm input-bordered w-full"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-          />
-          <button
-            onClick={() => servicesQuery.refetch()}
-            className="btn btn-sm btn-ghost"
-          >
-            <RefreshCcw
-              className={classNames("w-4 h-4", {
-                "animate-spin": servicesQuery.isFetching,
-              })}
+      <div className="flex flex-col gap-3.5 w-full">
+        {/* Fila 1: Búsqueda y Filtro de Estado */}
+        <div className="flex flex-row items-center gap-2 w-full">
+          <div className="flex gap-1.5 flex-1">
+            <input
+              type="text"
+              placeholder="Search service..."
+              className="input input-sm input-bordered w-full"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
             />
-          </button>
-        </div>
-
-        <div className="flex flex-col md:flex-row gap-4 select-none">
+            <button
+              onClick={() => servicesQuery.refetch()}
+              className="btn btn-sm btn-ghost p-1 shrink-0"
+            >
+              <RefreshCcw
+                className={classNames("w-4 h-4", {
+                  "animate-spin": servicesQuery.isFetching,
+                })}
+              />
+            </button>
+          </div>
           <select
-            className="select select-sm select-bordered w-full sm:w-60"
+            className="select select-sm select-bordered w-32 sm:w-48 shrink-0"
             value={statusFilter.value}
             onChange={e =>
               setStatusFilter({ value: e.target.value as TStatus })
@@ -190,15 +190,19 @@ export const ServicesPage = () => {
             <option value="running">Running</option>
             <option value="stopped">Stopped</option>
           </select>
+        </div>
+
+        {/* Fila 2: Botones de Acción */}
+        <div className="flex flex-row gap-2 w-full sm:justify-end">
           <button
-            className="btn btn-sm btn-secondary gap-2 w-full sm:w-auto"
+            className="btn btn-sm btn-secondary gap-2 flex-1 sm:flex-initial sm:w-auto"
             onClick={openRestoreBackupModal}
           >
             <Upload className="w-4 h-4" />
             Import backup
           </button>
           <button
-            className="btn btn-sm btn-primary gap-2 w-full sm:w-auto"
+            className="btn btn-sm btn-primary gap-2 flex-1 sm:flex-initial sm:w-auto"
             onClick={openCreateServiceModal}
           >
             <Plus className="w-4 h-4" />

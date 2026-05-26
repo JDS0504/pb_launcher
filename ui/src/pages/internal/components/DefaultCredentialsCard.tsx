@@ -1,14 +1,7 @@
-import { useMutation } from "@tanstack/react-query";
 import { useCopyToClipboard } from "@uidotdev/usehooks";
-import classNames from "classnames";
 import { Check, Copy } from "lucide-react";
 import type { FC } from "react";
 import { useState } from "react";
-import { serviceService } from "../../../services/services";
-import toast from "react-hot-toast";
-import { getErrorMessage } from "../../../utils/errors";
-import { useModal } from "../../../components/modal/hook";
-import { ConfirmAdminPasswordForm } from "../forms/ConfirmAdminPasswordForm";
 
 type Props = {
   service_id: string;
@@ -18,19 +11,16 @@ type Props = {
 };
 
 export const DefaultCredentialsCard: FC<Props> = ({
-  service_id,
   username: username_init,
   password: password_init,
-  onResetCredentials,
 }) => {
-  const [{ password, username }, setCredentials] = useState<{
+  const [{ password, username }] = useState<{
     username: string;
     password: string;
   }>({
     username: username_init,
     password: password_init,
   });
-  const { openModal } = useModal();
   const [, copyToClipboard] = useCopyToClipboard();
   const [copiedField, setCopiedField] = useState<
     "username" | "password" | null
@@ -41,34 +31,9 @@ export const DefaultCredentialsCard: FC<Props> = ({
     setCopiedField(field);
     setTimeout(() => setCopiedField(null), 1200);
   };
-  const upsertSuperuserMutation = useMutation({
-    mutationFn: serviceService.upsertSuperuser,
-    onSuccess: ({ email, password }) => {
-      setCredentials({ password, username: email });
-      onResetCredentials?.();
-    },
-    onError: error => toast.error(getErrorMessage(error)),
-  });
-
-  const onUpsertSuperuserHandle = () => {
-    openModal(
-      <ConfirmAdminPasswordForm
-        description="Confirma la contraseña de tu cuenta principal de PBLauncher para clonarla en esta instancia."
-        label="Contraseña de Administrador"
-        submitLabel="Confirmar y Clonar"
-        onSubmit={async (adminPassword) => {
-          await upsertSuperuserMutation.mutateAsync({
-            service_id,
-            password: adminPassword,
-          });
-        }}
-      />,
-      { title: "Clonar Contraseña Principal" }
-    );
-  };
 
   return (
-    <div className="card w-[350px] max-w-sm bg-base-100 shadow-xl">
+    <div className="card w-[350px] max-w-sm bg-base-100 shadow-xl border border-base-300">
       <div className="card-body space-y-4">
         <h2 className="card-title">Default Credentials</h2>
 
@@ -80,55 +45,44 @@ export const DefaultCredentialsCard: FC<Props> = ({
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <span className="font-semibold">Username:</span>
-                <div className="truncate">{username}</div>
+                <span className="font-semibold text-xs">Username:</span>
+                <div className="truncate text-sm">{username}</div>
               </div>
               <button
-                className="btn btn-ghost btn-sm"
+                className="btn btn-ghost btn-xs btn-circle"
                 onClick={() => handleCopy(username, "username")}
               >
                 {copiedField === "username" ? (
-                  <Check size={18} />
+                  <Check size={14} className="text-success" />
                 ) : (
-                  <Copy size={18} />
+                  <Copy size={14} />
                 )}
               </button>
             </div>
 
             <div className="flex items-center justify-between gap-4">
               <div>
-                <span className="font-semibold">Password:</span>
-                <div className="truncate">{password}</div>
+                <span className="font-semibold text-xs">Password:</span>
+                <div className="truncate text-sm">{password}</div>
               </div>
               <button
-                className="btn btn-ghost btn-sm"
+                className="btn btn-ghost btn-xs btn-circle"
                 onClick={() => handleCopy(password, "password")}
               >
                 {copiedField === "password" ? (
-                  <Check size={18} />
+                  <Check size={14} className="text-success" />
                 ) : (
-                  <Copy size={18} />
+                  <Copy size={14} />
                 )}
               </button>
             </div>
           </div>
         )}
 
-        <div
-          className={classNames("card-actions", {
-            "justify-end": username && password,
-          })}
-        >
-          <button
-            className={classNames("btn btn-outline btn-sm", {
-              "btn-error": username && password,
-              "btn-success w-full": !(username && password),
-            })}
-            onClick={onUpsertSuperuserHandle}
-            disabled={upsertSuperuserMutation.isPending}
-          >
-            Upsert Superuser
-          </button>
+        <div className="border-t border-base-300 pt-3">
+          <p className="text-xs text-base-content/60">
+            Si deseas cambiar las credenciales de esta instancia, ve a la sección <strong>Service &gt; General</strong> dentro de los detalles de la instancia.
+          </p>
         </div>
       </div>
     </div>

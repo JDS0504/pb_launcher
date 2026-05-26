@@ -1,5 +1,7 @@
 package systemstatus
 
+import "pb_launcher/utils/processstats"
+
 // CPUInfo represents CPU utilization and core count
 type CPUInfo struct {
 	UsagePercent float64 `json:"usage_percent"`
@@ -32,10 +34,7 @@ type HostInfo struct {
 }
 
 // InstanceStats representa el consumo real de recursos de una instancia en ejecución
-type InstanceStats struct {
-	CPUPercent  float64 `json:"cpu_percent"`
-	MemoryBytes uint64  `json:"memory_bytes"`
-}
+type InstanceStats = processstats.InstanceStats
 
 // SystemStatus is the unified metrics payload
 type SystemStatus struct {
