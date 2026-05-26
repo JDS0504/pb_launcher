@@ -423,14 +423,14 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
                       key={f.path}
                       className={`w-full py-1 px-2 rounded-lg flex items-center justify-between gap-2 transition-colors ${
                         isSelected
-                          ? "bg-primary/10 border-l-2 border-primary"
+                          ? "bg-base-300 font-semibold"
                           : "hover:bg-base-300"
                       }`}
                     >
                       <div className="flex items-center gap-1.5 min-w-0 flex-1">
                         <input
                           type="checkbox"
-                          className="checkbox checkbox-xs checkbox-primary shrink-0"
+                          className="checkbox checkbox-xs checkbox-neutral shrink-0"
                           checked={selectedFilePaths.has(f.path)}
                           disabled={!isStopped}
                           onChange={(e) => {

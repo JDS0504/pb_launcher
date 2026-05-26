@@ -1,6 +1,6 @@
 import toast from "react-hot-toast";
 import { useMemo, useState } from "react";
-import { Plus, RefreshCcw, Upload } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
 import { useModal } from "../../components/modal/hook";
 import { ServiceForm } from "./forms/ServiceForm";
 import { UpgradeServiceForm } from "./forms/UpgradeServiceForm";
@@ -12,7 +12,6 @@ import { serviceService, type ServiceDto } from "../../services/services";
 import { ServiceCard } from "./components/ServiceCard";
 import { useConfirmModal } from "../../hooks/useConfirmModal";
 import { getErrorMessage } from "../../utils/errors";
-import classNames from "classnames";
 import { useNavigate } from "react-router-dom";
 import { useProxyConfigs } from "../../hooks/useProxyConfigs";
 import { backupService } from "../../services/backup";
@@ -168,16 +167,6 @@ export const ServicesPage = () => {
               value={query}
               onChange={e => setQuery(e.target.value)}
             />
-            <button
-              onClick={() => servicesQuery.refetch()}
-              className="btn btn-sm btn-ghost p-1 shrink-0"
-            >
-              <RefreshCcw
-                className={classNames("w-4 h-4", {
-                  "animate-spin": servicesQuery.isFetching,
-                })}
-              />
-            </button>
           </div>
           <select
             className="select select-sm select-bordered w-32 sm:w-48 shrink-0"

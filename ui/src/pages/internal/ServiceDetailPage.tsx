@@ -71,7 +71,7 @@ export const ServiceDetailPage = () => {
           {/* Info de instancia */}
           <li className="shrink-0 select-none md:mb-4 w-full min-w-0">
             <div className="flex flex-col items-start px-3 py-2 bg-base-300/40 border border-base-300 rounded-lg text-left w-full md:px-4 md:py-3 min-w-0">
-              <div className="w-full flex flex-col items-start min-w-0">
+              <div className="hidden md:flex w-full flex-col items-start min-w-0">
                 <span className="text-[10px] uppercase tracking-wider text-base-content/50 font-bold md:mb-1">Instancia</span>
                 {serviceQuery.isLoading ? (
                   <div className="h-4 w-20 animate-pulse rounded bg-base-300" />
@@ -86,8 +86,7 @@ export const ServiceDetailPage = () => {
 
               {/* URLs de acceso con copiar + abrir admin */}
               {service && (
-                <div className="w-full flex flex-col gap-1.5 mt-2 pt-2 border-t border-base-300/60 select-text min-w-0">
-                  {/* Botón Abrir Admin */}
+                <div className="w-full flex flex-col gap-1.5 md:mt-2 md:pt-2 md:border-t border-base-300/60 select-text min-w-0">
                   {/* Botón Abrir Admin */}
                   {adminUrl && (
                     <a
