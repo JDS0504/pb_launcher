@@ -23,12 +23,9 @@ export const useServiceUrls = (
 
     const allDomains = [...customDomains];
 
-    if (proxyInfo.base_domain) {
+    if (allDomains.length === 0 && proxyInfo.base_domain) {
       const autoDomain = `${service.id}.${proxyInfo.base_domain}`;
-      // No duplicar si ya fue registrado como dominio custom
-      if (!allDomains.includes(autoDomain)) {
-        allDomains.push(autoDomain);
-      }
+      allDomains.push(autoDomain);
     }
 
     return allDomains

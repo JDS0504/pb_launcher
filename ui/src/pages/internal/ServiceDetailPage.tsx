@@ -1,6 +1,6 @@
 import { Navigate, useParams, useSearchParams } from "react-router-dom";
 import { useState } from "react";
-import { MenuIcon, XIcon, Copy, Check, ExternalLink, Terminal } from "lucide-react";
+import { MenuIcon, XIcon, ExternalLink, Terminal } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { serviceService } from "../../services/services";
 import { useProxyConfigs } from "../../hooks/useProxyConfigs";
@@ -14,16 +14,6 @@ import { SnapshotsSection } from "./details_section/SnapshotsSection";
 import { useModal } from "../../components/modal/hook";
 import { CLIConsoleModal } from "./components/CLIConsoleModal";
 
-const useCopyUrl = () => {
-  const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
-  const copy = async (url: string) => {
-    await navigator.clipboard.writeText(url);
-    setCopiedUrl(url);
-    setTimeout(() => setCopiedUrl(null), 2000);
-  };
-  return { copiedUrl, copy };
-};
-
 export const ServiceDetailPage = () => {
   const { openModal } = useModal();
   const { service_id } = useParams<{ service_id: string }>();
@@ -31,7 +21,6 @@ export const ServiceDetailPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeSection = searchParams.get("section") || "general";
   const [menuOpen, setMenuOpen] = useState(false);
-  const { copiedUrl, copy } = useCopyUrl();
 
   const serviceQuery = useQuery({
     queryKey: ["services", service_id],
@@ -99,43 +88,8 @@ export const ServiceDetailPage = () => {
               </div>
 
               {/* URLs de acceso con copiar + abrir admin */}
-              {service && serviceUrls.length > 0 && (
+              {service && (
                 <div className="w-full flex flex-col gap-1.5 mt-2 pt-2 border-t border-base-300/60 select-text min-w-0">
-                  <span className="text-[9px] uppercase tracking-wider font-bold text-base-content/40">Enlaces de acceso</span>
-                  <div className="flex flex-col gap-1 w-full min-w-0">
-                    {serviceUrls.map(url => {
-                      let cleanLabel = url.replace("http://", "").replace("https://", "");
-                      if (cleanLabel.endsWith("/_/")) cleanLabel = cleanLabel.slice(0, -3);
-                      if (cleanLabel.includes("/_/#/")) {
-                        cleanLabel = cleanLabel.split("/_/#/")[0];
-                      }
-                      const isCopied = copiedUrl === url;
-                      return (
-                        <div key={url} className="flex items-center gap-1 min-w-0">
-                          <a
-                            href={url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="link link-hover text-[11px] text-secondary hover:text-secondary-focus truncate block font-medium flex-1 min-w-0"
-                            title={url}
-                          >
-                            {cleanLabel}
-                          </a>
-                          <button
-                            className="btn btn-ghost btn-xs p-0.5 shrink-0"
-                            title={isCopied ? "¡Copiado!" : "Copiar URL"}
-                            onClick={() => copy(url)}
-                          >
-                            {isCopied
-                              ? <Check className="w-3 h-3 text-success" />
-                              : <Copy className="w-3 h-3 text-base-content/40" />
-                            }
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-
                   {/* Botón Abrir Admin */}
                   {adminUrl && (
                     <a

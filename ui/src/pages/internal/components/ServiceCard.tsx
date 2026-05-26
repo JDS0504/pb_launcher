@@ -10,13 +10,13 @@ import {
   Trash2,
   Upload,
   Terminal,
+  ExternalLink,
 } from "lucide-react";
 import classNames from "classnames";
 import { useModal } from "../../../components/modal/hook";
 import { DefaultCredentialsCard } from "./DefaultCredentialsCard";
 import type { ProxyConfigsResponse } from "../../../services/config";
 import { useServiceUrls } from "../../../hooks/useServiceUrls";
-import { CopyableField } from "./CopyableField";
 import { CLIConsoleModal } from "./CLIConsoleModal";
 
 type Props = {
@@ -49,6 +49,7 @@ export const ServiceCard: FC<Props> = ({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { openModal } = useModal();
   const serviceUrls = useServiceUrls(service, proxyInfo);
+  const adminUrl = serviceUrls.length > 0 ? serviceUrls[0] : null;
 
   const executeAfterBlur = (fn: () => void) => {
     (document.activeElement as HTMLElement)?.blur?.();
@@ -244,17 +245,27 @@ export const ServiceCard: FC<Props> = ({
             <span className="capitalize">{service.restart_policy}</span>
           </div>
         </div>
-        {serviceUrls.map(serviceUrl => (
-          <CopyableField key={serviceUrl} value={serviceUrl} isUrl />
-        ))}
-        <div className="card-actions justify-end mt-4">
+        <div className="card-actions justify-end mt-4 flex gap-2 w-full">
           <button
-            className="btn btn-sm btn-outline btn-primary w-full flex items-center gap-2"
+            className="btn btn-sm btn-outline btn-neutral flex-1 flex items-center justify-center gap-2"
             onClick={onDetails}
           >
             <Eye className="w-4 h-4" />
             Details
           </button>
+          {adminUrl && (
+            <a
+              id={`btn-open-admin-${service.id}`}
+              href={adminUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-sm btn-outline btn-primary flex-1 flex items-center justify-center gap-2"
+              title="Abrir PocketBase Admin en nueva pestaña"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Abrir Admin
+            </a>
+          )}
         </div>
       </div>
     </div>
