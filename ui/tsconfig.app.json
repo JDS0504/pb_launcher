@@ -10,10 +10,18 @@
     /* Bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
+    "allowSyntheticDefaultImports": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
+
+    /* Paths: paquetes sin campo "exports" que bundler mode no resuelve automáticamente */
+    "paths": {
+      "@xterm/xterm": ["./node_modules/@xterm/xterm/typings/xterm.d.ts"],
+      "@xterm/addon-fit": ["./node_modules/@xterm/addon-fit/typings/addon-fit.d.ts"],
+      "@xterm/addon-web-links": ["./node_modules/@xterm/addon-web-links/typings/addon-web-links.d.ts"]
+    },
 
     /* Linting */
     "strict": true,

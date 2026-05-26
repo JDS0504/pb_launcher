@@ -93,7 +93,7 @@ export const ShellModal: FC<Props> = ({ onClose }) => {
     };
 
     // ── Terminal → WebSocket (input del usuario) ──────────────────────────
-    const disposable = term.onData((data) => {
+    const disposable = term.onData((data: string) => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(data);
       }
