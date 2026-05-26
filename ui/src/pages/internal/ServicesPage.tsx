@@ -156,18 +156,16 @@ export const ServicesPage = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3.5 w-full">
-        {/* Fila 1: Búsqueda y Filtro de Estado */}
-        <div className="flex flex-row items-center gap-2 w-full">
-          <div className="flex gap-1.5 flex-1">
-            <input
-              type="text"
-              placeholder="Search service..."
-              className="input input-sm input-bordered w-full"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-            />
-          </div>
+      <div className="flex flex-col md:flex-row md:items-center gap-3.5 w-full">
+        {/* Bloque 1: Búsqueda y Filtro de Estado */}
+        <div className="flex flex-row items-center gap-2 flex-grow w-full md:w-auto">
+          <input
+            type="text"
+            placeholder="Search service..."
+            className="input input-sm input-bordered w-full md:max-w-xs"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+          />
           <select
             className="select select-sm select-bordered w-32 sm:w-48 shrink-0"
             value={statusFilter.value}
@@ -181,17 +179,17 @@ export const ServicesPage = () => {
           </select>
         </div>
 
-        {/* Fila 2: Botones de Acción */}
-        <div className="flex flex-row gap-2 w-full sm:justify-end">
+        {/* Bloque 2: Botones de Acción */}
+        <div className="flex flex-row gap-2 w-full md:w-auto shrink-0 md:justify-end">
           <button
-            className="btn btn-sm btn-secondary gap-2 flex-1 sm:flex-initial sm:w-auto"
+            className="btn btn-sm btn-secondary gap-2 flex-1 md:flex-none"
             onClick={openRestoreBackupModal}
           >
             <Upload className="w-4 h-4" />
             Import backup
           </button>
           <button
-            className="btn btn-sm btn-primary gap-2 flex-1 sm:flex-initial sm:w-auto"
+            className="btn btn-sm btn-primary gap-2 flex-1 md:flex-none"
             onClick={openCreateServiceModal}
           >
             <Plus className="w-4 h-4" />
