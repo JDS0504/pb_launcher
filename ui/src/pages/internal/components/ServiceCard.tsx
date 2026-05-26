@@ -9,7 +9,6 @@ import {
   ShieldAlert,
   Trash2,
   Upload,
-  Terminal,
   ExternalLink,
 } from "lucide-react";
 import classNames from "classnames";
@@ -17,7 +16,6 @@ import { useModal } from "../../../components/modal/hook";
 import { DefaultCredentialsCard } from "./DefaultCredentialsCard";
 import type { ProxyConfigsResponse } from "../../../services/config";
 import { useServiceUrls } from "../../../hooks/useServiceUrls";
-import { CLIConsoleModal } from "./CLIConsoleModal";
 
 type Props = {
   proxyInfo: ProxyConfigsResponse;
@@ -217,22 +215,6 @@ export const ServiceCard: FC<Props> = ({
               >
                 {service.status.charAt(0).toUpperCase() + service.status.slice(1)}
               </span>
-              <button
-                type="button"
-                className="btn btn-xs btn-ghost btn-circle text-primary"
-                title="Consola Interactiva PocketBase (CLI)"
-                onClick={() => {
-                  openModal(
-                    <CLIConsoleModal
-                      serviceId={service.id}
-                      serviceName={service.name}
-                    />,
-                    { title: "Consola Interactiva PocketBase (CLI)", width: 700 }
-                  );
-                }}
-              >
-                <Terminal className="w-3.5 h-3.5" />
-              </button>
             </div>
           </div>
 
@@ -247,7 +229,7 @@ export const ServiceCard: FC<Props> = ({
         </div>
         <div className="card-actions justify-end mt-4 flex gap-2 w-full">
           <button
-            className="btn btn-sm btn-outline btn-neutral flex-1 flex items-center justify-center gap-2"
+            className="btn btn-sm btn-neutral flex-1 flex items-center justify-center gap-2"
             onClick={onDetails}
           >
             <Eye className="w-4 h-4" />
@@ -259,7 +241,7 @@ export const ServiceCard: FC<Props> = ({
               href={adminUrl}
               target="_blank"
               rel="noreferrer"
-              className="btn btn-sm btn-outline btn-primary flex-1 flex items-center justify-center gap-2"
+              className="btn btn-sm btn-primary flex-1 flex items-center justify-center gap-2 text-primary-content"
               title="Abrir PocketBase Admin en nueva pestaña"
             >
               <ExternalLink className="w-4 h-4" />

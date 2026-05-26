@@ -74,6 +74,7 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [imagePreviewUrl, setImagePreviewUrl] = useState("");
+  const [selectedFilePaths, setSelectedFilePaths] = useState<Set<string>>(new Set());
 
   const isImageFile = (path: string) => {
     const ext = path.toLowerCase().split('.').pop();
@@ -267,6 +268,21 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
     onError: error => toast.error(getErrorMessage(error)),
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (paths: string[]) => {
+      for (const p of paths) {
+        await filesService.deleteFile({ serviceID: service_id, path: p });
+      }
+    },
+    onSuccess: () => {
+      toast.success("Archivos eliminados con éxito");
+      setSelectedFilePaths(new Set());
+      setSelectedPath(null);
+      filesQuery.refetch();
+    },
+    onError: error => toast.error(getErrorMessage(error)),
+  });
+
   if (service == null) {
     return <div className="p-4">Loading...</div>;
   }
@@ -282,6 +298,10 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
 
   const handleStopService = () => {
     commandMutation.mutate({ service_id, action: "stop" });
+  };
+
+  const handleRestartService = () => {
+    commandMutation.mutate({ service_id, action: "restart" });
   };
 
   const handleSave = () => {
@@ -301,6 +321,17 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
     );
     if (ok) {
       deleteMutation.mutate({ serviceID: service_id, path: selectedPath });
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedFilePaths.size === 0) return;
+    const ok = await confirm(
+      "Eliminar Archivos Seleccionados",
+      `¿Estás seguro de que deseas eliminar permanentemente los ${selectedFilePaths.size} archivos/carpetas seleccionados?`
+    );
+    if (ok) {
+      bulkDeleteMutation.mutate(Array.from(selectedFilePaths));
     }
   };
 
@@ -360,6 +391,24 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
             </div>
           </div>
 
+          {/* Panel de acciones por lotes */}
+          {selectedFilePaths.size > 0 && (
+            <div className="p-2 border-b border-base-300 bg-error/10 flex justify-between items-center shrink-0">
+              <span className="text-[10px] font-semibold text-error">
+                {selectedFilePaths.size} seleccionados
+              </span>
+              <button
+                type="button"
+                onClick={handleBulkDelete}
+                className="btn btn-xs btn-error gap-1 text-[10px]"
+                disabled={!isStopped || bulkDeleteMutation.isPending}
+              >
+                <Trash2 className="w-3 h-3" />
+                Eliminar Selección
+              </button>
+            </div>
+          )}
+
           <div className="flex-1 overflow-y-auto p-2 space-y-1 font-mono text-xs">
             {files.length === 0 ? (
               <div className="p-4 text-center text-base-content/50">No hay archivos en la instancia.</div>
@@ -370,50 +419,70 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
               ).map((f) => {
                   const isSelected = selectedPath === f.path;
                   return (
-                    <button
+                    <div
                       key={f.path}
-                      type="button"
-                      onClick={() => {
-                        setSelectedPath(f.path);
-                        if (f.is_dir) {
-                          togglePath(f.path);
-                        }
-                      }}
-                      className={`w-full text-left py-1.5 px-2 rounded-lg flex items-center justify-between gap-2 transition-colors ${
+                      className={`w-full py-1 px-2 rounded-lg flex items-center justify-between gap-2 transition-colors ${
                         isSelected
-                          ? "bg-primary text-primary-content"
-                          : "hover:bg-base-300 text-base-content/90"
+                          ? "bg-primary/10 border-l-2 border-primary"
+                          : "hover:bg-base-300"
                       }`}
                     >
-                      <span
-                        className="flex items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap"
-                        style={{ paddingLeft: `${indentFor(f.path)}px` }}
-                      >
-                        {f.is_dir ? (
-                          <>
-                            {expandedPaths.has(f.path) ? (
-                              <ChevronDown className="w-3.5 h-3.5 shrink-0 text-base-content/60" />
-                            ) : (
-                              <ChevronRight className="w-3.5 h-3.5 shrink-0 text-base-content/60" />
-                            )}
-                            {expandedPaths.has(f.path) ? (
-                              <FolderOpen className="w-3.5 h-3.5 shrink-0 text-amber-500" />
-                            ) : (
-                              <Folder className="w-3.5 h-3.5 shrink-0 text-amber-500" />
-                            )}
-                          </>
-                        ) : (
-                          <>
-                            <span className="w-3.5 shrink-0" />
-                            <FileText className="w-3.5 h-3.5 shrink-0" />
-                          </>
-                        )}
-                        <span>{getFileName(f.path)}</span>
-                      </span>
-                      <span className={`text-[10px] opacity-70 shrink-0 ${isSelected ? "text-primary-content" : ""}`}>
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                        <input
+                          type="checkbox"
+                          className="checkbox checkbox-xs checkbox-primary shrink-0"
+                          checked={selectedFilePaths.has(f.path)}
+                          disabled={!isStopped}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setSelectedFilePaths(prev => {
+                              const next = new Set(prev);
+                              if (checked) {
+                                next.add(f.path);
+                              } else {
+                                next.delete(f.path);
+                              }
+                              return next;
+                            });
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedPath(f.path);
+                            if (f.is_dir) {
+                              togglePath(f.path);
+                            }
+                          }}
+                          className="text-left flex-1 min-w-0 flex items-center gap-1 font-mono text-xs text-base-content/90"
+                          style={{ paddingLeft: `${indentFor(f.path)}px` }}
+                        >
+                          {f.is_dir ? (
+                            <>
+                              {expandedPaths.has(f.path) ? (
+                                <ChevronDown className="w-3.5 h-3.5 shrink-0 text-base-content/60" />
+                              ) : (
+                                <ChevronRight className="w-3.5 h-3.5 shrink-0 text-base-content/60" />
+                              )}
+                              {expandedPaths.has(f.path) ? (
+                                <FolderOpen className="w-3.5 h-3.5 shrink-0 text-amber-500" />
+                              ) : (
+                                <Folder className="w-3.5 h-3.5 shrink-0 text-amber-500" />
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <span className="w-3.5 shrink-0" />
+                              <FileText className="w-3.5 h-3.5 shrink-0" />
+                            </>
+                          )}
+                          <span className="truncate">{getFileName(f.path)}</span>
+                        </button>
+                      </div>
+                      <span className={`text-[10px] opacity-70 shrink-0 select-none ${isSelected ? "text-primary font-semibold" : ""}`}>
                         {!f.is_dir && formatSize(f.size)}
                       </span>
-                    </button>
+                    </div>
                   );
                 })
             )}
@@ -494,6 +563,15 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
                       Iniciar Servicio
                     </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={handleRestartService}
+                    className="btn btn-xs btn-neutral gap-1"
+                    disabled={commandMutation.isPending || service?.status === "pending" || service?.status !== "running"}
+                  >
+                    <RefreshCw className="w-2.5 h-2.5" />
+                    Reiniciar
+                  </button>
                   <button
                     type="button"
                     onClick={() => {

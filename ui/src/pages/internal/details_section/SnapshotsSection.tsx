@@ -1,5 +1,5 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { Camera, Download, RotateCcw, Trash2 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Camera, Download, RotateCcw, Trash2, Play, Square, RefreshCw } from "lucide-react";
 import type { FC } from "react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
@@ -7,7 +7,7 @@ import { ErrorFallback } from "../../../components/helpers/ErrorFallback";
 import { useModal } from "../../../components/modal/hook";
 import { useConfirmModal } from "../../../hooks/useConfirmModal";
 import { backupService, type SnapshotInfo } from "../../../services/backup";
-import type { ServiceDto } from "../../../services/services";
+import { serviceService, type ServiceDto } from "../../../services/services";
 import { getErrorMessage } from "../../../utils/errors";
 import { SnapshotNameForm } from "../forms/SnapshotNameForm";
 
@@ -26,6 +26,28 @@ export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
   const navigate = useNavigate();
   const { openModal } = useModal();
   const confirm = useConfirmModal();
+  const queryClient = useQueryClient();
+
+  const commandMutation = useMutation({
+    mutationFn: serviceService.executeServiceCommand,
+    onSuccess: (_, variables) => {
+      toast.success(`Comando '${variables.action}' enviado con éxito`);
+      queryClient.invalidateQueries({ queryKey: ["services", service_id] });
+    },
+    onError: error => toast.error(getErrorMessage(error)),
+  });
+
+  const handleStartService = () => {
+    commandMutation.mutate({ service_id, action: "start" });
+  };
+
+  const handleStopService = () => {
+    commandMutation.mutate({ service_id, action: "stop" });
+  };
+
+  const handleRestartService = () => {
+    commandMutation.mutate({ service_id, action: "restart" });
+  };
 
   const snapshotsQuery = useQuery({
     queryKey: ["snapshots", service_id],
@@ -132,28 +154,69 @@ export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
           Snapshots are local point-in-time ZIP copies. Creating a snapshot requires
           the service to be stopped. Restoring creates a new instance.
         </div>
-        <div
-          title={
-            canCreate
-              ? undefined
-              : "Detén el servicio antes de crear un snapshot"
-          }
-          className="shrink-0"
-        >
+        <div className="flex flex-wrap gap-2 items-center justify-end shrink-0">
+          {/* Botones de Control de Servicio */}
+          {!canCreate ? (
+            <button
+              type="button"
+              onClick={handleStopService}
+              className="btn btn-sm btn-error gap-1"
+              disabled={commandMutation.isPending || service?.status === "pending"}
+            >
+              <Square className="w-3 h-3 fill-current" />
+              Detener Servicio
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleStartService}
+              className="btn btn-sm btn-success gap-1"
+              disabled={commandMutation.isPending || service?.status === "pending"}
+            >
+              <Play className="w-3 h-3 fill-current" />
+              Iniciar Servicio
+            </button>
+          )}
           <button
-            className="btn btn-sm btn-primary gap-2 w-full sm:w-auto"
-            disabled={!canCreate || createMutation.isPending}
-            onClick={createSnapshot}
+            type="button"
+            onClick={handleRestartService}
+            className="btn btn-sm btn-neutral gap-1"
+            disabled={commandMutation.isPending || service?.status === "pending" || service?.status !== "running"}
           >
-            <Camera className="w-4 h-4" />
-            Create snapshot
+            <RefreshCw className="w-3 h-3" />
+            Reiniciar
           </button>
+
+          <div
+            title={
+              canCreate
+                ? undefined
+                : "Detén el servicio antes de crear un snapshot"
+            }
+          >
+            <button
+              className="btn btn-sm btn-primary gap-2"
+              disabled={!canCreate || createMutation.isPending}
+              onClick={createSnapshot}
+            >
+              <Camera className="w-4 h-4" />
+              Create snapshot
+            </button>
+          </div>
         </div>
       </div>
 
       {!canCreate && (
-        <div className="alert alert-info py-2 text-sm">
-          Stop this instance before creating a snapshot.
+        <div className="alert alert-info py-2 text-sm flex justify-between items-center gap-3">
+          <span>Stop this instance before creating a snapshot.</span>
+          <button
+            type="button"
+            onClick={handleStopService}
+            className="btn btn-xs btn-neutral"
+            disabled={commandMutation.isPending}
+          >
+            Detener Ahora
+          </button>
         </div>
       )}
 
