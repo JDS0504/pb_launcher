@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { statusService } from "../../services/status";
 import { serviceService } from "../../services/services";
-import { Cpu, HardDrive, Server, Activity, RefreshCcw, Power } from "lucide-react";
+import { Cpu, HardDrive, Server, Activity, RefreshCcw, Power, Terminal } from "lucide-react";
 import classNames from "classnames";
 import React from "react";
+import { useModal } from "../../components/modal/hook";
+import { ShellModal } from "./components/ShellModal";
 
 const formatBytes = (bytes: number, decimals = 2) => {
   if (!bytes) return "0 B";
@@ -30,6 +32,7 @@ const formatUptime = (seconds: number) => {
 };
 
 export const StatusPage = () => {
+  const { openModal } = useModal();
   const statusQuery = useQuery({
     queryKey: ["system_status"],
     queryFn: statusService.fetchSystemStatus,
@@ -106,17 +109,34 @@ export const StatusPage = () => {
           <h2 className="text-2xl font-bold tracking-tight">Estado del Servidor</h2>
           <p className="text-sm text-base-content/60">Monitoreo de recursos de hardware en tiempo real.</p>
         </div>
-        <button
-          onClick={() => { statusQuery.refetch(); servicesQuery.refetch(); }}
-          className="btn btn-sm btn-ghost gap-2"
-        >
-          <RefreshCcw
-            className={classNames("w-4 h-4", {
-              "animate-spin": statusQuery.isFetching || servicesQuery.isFetching,
-            })}
-          />
-          {statusQuery.isFetching || servicesQuery.isFetching ? "Actualizando..." : "Actualizado"}
-        </button>
+      <div className="flex items-center gap-2">
+          <button
+            id="btn-open-shell"
+            onClick={() =>
+              openModal(<ShellModal />, {
+                title: "Shell Interactiva del Servidor (Admin)",
+                width: "min(98vw, 1200px)",
+                closeOnBackdropClick: false,
+              })
+            }
+            className="btn btn-sm btn-neutral gap-2"
+            title="Abrir shell interactiva del servidor"
+          >
+            <Terminal className="w-4 h-4 text-primary" />
+            Shell
+          </button>
+          <button
+            onClick={() => { statusQuery.refetch(); servicesQuery.refetch(); }}
+            className="btn btn-sm btn-ghost gap-2"
+          >
+            <RefreshCcw
+              className={classNames("w-4 h-4", {
+                "animate-spin": statusQuery.isFetching || servicesQuery.isFetching,
+              })}
+            />
+            {statusQuery.isFetching || servicesQuery.isFetching ? "Actualizando..." : "Actualizado"}
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
