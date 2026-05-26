@@ -1,6 +1,6 @@
 import { useMemo, type PropsWithChildren } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { History, Server, Waypoints, User, LogOut, Settings, Activity, FolderOpen, Terminal } from "lucide-react";
+import { History, Server, Waypoints, User, LogOut, Settings, Activity, FolderOpen } from "lucide-react";
 import { useConfirmModal } from "../hooks/useConfirmModal";
 import { authService } from "../services/auth";
 import { useViewportHeight } from "../hooks/useViewportHeight";
@@ -20,7 +20,6 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
     if (pathname === "/operations") return "operations";
     if (pathname === "/settings") return "settings";
     if (pathname === "/status") return "status";
-    if (pathname === "/shell") return "shell";
     return "<none>";
   }, [pathname]);
 
@@ -121,19 +120,6 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
             >
               <Activity className="w-4 h-4" />
               <span className="hidden sm:inline">Status</span>
-            </NavLink>
-
-            <NavLink
-              to="/shell"
-              className={classNames(
-                "btn btn-sm btn-ghost shrink-0 gap-2 text-base-content transition-colors",
-                {
-                  "bg-base-200 text-primary": selected === "shell",
-                },
-              )}
-            >
-              <Terminal className="w-4 h-4" />
-              <span className="hidden sm:inline">Shell</span>
             </NavLink>
           </nav>
           <div className="dropdown dropdown-end shrink-0">
