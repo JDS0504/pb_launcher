@@ -13,15 +13,28 @@ import (
 )
 
 func handleShellSession(conn *websocket.Conn) {
-	shell := detectShell()
+	// Mutex para sincronizar las escrituras concurrentes en el WebSocket (evita cierres 1006)
+	var writeMu sync.Mutex
 
+	writeMessageSafe := func(messageType int, data []byte) error {
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		conn.SetWriteDeadline(time.Now().Add(shellWriteTimeout))
+		return conn.WriteMessage(messageType, data)
+	}
+
+	writeTextSafe := func(msg string) {
+		_ = writeMessageSafe(websocket.TextMessage, []byte(msg))
+	}
+
+	shell := detectShell()
 	cmd := exec.Command(shell)
 	cmd.Env = buildShellEnv()
 
 	// Iniciar el comando con un pseudo-terminal UNIX real
 	ptyF, err := pty.Start(cmd)
 	if err != nil {
-		writeWSText(conn, "\r\n\033[31m[ERROR] No se pudo iniciar la PTY: "+err.Error()+"\033[0m\r\n")
+		writeTextSafe("\r\n\033[31m[ERROR] No se pudo iniciar la PTY: " + err.Error() + "\033[0m\r\n")
 		return
 	}
 	defer ptyF.Close()
@@ -29,11 +42,11 @@ func handleShellSession(conn *websocket.Conn) {
 	slog.Info("shell (unix): process started with PTY", "shell", shell, "pid", cmd.Process.Pid)
 
 	// Banner de bienvenida
-	writeWSText(conn, "\033[1;32m╔══════════════════════════════════════════╗\033[0m\r\n")
-	writeWSText(conn, "\033[1;32m║     PB Launcher · Shell Interactiva      ║\033[0m\r\n")
-	writeWSText(conn, "\033[1;32m║  Solo accesible para administradores     ║\033[0m\r\n")
-	writeWSText(conn, "\033[1;32m║  PTY Real Activa · Timeout: 30 minutos   ║\033[0m\r\n")
-	writeWSText(conn, "\033[1;32m╚══════════════════════════════════════════╝\033[0m\r\n\r\n")
+	writeTextSafe("\033[1;32m╔══════════════════════════════════════════╗\033[0m\r\n")
+	writeTextSafe("\033[1;32m║     PB Launcher · Shell Interactiva      ║\033[0m\r\n")
+	writeTextSafe("\033[1;32m║  Solo accesible para administradores     ║\033[0m\r\n")
+	writeTextSafe("\033[1;32m║  PTY Real Activa · Timeout: 30 minutos   ║\033[0m\r\n")
+	writeTextSafe("\033[1;32m╚══════════════════════════════════════════╝\033[0m\r\n\r\n")
 
 	done := make(chan struct{})
 	var closeOnce sync.Once
@@ -55,8 +68,7 @@ func handleShellSession(conn *websocket.Conn) {
 			case <-done:
 				return
 			case <-pingTicker.C:
-				conn.SetWriteDeadline(time.Now().Add(shellWriteTimeout))
-				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				if err := writeMessageSafe(websocket.PingMessage, nil); err != nil {
 					closeDone()
 					return
 				}
@@ -70,8 +82,7 @@ func handleShellSession(conn *websocket.Conn) {
 		for {
 			n, err := ptyF.Read(buf)
 			if n > 0 {
-				conn.SetWriteDeadline(time.Now().Add(shellWriteTimeout))
-				if err := conn.WriteMessage(websocket.BinaryMessage, buf[:n]); err != nil {
+				if err := writeMessageSafe(websocket.BinaryMessage, buf[:n]); err != nil {
 					break
 				}
 			}
@@ -85,7 +96,7 @@ func handleShellSession(conn *websocket.Conn) {
 	// Esperar fin del proceso
 	go func() {
 		_ = cmd.Wait()
-		writeWSText(conn, "\r\n\033[33m[SHELL] Sesión terminada.\033[0m\r\n")
+		writeTextSafe("\r\n\033[33m[SHELL] Sesión terminada.\033[0m\r\n")
 		time.Sleep(100 * time.Millisecond)
 		closeDone()
 	}()
@@ -100,7 +111,7 @@ func handleShellSession(conn *websocket.Conn) {
 		case <-done:
 			return
 		case <-sessionTimer.C:
-			writeWSText(conn, "\r\n\033[33m[TIMEOUT] Sesión expirada por inactividad (30 min).\033[0m\r\n")
+			writeTextSafe("\r\n\033[33m[TIMEOUT] Sesión expirada por inactividad (30 min).\033[0m\r\n")
 			_ = cmd.Process.Kill()
 			return
 		default:
