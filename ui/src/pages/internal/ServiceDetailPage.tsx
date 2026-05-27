@@ -192,7 +192,7 @@ export const ServiceDetailPage = () => {
           <div className="mb-8 min-w-0">
             <h3 className="text-lg font-semibold mb-6">Uptime</h3>
             <div className="rounded-box bg-base-200 p-3 sm:p-4 min-w-0">
-              <UptimeSection service_id={service_id} />
+              <UptimeSection service_id={service_id} serviceCreated={service?.created} />
             </div>
           </div>
         )}

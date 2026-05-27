@@ -18,13 +18,13 @@ const ServiceUptimeRow: FC<{ service: ServiceDto; rangeDays: 1 | 7 | 30; sinceDa
 
   const uptimeStat = useMemo(() => {
     if (!operationsQuery.data) return null;
-    const stats = calculateUptimeForLogs(operationsQuery.data);
+    const stats = calculateUptimeForLogs(operationsQuery.data, undefined, undefined, service.created);
     if (rangeDays === 1) return stats.last24h;
     if (rangeDays === 7) return stats.last7d;
     return stats.last30d;
-  }, [operationsQuery.data, rangeDays]);
+  }, [operationsQuery.data, rangeDays, service.created]);
 
-  const percent = uptimeStat?.percent ?? 100; // Asumir 100% si no hay logs
+  const percent = uptimeStat?.percent ?? 0; // Asumir 0% si no hay logs/operaciones
 
   const getUptimeBadgeClass = (val: number) => {
     if (val >= 99) return "badge-success";
@@ -57,6 +57,18 @@ const ServiceUptimeRow: FC<{ service: ServiceDto; rangeDays: 1 | 7 | 30; sinceDa
             {percent.toFixed(2)}%
           </span>
         )}
+      </td>
+      <td className="hidden sm:table-cell">
+        <div className="w-full bg-base-300 rounded-full h-1.5 overflow-hidden max-w-[120px]">
+          <div
+            className={classNames("h-full rounded-full transition-all duration-500", {
+              "bg-success": percent >= 99,
+              "bg-warning": percent >= 95 && percent < 99,
+              "bg-error": percent < 95,
+            })}
+            style={{ width: `${percent}%` }}
+          />
+        </div>
       </td>
       <td className="hidden md:table-cell text-xs font-mono text-base-content/65">
         {uptimeStat ? `${Math.round(uptimeStat.activeMs / 3600000)}h active` : "—"}
@@ -167,6 +179,7 @@ export const UptimePage: FC = () => {
                       <th>Instancia</th>
                       <th>Estado</th>
                       <th>Uptime ({rangeDays === 1 ? "24h" : `${rangeDays}d`})</th>
+                      <th className="hidden sm:table-cell">Disponibilidad</th>
                       <th className="hidden md:table-cell">Actividad</th>
                     </tr>
                   </thead>

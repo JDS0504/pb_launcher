@@ -8,9 +8,10 @@ import { calculateUptimeForLogs } from "../../../utils/uptime";
 
 type Props = {
   service_id: string;
+  serviceCreated?: string;
 };
 
-export const UptimeSection: FC<Props> = ({ service_id }) => {
+export const UptimeSection: FC<Props> = ({ service_id, serviceCreated }) => {
   const sinceDate = useMemo(() => {
     return new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   }, []);
@@ -22,8 +23,8 @@ export const UptimeSection: FC<Props> = ({ service_id }) => {
   });
 
   const uptimeStats = useMemo(() => {
-    return calculateUptimeForLogs(operationsQuery.data ?? []);
-  }, [operationsQuery.data]);
+    return calculateUptimeForLogs(operationsQuery.data ?? [], undefined, undefined, serviceCreated);
+  }, [operationsQuery.data, serviceCreated]);
 
   if (operationsQuery.isLoading) return <div className="p-4 text-xs text-base-content/60">Cargando métricas de uptime...</div>;
   if (operationsQuery.isError) {
