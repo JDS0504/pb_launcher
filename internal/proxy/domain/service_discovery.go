@@ -27,7 +27,7 @@ func NewServiceDiscovery(repo repositories.ServiceRepository) (*ServiceDiscovery
 
 	cache, err := bigcache.New(context.Background(), bigcache.Config{
 		Shards:           256,
-		LifeWindow:       45 * time.Second, // debe ser << autosleep_idle_timeout para no reiniciar el timer de inactividad
+		LifeWindow:       15 * time.Second, // debe ser << autosleep_idle_timeout para no reiniciar el timer de inactividad
 		CleanWindow:      2 * time.Minute,
 		MaxEntrySize:     512,
 		Verbose:          false,
