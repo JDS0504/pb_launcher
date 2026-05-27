@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo, type FC } from "react";
 import classNames from "classnames";
-import { Search, Activity, ExternalLink, ShieldCheck, AlertTriangle } from "lucide-react";
+import { Search, Activity, ExternalLink, AlertTriangle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { serviceService, type ServiceDto } from "../../services/services";
 import { calculateUptimeForLogs } from "../../utils/uptime";
@@ -9,10 +9,10 @@ import { calculateUptimeForLogs } from "../../utils/uptime";
 const PAGE_SIZE = 10;
 
 // Subcomponente de fila para renderizado de Uptime de forma diferida/optimizada por servicio
-const ServiceUptimeRow: FC<{ service: ServiceDto; rangeDays: 1 | 7 | 30 }> = ({ service, rangeDays }) => {
+const ServiceUptimeRow: FC<{ service: ServiceDto; rangeDays: 1 | 7 | 30; sinceDate: string }> = ({ service, rangeDays, sinceDate }) => {
   const operationsQuery = useQuery({
-    queryKey: ["operation-logs", service.id],
-    queryFn: () => serviceService.fetchOperationLogs(service.id),
+    queryKey: ["operation-logs", service.id, sinceDate],
+    queryFn: () => serviceService.fetchOperationLogs(service.id, sinceDate),
     refetchInterval: 10000, // Menos frecuente para optimizar
   });
 
@@ -58,18 +58,6 @@ const ServiceUptimeRow: FC<{ service: ServiceDto; rangeDays: 1 | 7 | 30 }> = ({ 
           </span>
         )}
       </td>
-      <td className="hidden sm:table-cell">
-        <div className="w-full bg-base-300 rounded-full h-1.5 overflow-hidden max-w-[120px]">
-          <div
-            className={classNames("h-full rounded-full transition-all duration-500", {
-              "bg-success": percent >= 99,
-              "bg-warning": percent >= 95 && percent < 99,
-              "bg-error": percent < 95,
-            })}
-            style={{ width: `${percent}%` }}
-          />
-        </div>
-      </td>
       <td className="hidden md:table-cell text-xs font-mono text-base-content/65">
         {uptimeStat ? `${Math.round(uptimeStat.activeMs / 3600000)}h active` : "—"}
       </td>
@@ -87,6 +75,11 @@ export const UptimePage: FC = () => {
     queryFn: serviceService.fetchAllServices,
     refetchInterval: 5000,
   });
+
+  const sinceDate = useMemo(() => {
+    const days = rangeDays;
+    return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+  }, [rangeDays]);
 
   const filtered = useMemo(() => {
     const servicesList = servicesQuery.data ?? [];
@@ -157,14 +150,6 @@ export const UptimePage: FC = () => {
         </div>
       </div>
 
-      {/* Info General Consolidadas */}
-      <div className="alert alert-info shadow-sm py-3 px-4 flex flex-row items-center gap-3">
-        <ShieldCheck className="w-5 h-5 text-info shrink-0" />
-        <div className="text-xs">
-          Visualizando disponibilidad de <span className="font-bold">{filtered.length}</span> servicio(s) coincidente(s) en base al rango de <span className="font-bold">{rangeDays === 1 ? "24 horas" : `${rangeDays} días`}</span>.
-        </div>
-      </div>
-
       {/* Tabla Desglose */}
       <div className="card bg-base-100 border border-base-300 shadow-sm">
         <div className="card-body p-0 sm:p-4">
@@ -182,7 +167,6 @@ export const UptimePage: FC = () => {
                       <th>Instancia</th>
                       <th>Estado</th>
                       <th>Uptime ({rangeDays === 1 ? "24h" : `${rangeDays}d`})</th>
-                      <th className="hidden sm:table-cell">Disponibilidad</th>
                       <th className="hidden md:table-cell">Actividad</th>
                     </tr>
                   </thead>
@@ -192,6 +176,7 @@ export const UptimePage: FC = () => {
                         key={service.id}
                         service={service}
                         rangeDays={rangeDays}
+                        sinceDate={sinceDate}
                       />
                     ))}
                   </tbody>

@@ -269,9 +269,13 @@ export const serviceService = {
     if (json == null || !Array.isArray(json)) return [];
     return json as ServiceLog[];
   },
-  fetchOperationLogs: async (service_id: string): Promise<OperationLog[]> => {
+  fetchOperationLogs: async (service_id: string, sinceDate?: string): Promise<OperationLog[]> => {
+    let filter = `service="${service_id}"`;
+    if (sinceDate) {
+      filter += `&&created>="${sinceDate}"`;
+    }
     return pb.collection(OPERATION_LOGS_COLLECTION).getFullList<OperationLog>({
-      filter: `service="${service_id}"`,
+      filter: filter,
       fields: "id,service,operation,status,message,metadata,created",
       sort: "-created",
     });

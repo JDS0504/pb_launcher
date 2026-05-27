@@ -11,9 +11,13 @@ type Props = {
 };
 
 export const UptimeSection: FC<Props> = ({ service_id }) => {
+  const sinceDate = useMemo(() => {
+    return new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  }, []);
+
   const operationsQuery = useQuery({
-    queryKey: ["operation-logs", service_id],
-    queryFn: () => serviceService.fetchOperationLogs(service_id),
+    queryKey: ["operation-logs", service_id, sinceDate],
+    queryFn: () => serviceService.fetchOperationLogs(service_id, sinceDate),
     refetchInterval: 5000,
   });
 
