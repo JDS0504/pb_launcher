@@ -3,65 +3,31 @@ import { useState, useMemo, type FC } from "react";
 import classNames from "classnames";
 import { Search, Activity, ExternalLink, AlertTriangle } from "lucide-react";
 import { Link } from "react-router-dom";
-import { serviceService, type ServiceDto } from "../../services/services";
-import { calculateUptimeForLogs } from "../../utils/uptime";
+import { serviceService, type ServiceUptimeViewDto } from "../../services/services";
 
 const PAGE_SIZE = 10;
 
-// Subcomponente de fila para renderizado de Uptime de forma diferida/optimizada por servicio
-const ServiceUptimeRow: FC<{ service: ServiceDto; rangeDays: 1 | 7 | 30; sinceDate: string }> = ({ service, rangeDays, sinceDate }) => {
-  const operationsQuery = useQuery({
-    queryKey: ["operation-logs", service.id, sinceDate],
-    queryFn: () => serviceService.fetchOperationLogs(service.id, sinceDate),
-    refetchInterval: 10000, // Menos frecuente para optimizar
-  });
-
-  const uptimeStat = useMemo(() => {
-    if (!operationsQuery.data) return null;
-    const stats = calculateUptimeForLogs(operationsQuery.data);
-    if (rangeDays === 1) return stats.last24h;
-    if (rangeDays === 7) return stats.last7d;
-    return stats.last30d;
-  }, [operationsQuery.data, rangeDays]);
-
-  const percent = uptimeStat?.percent ?? 100; // Asumir 100% si no hay logs
-
+// Renderizar indicador visual de Uptime e información de advertencia de riesgo
+const UptimePercentageBadge: FC<{ percent: number }> = ({ percent }) => {
   const getUptimeBadgeClass = (val: number) => {
-    if (val >= 99) return "badge-success";
-    if (val >= 95) return "badge-warning";
-    return "badge-error";
+    // Si es 100% de uptime, es un riesgo para nuestro caso porque no está haciendo el auto-sleep
+    if (val === 100) return "badge-warning border-warning/30 bg-warning/5 text-warning";
+    if (val >= 99) return "badge-success border-success/30 bg-success/5 text-success";
+    if (val >= 95) return "badge-info border-info/30 bg-info/5 text-info";
+    return "badge-error border-error/30 bg-error/5 text-error";
   };
 
   return (
-    <tr className="hover:bg-base-200/40">
-      <td className="font-bold text-primary truncate max-w-[150px]">
-        <Link to={`/services/${service.id}?section=uptime`} className="hover:underline flex items-center gap-1.5">
-          {service.name} <ExternalLink className="w-3 h-3 opacity-50" />
-        </Link>
-      </td>
-      <td>
-        <span
-          className={classNames("badge badge-xs", {
-            "badge-success": service.status === "running",
-            "badge-neutral": service.status === "stopped",
-          })}
-        >
-          {service.status}
+    <div className="flex items-center gap-1.5">
+      <span className={classNames("badge badge-sm font-mono font-bold px-2.5 py-1.5 border", getUptimeBadgeClass(percent))}>
+        {percent.toFixed(2)}%
+      </span>
+      {percent === 100 && (
+        <span className="text-[9px] font-bold text-warning uppercase tracking-wider scale-90 origin-left" title="Riesgo: 100% Uptime detectado (posible fallo de auto-sleep)">
+          ⚠️ Riesgo
         </span>
-      </td>
-      <td>
-        {operationsQuery.isLoading ? (
-          <span className="loading loading-ring loading-xs text-base-content/40"></span>
-        ) : (
-          <span className={classNames("badge badge-sm font-mono font-bold", getUptimeBadgeClass(percent))}>
-            {percent.toFixed(2)}%
-          </span>
-        )}
-      </td>
-      <td className="hidden md:table-cell text-xs font-mono text-base-content/65">
-        {uptimeStat ? `${Math.round(uptimeStat.activeMs / 3600000)}h active` : "—"}
-      </td>
-    </tr>
+      )}
+    </div>
   );
 };
 
@@ -70,35 +36,37 @@ export const UptimePage: FC = () => {
   const [rangeDays, setRangeDays] = useState<1 | 7 | 30>(7);
   const [page, setPage] = useState(0);
 
-  const servicesQuery = useQuery({
-    queryKey: ["services"],
-    queryFn: serviceService.fetchAllServices,
+  // Cargar datos consolidados desde la vista SQL
+  const uptimeQuery = useQuery({
+    queryKey: ["service-uptime-view"],
+    queryFn: serviceService.fetchServiceUptimeView,
     refetchInterval: 5000,
   });
-
-  const sinceDate = useMemo(() => {
-    const days = rangeDays;
-    return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-  }, [rangeDays]);
-
-  const filtered = useMemo(() => {
-    const servicesList = servicesQuery.data ?? [];
-    return servicesList.filter(
-      s =>
-        s.name.toLowerCase().includes(search.toLowerCase()) ||
-        s.id.toLowerCase().includes(search.toLowerCase())
-    );
-  }, [servicesQuery.data, search]);
-
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   const handleSearch = (val: string) => {
     setSearch(val);
     setPage(0);
   };
 
-  if (servicesQuery.isLoading) {
+  // Filtrar, ordenar y paginar la data en el frontend
+  const processedData = useMemo(() => {
+    const list = uptimeQuery.data ?? [];
+    
+    // 1. Filtrar según la búsqueda
+    const filtered = list.filter(
+      item =>
+        item.service_name.toLowerCase().includes(search.toLowerCase()) ||
+        item.id.toLowerCase().includes(search.toLowerCase())
+    );
+
+    // 2. Ordenar de mayor a menor según las horas activas de la última semana (active_hours_7d)
+    return filtered.sort((a, b) => b.active_hours_7d - a.active_hours_7d);
+  }, [uptimeQuery.data, search]);
+
+  const totalPages = Math.ceil(processedData.length / PAGE_SIZE);
+  const paginated = processedData.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  if (uptimeQuery.isLoading) {
     return (
       <div className="flex h-[50vh] w-full items-center justify-center">
         <span className="loading loading-ring loading-lg text-primary"></span>
@@ -112,10 +80,10 @@ export const UptimePage: FC = () => {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
         <div>
           <h2 className="text-xl font-semibold flex items-center gap-2">
-            <Activity className="w-5 h-5 text-primary animate-pulse" /> Uptime Monitor
+            <Activity className="w-5 h-5 text-primary animate-pulse" /> Monitor de Disponibilidad Global
           </h2>
           <p className="text-sm text-base-content/70">
-            Control de disponibilidad global y diagnóstico de servicios activos.
+            Línea de tiempo consolidada y diagnóstico automático de consumo.
           </p>
         </div>
 
@@ -150,13 +118,21 @@ export const UptimePage: FC = () => {
         </div>
       </div>
 
+      {/* Explicación de Riesgo de 100% Uptime */}
+      <div className="alert alert-warning border border-warning/20 bg-warning/5 text-warning-content/90 text-xs py-2 px-3 rounded-lg shadow-sm flex items-start gap-2">
+        <AlertTriangle className="w-4 h-4 shrink-0 text-warning" />
+        <div>
+          <span className="font-bold">Nota de Operación:</span> Los servicios están diseñados para suspenderse (auto-sleep) por inactividad. Un uptime continuo de 100% representa un riesgo potencial de consumo continuo de recursos.
+        </div>
+      </div>
+
       {/* Tabla Desglose */}
       <div className="card bg-base-100 border border-base-300 shadow-sm">
         <div className="card-body p-0 sm:p-4">
-          {filtered.length === 0 ? (
+          {processedData.length === 0 ? (
             <div className="text-sm text-base-content/70 py-8 text-center flex flex-col items-center justify-center gap-2">
               <AlertTriangle className="w-6 h-6 text-warning" />
-              <span>No se encontraron instancias de servicio creadas.</span>
+              <span>No se encontraron instancias de servicio registradas.</span>
             </div>
           ) : (
             <>
@@ -167,18 +143,46 @@ export const UptimePage: FC = () => {
                       <th>Instancia</th>
                       <th>Estado</th>
                       <th>Uptime ({rangeDays === 1 ? "24h" : `${rangeDays}d`})</th>
-                      <th className="hidden md:table-cell">Actividad</th>
+                      <th>Horas Activas</th>
+                      <th>Horas Inactivas</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {paginated.map(service => (
-                      <ServiceUptimeRow
-                        key={service.id}
-                        service={service}
-                        rangeDays={rangeDays}
-                        sinceDate={sinceDate}
-                      />
-                    ))}
+                    {paginated.map((item: ServiceUptimeViewDto) => {
+                      const percent = rangeDays === 1 ? item.uptime_24h : rangeDays === 7 ? item.uptime_7d : item.uptime_30d;
+                      const activeH = rangeDays === 1 ? item.active_hours_24h : rangeDays === 7 ? item.active_hours_7d : item.active_hours_30d;
+                      const inactiveH = rangeDays === 1 ? item.inactive_hours_24h : rangeDays === 7 ? item.inactive_hours_7d : item.inactive_hours_30d;
+
+                      return (
+                        <tr key={item.id} className="hover:bg-base-200/40">
+                          <td className="font-bold text-primary truncate max-w-[150px]">
+                            <Link to={`/services/${item.id}?section=uptime`} className="hover:underline flex items-center gap-1.5">
+                              {item.service_name} <ExternalLink className="w-3 h-3 opacity-50" />
+                            </Link>
+                          </td>
+                          <td>
+                            <span
+                              className={classNames("badge badge-xs", {
+                                "badge-success": item.service_status === "running",
+                                "badge-neutral": item.service_status === "stopped",
+                                "badge-primary": item.service_status === "sleeping",
+                              })}
+                            >
+                              {item.service_status}
+                            </span>
+                          </td>
+                          <td>
+                            <UptimePercentageBadge percent={percent} />
+                          </td>
+                          <td className="font-mono text-xs text-success font-semibold">
+                            {activeH.toFixed(1)}h
+                          </td>
+                          <td className="font-mono text-xs text-error font-semibold">
+                            {inactiveH.toFixed(1)}h
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
