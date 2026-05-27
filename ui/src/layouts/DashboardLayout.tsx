@@ -102,7 +102,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
               )}
             >
               <History className="w-4 h-4" />
-              <span className="hidden sm:inline">Operations</span>
+              <span className="hidden sm:inline">History</span>
             </NavLink>
 
             <NavLink
