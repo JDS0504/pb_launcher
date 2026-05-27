@@ -16,7 +16,7 @@ export const OperationsPage = () => {
 
   const operationsQuery = useQuery({
     queryKey: ["operation-logs", "global"],
-    queryFn: serviceService.fetchAllOperationLogs,
+    queryFn: () => serviceService.fetchAllOperationLogs(),
     refetchInterval: 3000,
   });
 
