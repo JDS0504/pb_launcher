@@ -108,103 +108,100 @@ export const StatusPage = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-3 gap-2 md:gap-6">
         {/* CPU Usage Card */}
-        <div className={classNames("card border bg-base-100 shadow-sm transition-all hover:shadow-md", getStatusColor(data.cpu.usage_percent))}>
-          <div className="card-body items-center text-center p-6">
-            <div className="flex items-center justify-between w-full mb-4">
-              <span className="font-bold uppercase tracking-wider text-xs text-base-content/60 flex items-center gap-1.5">
-                <Cpu className="w-4 h-4 text-primary" /> CPU
-              </span>
-              <span className="badge badge-sm font-semibold">{data.cpu.cores} Cores</span>
-            </div>
+        <div className={classNames("card border bg-base-100 shadow-sm transition-all hover:shadow-md p-3 md:p-4", getStatusColor(data.cpu.usage_percent))}>
+          <div className="flex flex-col md:flex-row items-center gap-3 md:gap-4 w-full">
             <div 
-              className={classNames("radial-progress", getRadialColorClass(data.cpu.usage_percent))}
+              className={classNames("radial-progress shrink-0", getRadialColorClass(data.cpu.usage_percent))}
               style={{
                 "--value": Math.round(data.cpu.usage_percent),
-                "--size": "10rem",
-                "--thickness": "12px",
+                "--size": "clamp(3.2rem, 10vw, 4.5rem)",
+                "--thickness": "clamp(4px, 1vw, 7px)",
               } as React.CSSProperties}
               role="progressbar"
             >
-              <div className="flex flex-col items-center">
-                <span className="text-3xl font-extrabold text-base-content">{Math.round(data.cpu.usage_percent)}%</span>
-                <span className="text-[10px] text-base-content/50 uppercase font-semibold">En uso</span>
-              </div>
+              <span className="text-xs md:text-sm font-extrabold text-base-content">{Math.round(data.cpu.usage_percent)}%</span>
             </div>
-            <div className="mt-4 text-xs font-semibold text-base-content/70">
-              Carga total del procesador
+            <div className="flex flex-col items-center md:items-start flex-1 min-w-0 w-full text-center md:text-left gap-1">
+              <div className="flex items-center justify-between w-full gap-2">
+                <span className="font-bold uppercase tracking-wider text-[10px] md:text-xs text-base-content/60 flex items-center gap-1">
+                  <Cpu className="w-3.5 h-3.5 text-primary" /> CPU
+                </span>
+                <span className="badge badge-xs md:badge-sm font-semibold">{data.cpu.cores} Cores</span>
+              </div>
+              <p className="text-[10px] md:text-xs text-base-content/65 truncate hidden md:block">
+                Carga total del procesador
+              </p>
             </div>
           </div>
         </div>
 
         {/* RAM Memory Card */}
-        <div className={classNames("card border bg-base-100 shadow-sm transition-all hover:shadow-md", getStatusColor(data.ram.usage_percent))}>
-          <div className="card-body items-center text-center p-6">
-            <div className="flex items-center justify-between w-full mb-4">
-              <span className="font-bold uppercase tracking-wider text-xs text-base-content/60 flex items-center gap-1.5">
-                <Activity className="w-4 h-4 text-secondary" /> RAM
-              </span>
-              <span className="badge badge-sm font-semibold">{formatBytes(data.ram.total_bytes, 0)} Total</span>
-            </div>
+        <div className={classNames("card border bg-base-100 shadow-sm transition-all hover:shadow-md p-3 md:p-4", getStatusColor(data.ram.usage_percent))}>
+          <div className="flex flex-col md:flex-row items-center gap-3 md:gap-4 w-full">
             <div 
-              className={classNames("radial-progress", getRadialColorClass(data.ram.usage_percent))}
+              className={classNames("radial-progress shrink-0", getRadialColorClass(data.ram.usage_percent))}
               style={{
                 "--value": Math.round(data.ram.usage_percent),
-                "--size": "10rem",
-                "--thickness": "12px",
+                "--size": "clamp(3.2rem, 10vw, 4.5rem)",
+                "--thickness": "clamp(4px, 1vw, 7px)",
               } as React.CSSProperties}
               role="progressbar"
             >
-              <div className="flex flex-col items-center">
-                <span className="text-3xl font-extrabold text-base-content">{Math.round(data.ram.usage_percent)}%</span>
-                <span className="text-[10px] text-base-content/50 uppercase font-semibold">En uso</span>
-              </div>
+              <span className="text-xs md:text-sm font-extrabold text-base-content">{Math.round(data.ram.usage_percent)}%</span>
             </div>
-            <div className="mt-4 text-xs text-base-content/75 flex flex-col gap-1 w-full font-medium">
-              <div className="flex justify-between border-b border-base-200 py-1">
-                <span>Usada:</span>
-                <span className="font-bold">{formatBytes(data.ram.used_bytes)}</span>
+            <div className="flex flex-col items-center md:items-start flex-1 min-w-0 w-full text-center md:text-left gap-1">
+              <div className="flex items-center justify-between w-full gap-2">
+                <span className="font-bold uppercase tracking-wider text-[10px] md:text-xs text-base-content/60 flex items-center gap-1">
+                  <Activity className="w-3.5 h-3.5 text-secondary" /> RAM
+                </span>
+                <span className="badge badge-xs md:badge-sm font-semibold">{formatBytes(data.ram.total_bytes, 0)}</span>
               </div>
-              <div className="flex justify-between py-1">
-                <span>Disponible:</span>
-                <span className="font-bold">{formatBytes(data.ram.free_bytes)}</span>
+              <div className="text-[9px] md:text-xs text-base-content/75 flex flex-col w-full font-medium">
+                <div className="flex justify-between border-b border-base-200/50 py-0.5">
+                  <span className="opacity-60">Usada:</span>
+                  <span className="font-bold">{formatBytes(data.ram.used_bytes, 1)}</span>
+                </div>
+                <div className="flex justify-between py-0.5">
+                  <span className="opacity-60">Libre:</span>
+                  <span className="font-bold">{formatBytes(data.ram.free_bytes, 1)}</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
         {/* Storage Disk Card */}
-        <div className={classNames("card border bg-base-100 shadow-sm transition-all hover:shadow-md", getStatusColor(data.disk.usage_percent))}>
-          <div className="card-body items-center text-center p-6">
-            <div className="flex items-center justify-between w-full mb-4">
-              <span className="font-bold uppercase tracking-wider text-xs text-base-content/60 flex items-center gap-1.5">
-                <HardDrive className="w-4 h-4 text-accent" /> Almacenamiento
-              </span>
-              <span className="badge badge-sm font-semibold">{formatBytes(data.disk.total_bytes, 0)} Total</span>
-            </div>
+        <div className={classNames("card border bg-base-100 shadow-sm transition-all hover:shadow-md p-3 md:p-4", getStatusColor(data.disk.usage_percent))}>
+          <div className="flex flex-col md:flex-row items-center gap-3 md:gap-4 w-full">
             <div 
-              className={classNames("radial-progress", getRadialColorClass(data.disk.usage_percent))}
+              className={classNames("radial-progress shrink-0", getRadialColorClass(data.disk.usage_percent))}
               style={{
                 "--value": Math.round(data.disk.usage_percent),
-                "--size": "10rem",
-                "--thickness": "12px",
+                "--size": "clamp(3.2rem, 10vw, 4.5rem)",
+                "--thickness": "clamp(4px, 1vw, 7px)",
               } as React.CSSProperties}
               role="progressbar"
             >
-              <div className="flex flex-col items-center">
-                <span className="text-3xl font-extrabold text-base-content">{Math.round(data.disk.usage_percent)}%</span>
-                <span className="text-[10px] text-base-content/50 uppercase font-semibold">Lleno</span>
-              </div>
+              <span className="text-xs md:text-sm font-extrabold text-base-content">{Math.round(data.disk.usage_percent)}%</span>
             </div>
-            <div className="mt-4 text-xs text-base-content/75 flex flex-col gap-1 w-full font-medium">
-              <div className="flex justify-between border-b border-base-200 py-1">
-                <span>Usado:</span>
-                <span className="font-bold">{formatBytes(data.disk.used_bytes)}</span>
+            <div className="flex flex-col items-center md:items-start flex-1 min-w-0 w-full text-center md:text-left gap-1">
+              <div className="flex items-center justify-between w-full gap-2">
+                <span className="font-bold uppercase tracking-wider text-[10px] md:text-xs text-base-content/60 flex items-center gap-1">
+                  <HardDrive className="w-3.5 h-3.5 text-accent" /> Disco
+                </span>
+                <span className="badge badge-xs md:badge-sm font-semibold">{formatBytes(data.disk.total_bytes, 0)}</span>
               </div>
-              <div className="flex justify-between py-1">
-                <span>Libre:</span>
-                <span className="font-bold">{formatBytes(data.disk.free_bytes)}</span>
+              <div className="text-[9px] md:text-xs text-base-content/75 flex flex-col w-full font-medium">
+                <div className="flex justify-between border-b border-base-200/50 py-0.5">
+                  <span className="opacity-60">Usado:</span>
+                  <span className="font-bold">{formatBytes(data.disk.used_bytes, 1)}</span>
+                </div>
+                <div className="flex justify-between py-0.5">
+                  <span className="opacity-60">Libre:</span>
+                  <span className="font-bold">{formatBytes(data.disk.free_bytes, 1)}</span>
+                </div>
               </div>
             </div>
           </div>
