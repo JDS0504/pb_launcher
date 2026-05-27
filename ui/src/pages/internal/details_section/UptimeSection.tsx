@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState, useMemo, type FC } from "react";
+import { useMemo, type FC } from "react";
 import classNames from "classnames";
-import { CheckCircle, AlertTriangle, XCircle, Clock } from "lucide-react";
+import { Clock } from "lucide-react";
 import { ErrorFallback } from "../../../components/helpers/ErrorFallback";
 import { serviceService } from "../../../services/services";
 import { calculateUptimeForLogs } from "../../../utils/uptime";
@@ -11,8 +11,6 @@ type Props = {
 };
 
 export const UptimeSection: FC<Props> = ({ service_id }) => {
-  const [rangeDays, setRangeDays] = useState<7 | 30>(7);
-
   const operationsQuery = useQuery({
     queryKey: ["operation-logs", service_id],
     queryFn: () => serviceService.fetchOperationLogs(service_id),
@@ -23,7 +21,7 @@ export const UptimeSection: FC<Props> = ({ service_id }) => {
     return calculateUptimeForLogs(operationsQuery.data ?? []);
   }, [operationsQuery.data]);
 
-  if (operationsQuery.isLoading) return <div className="p-4">Cargando métricas de uptime...</div>;
+  if (operationsQuery.isLoading) return <div className="p-4 text-xs text-base-content/60">Cargando métricas de uptime...</div>;
   if (operationsQuery.isError) {
     return (
       <ErrorFallback
@@ -33,86 +31,64 @@ export const UptimeSection: FC<Props> = ({ service_id }) => {
     );
   }
 
-  const selectedStat = rangeDays === 7 ? uptimeStats.last7d : uptimeStats.last30d;
-
   const getStatusColor = (percent: number) => {
     if (percent >= 99) return "text-success border-success/30 bg-success/5";
     if (percent >= 95) return "text-warning border-warning/30 bg-warning/5";
     return "text-error border-error/30 bg-error/5";
   };
 
-  const getStatusIcon = (percent: number) => {
-    if (percent >= 99) return <CheckCircle className="w-8 h-8 text-success" />;
-    if (percent >= 95) return <AlertTriangle className="w-8 h-8 text-warning" />;
-    return <XCircle className="w-8 h-8 text-error" />;
+  const getRadialColorClass = (percent: number) => {
+    if (percent >= 99) return "text-success";
+    if (percent >= 95) return "text-warning";
+    return "text-error";
+  };
+
+  const renderCard = (title: string, stats: { percent: number; activeMs: number; inactiveMs: number }) => {
+    const cardBgColor = getStatusColor(stats.percent);
+    const progressColor = getRadialColorClass(stats.percent);
+    return (
+      <div className={classNames("card border shadow-sm p-4 flex flex-col items-center justify-between text-center gap-4 transition-all hover:shadow-md", cardBgColor)}>
+        <span className="text-[10px] uppercase font-bold tracking-wider text-base-content/60">{title}</span>
+        
+        <div 
+          className={classNames("radial-progress shrink-0", progressColor)}
+          style={{
+            "--value": Math.round(stats.percent),
+            "--size": "5.5rem",
+            "--thickness": "8px",
+          } as React.CSSProperties}
+          role="progressbar"
+        >
+          <span className="text-xs md:text-sm font-extrabold text-base-content">{stats.percent.toFixed(1)}%</span>
+        </div>
+
+        <div className="text-[10px] font-mono w-full bg-base-200/50 p-2 rounded border border-base-200/30 leading-relaxed text-base-content/75">
+          <div className="flex justify-between border-b border-base-200/30 pb-0.5">
+            <span>Tiempo Activo:</span>
+            <span className="font-bold text-success">{(stats.activeMs / 3600000).toFixed(1)}h</span>
+          </div>
+          <div className="flex justify-between pt-0.5">
+            <span>Tiempo Inactivo:</span>
+            <span className="font-bold text-error">{(stats.inactiveMs / 3600000).toFixed(1)}h</span>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
     <div className="space-y-6">
-      {/* Selector de Rango */}
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-bold uppercase tracking-wider text-base-content/60">
-          Porcentaje de disponibilidad
+          Porcentaje de disponibilidad de la instancia
         </h4>
-        <div className="flex gap-1">
-          {([7, 30] as const).map(d => (
-            <button
-              key={d}
-              className={classNames("btn btn-xs", {
-                "btn-neutral": rangeDays === d,
-                "btn-ghost": rangeDays !== d,
-              })}
-              onClick={() => setRangeDays(d)}
-            >
-              Últimos {d} días
-            </button>
-          ))}
-        </div>
       </div>
 
-      {/* Tarjeta Principal de Disponibilidad */}
-      <div className={classNames("card border shadow-sm p-6 flex flex-col md:flex-row items-center gap-6", getStatusColor(selectedStat.percent))}>
-        <div className="shrink-0">{getStatusIcon(selectedStat.percent)}</div>
-        <div className="flex-grow text-center md:text-left">
-          <div className="text-4xl font-black text-base-content leading-none">
-            {selectedStat.percent.toFixed(2)}%
-          </div>
-          <p className="text-xs text-base-content/65 mt-1 font-medium">
-            Disponibilidad promedio en los últimos {rangeDays} días.
-          </p>
-        </div>
-        <div className="text-xs font-mono text-base-content/85 grid grid-cols-2 gap-x-4 gap-y-1 bg-base-200/50 p-3 rounded-lg border border-base-200/40">
-          <div>Tiempo Activo:</div>
-          <div className="font-bold text-success text-right">
-            {Math.round(selectedStat.activeMs / 3600000)}h
-          </div>
-          <div>Tiempo Inactivo:</div>
-          <div className="font-bold text-error text-right">
-            {Math.round(selectedStat.inactiveMs / 3600000)}h
-          </div>
-        </div>
-      </div>
-
-      {/* Historial de períodos */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="card border border-base-200 bg-base-100/50 p-4">
-          <span className="text-[10px] uppercase font-bold text-base-content/40">Últimas 24 Horas</span>
-          <span className="text-2xl font-extrabold text-base-content mt-1">
-            {uptimeStats.last24h.percent.toFixed(2)}%
-          </span>
-        </div>
-        <div className="card border border-base-200 bg-base-100/50 p-4">
-          <span className="text-[10px] uppercase font-bold text-base-content/40">Últimos 7 Días</span>
-          <span className="text-2xl font-extrabold text-base-content mt-1">
-            {uptimeStats.last7d.percent.toFixed(2)}%
-          </span>
-        </div>
-        <div className="card border border-base-200 bg-base-100/50 p-4">
-          <span className="text-[10px] uppercase font-bold text-base-content/40">Últimos 30 Días</span>
-          <span className="text-2xl font-extrabold text-base-content mt-1">
-            {uptimeStats.last30d.percent.toFixed(2)}%
-          </span>
-        </div>
+      {/* Grid de 3 Tarjetas de Disponibilidad */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {renderCard("Últimas 24 Horas", uptimeStats.last24h)}
+        {renderCard("Últimos 7 Días", uptimeStats.last7d)}
+        {renderCard("Últimos 30 Días", uptimeStats.last30d)}
       </div>
 
       {/* Resumen explicativo */}

@@ -1,6 +1,6 @@
 import { useMemo, type PropsWithChildren } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { History, Server, Waypoints, User, LogOut, Settings, Activity, FolderOpen } from "lucide-react";
+import { History, Server, Waypoints, User, LogOut, Settings, Activity, FolderOpen, Clock } from "lucide-react";
 import { useConfirmModal } from "../hooks/useConfirmModal";
 import { authService } from "../services/auth";
 import { useViewportHeight } from "../hooks/useViewportHeight";
@@ -18,6 +18,7 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
     if (pathname === "/proxy" || pathname.startsWith("/proxy/")) return "proxy";
     if (pathname === "/files" || pathname.startsWith("/files/")) return "files";
     if (pathname === "/operations") return "operations";
+    if (pathname === "/uptime") return "uptime";
     if (pathname === "/settings") return "settings";
     if (pathname === "/status") return "status";
     return "<none>";
@@ -103,6 +104,19 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
             >
               <History className="w-4 h-4" />
               <span className="hidden sm:inline">History</span>
+            </NavLink>
+
+            <NavLink
+              to="/uptime"
+              className={classNames(
+                "btn btn-sm btn-ghost shrink-0 gap-2 text-base-content transition-colors",
+                {
+                  "bg-base-200 text-primary": selected === "uptime",
+                },
+              )}
+            >
+              <Clock className="w-4 h-4" />
+              <span className="hidden sm:inline">Uptime</span>
             </NavLink>
 
             <NavLink
