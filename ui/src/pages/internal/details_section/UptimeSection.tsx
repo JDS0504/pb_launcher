@@ -4,6 +4,7 @@ import classNames from "classnames";
 import { CheckCircle, AlertTriangle, XCircle, Clock } from "lucide-react";
 import { ErrorFallback } from "../../../components/helpers/ErrorFallback";
 import { serviceService } from "../../../services/services";
+import { calculateUptimeForLogs } from "../../../utils/uptime";
 
 type Props = {
   service_id: string;
@@ -19,69 +20,7 @@ export const UptimeSection: FC<Props> = ({ service_id }) => {
   });
 
   const uptimeStats = useMemo(() => {
-    const logs = operationsQuery.data ?? [];
-    const successfulLogs = logs
-      .filter(l => l.status === "success")
-      .sort((a, b) => new Date(a.created).getTime() - new Date(b.created).getTime());
-
-    const now = new Date();
-    const calculateForDays = (days: number) => {
-      const msInPeriod = days * 24 * 60 * 60 * 1000;
-      const startTime = now.getTime() - msInPeriod;
-
-      // 1. Determinar el estado inicial al inicio del periodo
-      const logsBeforePeriod = successfulLogs.filter(
-        l => new Date(l.created).getTime() < startTime
-      );
-      let isCurrentlyActive = false;
-      if (logsBeforePeriod.length > 0) {
-        const lastLogBefore = logsBeforePeriod[logsBeforePeriod.length - 1];
-        isCurrentlyActive =
-          lastLogBefore.operation === "start" || lastLogBefore.operation === "wakeup";
-      }
-
-      // 2. Filtrar logs que caen dentro del periodo
-      const logsInPeriod = successfulLogs.filter(
-        l => new Date(l.created).getTime() >= startTime
-      );
-
-      let totalActiveMs = 0;
-      let lastEventTime = startTime;
-
-      for (const log of logsInPeriod) {
-        const logTime = new Date(log.created).getTime();
-        if (isCurrentlyActive) {
-          // El servicio estuvo activo desde lastEventTime hasta logTime
-          totalActiveMs += logTime - lastEventTime;
-        }
-        
-        // Cambiar estado según la operación
-        if (log.operation === "start" || log.operation === "wakeup") {
-          isCurrentlyActive = true;
-        } else if (log.operation === "stop" || log.operation === "sleep") {
-          isCurrentlyActive = false;
-        }
-        lastEventTime = logTime;
-      }
-
-      // Si terminó el bucle y sigue activo, sumar el tiempo restante hasta "ahora"
-      if (isCurrentlyActive) {
-        totalActiveMs += now.getTime() - lastEventTime;
-      }
-
-      const percent = Math.min(100, Math.max(0, (totalActiveMs / msInPeriod) * 100));
-      return {
-        percent,
-        activeMs: totalActiveMs,
-        inactiveMs: msInPeriod - totalActiveMs,
-      };
-    };
-
-    return {
-      last24h: calculateForDays(1),
-      last7d: calculateForDays(7),
-      last30d: calculateForDays(30),
-    };
+    return calculateUptimeForLogs(operationsQuery.data ?? []);
   }, [operationsQuery.data]);
 
   if (operationsQuery.isLoading) return <div className="p-4">Cargando métricas de uptime...</div>;

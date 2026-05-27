@@ -5,6 +5,7 @@ import { useState, useMemo } from "react";
 import { Search } from "lucide-react";
 import { ErrorFallback } from "../../components/helpers/ErrorFallback";
 import { serviceService } from "../../services/services";
+import { calculateUptimeForLogs } from "../../utils/uptime";
 
 const PAGE_SIZE = 25;
 
@@ -24,6 +25,10 @@ export const OperationsPage = () => {
     queryKey: ["services"],
     queryFn: serviceService.fetchAllServices,
   });
+
+  const globalUptime = useMemo(() => {
+    return calculateUptimeForLogs(operationsQuery.data ?? []);
+  }, [operationsQuery.data]);
 
   const filteredOperations = useMemo(() => {
     const ops = operationsQuery.data ?? [];
@@ -102,6 +107,28 @@ export const OperationsPage = () => {
               </button>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* Global Uptime Summary */}
+      <div className="grid grid-cols-3 gap-3 md:gap-6">
+        <div className="card border border-base-300 bg-base-100 shadow-sm p-3 md:p-4 flex flex-col items-center justify-center text-center">
+          <span className="text-[9px] md:text-[10px] uppercase font-bold text-base-content/40 tracking-wider">Uptime 24h</span>
+          <span className="text-sm md:text-xl font-black text-success mt-0.5">
+            {globalUptime.last24h.percent.toFixed(2)}%
+          </span>
+        </div>
+        <div className="card border border-base-300 bg-base-100 shadow-sm p-3 md:p-4 flex flex-col items-center justify-center text-center">
+          <span className="text-[9px] md:text-[10px] uppercase font-bold text-base-content/40 tracking-wider">Uptime 7d</span>
+          <span className="text-sm md:text-xl font-black text-success mt-0.5">
+            {globalUptime.last7d.percent.toFixed(2)}%
+          </span>
+        </div>
+        <div className="card border border-base-300 bg-base-100 shadow-sm p-3 md:p-4 flex flex-col items-center justify-center text-center">
+          <span className="text-[9px] md:text-[10px] uppercase font-bold text-base-content/40 tracking-wider">Uptime 30d</span>
+          <span className="text-sm md:text-xl font-black text-success mt-0.5">
+            {globalUptime.last30d.percent.toFixed(2)}%
+          </span>
         </div>
       </div>
 
