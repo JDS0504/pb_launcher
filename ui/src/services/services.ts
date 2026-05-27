@@ -289,4 +289,23 @@ export const serviceService = {
       sort: "-created",
     });
   },
+  fetchServiceUptimeView: async (): Promise<ServiceUptimeViewDto[]> => {
+    return pb.collection("service_uptime_view").getFullList<ServiceUptimeViewDto>();
+  },
 };
+
+export interface ServiceUptimeViewDto {
+  id: string;
+  service_name: string;
+  service_status: string;
+  uptime_24h: number;
+  active_hours_24h: number;
+  inactive_hours_24h: number;
+  uptime_7d: number;
+  active_hours_7d: number;
+  inactive_hours_7d: number;
+  uptime_30d: number;
+  active_hours_30d: number;
+  inactive_hours_30d: number;
+}
+

@@ -4,56 +4,85 @@ import classNames from "classnames";
 import { Clock } from "lucide-react";
 import { ErrorFallback } from "../../../components/helpers/ErrorFallback";
 import { serviceService } from "../../../services/services";
-import { calculateUptimeForLogs } from "../../../utils/uptime";
 
 type Props = {
   service_id: string;
   serviceCreated?: string;
 };
 
-export const UptimeSection: FC<Props> = ({ service_id, serviceCreated }) => {
-  const sinceDate = useMemo(() => {
-    return new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  }, []);
-
-  const operationsQuery = useQuery({
-    queryKey: ["operation-logs", service_id, sinceDate],
-    queryFn: () => serviceService.fetchOperationLogs(service_id, sinceDate),
+export const UptimeSection: FC<Props> = ({ service_id }) => {
+  // Consultar la vista de Uptime consolidada en lugar de procesar los logs en cliente
+  const uptimeQuery = useQuery({
+    queryKey: ["service-uptime-view"],
+    queryFn: serviceService.fetchServiceUptimeView,
     refetchInterval: 5000,
   });
 
   const uptimeStats = useMemo(() => {
-    return calculateUptimeForLogs(operationsQuery.data ?? [], undefined, undefined, serviceCreated);
-  }, [operationsQuery.data, serviceCreated]);
+    const list = uptimeQuery.data ?? [];
+    const item = list.find((s) => s.id === service_id);
+    if (!item) return null;
+    return {
+      last24h: {
+        percent: item.uptime_24h,
+        activeHours: item.active_hours_24h,
+        inactiveHours: item.inactive_hours_24h,
+      },
+      last7d: {
+        percent: item.uptime_7d,
+        activeHours: item.active_hours_7d,
+        inactiveHours: item.inactive_hours_7d,
+      },
+      last30d: {
+        percent: item.uptime_30d,
+        activeHours: item.active_hours_30d,
+        inactiveHours: item.inactive_hours_30d,
+      },
+    };
+  }, [uptimeQuery.data, service_id]);
 
-  if (operationsQuery.isLoading) return <div className="p-4 text-xs text-base-content/60">Cargando métricas de uptime...</div>;
-  if (operationsQuery.isError) {
+  if (uptimeQuery.isLoading) return <div className="p-4 text-xs text-base-content/60">Cargando métricas de uptime...</div>;
+  if (uptimeQuery.isError) {
     return (
       <ErrorFallback
-        error={operationsQuery.error}
-        onRetry={() => setTimeout(operationsQuery.refetch)}
+        error={uptimeQuery.error}
+        onRetry={() => setTimeout(uptimeQuery.refetch)}
       />
     );
   }
 
+  if (!uptimeStats) {
+    return <div className="p-4 text-xs text-base-content/60">No se encontraron métricas de disponibilidad para esta instancia.</div>;
+  }
+
   const getStatusColor = (percent: number) => {
+    // 100% de uptime continuo es un riesgo (fallo de auto-sleep)
+    if (percent === 100) return "text-warning border-warning/30 bg-warning/5";
     if (percent >= 99) return "text-success border-success/30 bg-success/5";
-    if (percent >= 95) return "text-warning border-warning/30 bg-warning/5";
+    if (percent >= 95) return "text-info border-info/30 bg-info/5";
     return "text-error border-error/30 bg-error/5";
   };
 
   const getRadialColorClass = (percent: number) => {
+    if (percent === 100) return "text-warning";
     if (percent >= 99) return "text-success";
-    if (percent >= 95) return "text-warning";
+    if (percent >= 95) return "text-info";
     return "text-error";
   };
 
-  const renderCard = (title: string, stats: { percent: number; activeMs: number; inactiveMs: number }) => {
+  const renderCard = (title: string, stats: { percent: number; activeHours: number; inactiveHours: number }) => {
     const cardBgColor = getStatusColor(stats.percent);
     const progressColor = getRadialColorClass(stats.percent);
     return (
       <div className={classNames("card border shadow-sm p-4 flex flex-col items-center justify-between text-center gap-4 transition-all hover:shadow-md", cardBgColor)}>
-        <span className="text-[10px] uppercase font-bold tracking-wider text-base-content/60">{title}</span>
+        <div className="flex flex-col items-center gap-0.5">
+          <span className="text-[10px] uppercase font-bold tracking-wider text-base-content/60">{title}</span>
+          {stats.percent === 100 && (
+            <span className="badge badge-xs badge-warning border-warning/20 text-[8px] font-extrabold px-1 py-0.5 mt-0.5">
+              ⚠️ RIESGO
+            </span>
+          )}
+        </div>
         
         <div 
           className={classNames("radial-progress shrink-0", progressColor)}
@@ -70,11 +99,11 @@ export const UptimeSection: FC<Props> = ({ service_id, serviceCreated }) => {
         <div className="text-[10px] font-mono w-full bg-base-200/50 p-2 rounded border border-base-200/30 leading-relaxed text-base-content/75">
           <div className="flex justify-between border-b border-base-200/30 pb-0.5">
             <span>Tiempo Activo:</span>
-            <span className="font-bold text-success">{(stats.activeMs / 3600000).toFixed(1)}h</span>
+            <span className="font-bold text-success">{stats.activeHours.toFixed(1)}h</span>
           </div>
           <div className="flex justify-between pt-0.5">
             <span>Tiempo Inactivo:</span>
-            <span className="font-bold text-error">{(stats.inactiveMs / 3600000).toFixed(1)}h</span>
+            <span className="font-bold text-error">{stats.inactiveHours.toFixed(1)}h</span>
           </div>
         </div>
       </div>
@@ -100,8 +129,8 @@ export const UptimeSection: FC<Props> = ({ service_id, serviceCreated }) => {
       <div className="text-xs text-base-content/60 flex items-start gap-2 bg-base-200/30 p-3 rounded-lg border border-base-300/40">
         <Clock className="w-4 h-4 shrink-0 mt-0.5" />
         <p>
-          El cálculo de uptime se basa en el registro de eventos exitosos de la instancia. Las operaciones de tipo
-          <span className="font-bold text-primary mx-1">start</span> y <span className="font-bold text-primary mr-1">wakeup</span> indican estado encendido, mientras que las operaciones <span className="font-bold text-primary mx-1">stop</span> y <span className="font-bold text-primary mr-1">sleep</span> representan estado apagado.
+          El cálculo de uptime se lee directamente del motor analítico de base de datos SQL. 
+          Un uptime continuo del <span className="font-bold text-warning">100.0%</span> representa un riesgo potencial en nuestro entorno de microservicios suspensibles, ya que indica que el auto-sleep del servicio no se ha activado.
         </p>
       </div>
     </div>
