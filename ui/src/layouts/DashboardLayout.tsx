@@ -32,10 +32,6 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
     await authService.logout();
   };
 
-  const closeDropdown = () => {
-    (document.activeElement as HTMLElement)?.blur?.();
-  };
-
   return (
     <div style={{ height }} className="bg-base-200 flex flex-col items-center">
       <header
@@ -131,18 +127,6 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
               tabIndex={0}
               className="dropdown-content menu p-2 shadow bg-base-100 rounded-box w-48 mt-2 z-[1]"
             >
-              <li>
-                <NavLink to="/status" onClick={closeDropdown}>
-                  <Activity className="w-4 h-4" />
-                  Status
-                </NavLink>
-              </li>
-              <li>
-                <NavLink to="/settings" onClick={closeDropdown}>
-                  <Settings className="w-4 h-4" />
-                  Settings
-                </NavLink>
-              </li>
               <li>
                 <button onClick={logout}>
                   <LogOut className="w-4 h-4" />
