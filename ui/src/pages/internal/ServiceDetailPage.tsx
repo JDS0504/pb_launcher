@@ -11,6 +11,7 @@ import { ServiceLogsSection } from "./details_section/ServiceLogsSection";
 import { OperationHistorySection } from "./details_section/OperationHistorySection";
 import { FileManagerSection } from "./details_section/FileManagerSection";
 import { SnapshotsSection } from "./details_section/SnapshotsSection";
+import { UptimeSection } from "./details_section/UptimeSection";
 
 export const ServiceDetailPage = () => {
   const { service_id } = useParams<{ service_id: string }>();
@@ -133,6 +134,11 @@ export const ServiceDetailPage = () => {
             </button>
           </li>
           <li>
+            <button className={menuItemClass("uptime")} onClick={() => handleSectionChange("uptime")}>
+              Uptime
+            </button>
+          </li>
+          <li>
             <button className={menuItemClass("files")} onClick={() => handleSectionChange("files")}>
               Files
             </button>
@@ -178,6 +184,15 @@ export const ServiceDetailPage = () => {
             <h3 className="text-lg font-semibold mb-6">History</h3>
             <div className="rounded-box bg-base-200 p-3 sm:p-4 min-w-0">
               <OperationHistorySection service_id={service_id} />
+            </div>
+          </div>
+        )}
+
+        {activeSection === "uptime" && (
+          <div className="mb-8 min-w-0">
+            <h3 className="text-lg font-semibold mb-6">Uptime</h3>
+            <div className="rounded-box bg-base-200 p-3 sm:p-4 min-w-0">
+              <UptimeSection service_id={service_id} />
             </div>
           </div>
         )}
