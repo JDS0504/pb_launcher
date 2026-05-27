@@ -3,26 +3,26 @@ import { useState, useMemo, type FC } from "react";
 import classNames from "classnames";
 import { Search, Activity, ExternalLink, AlertTriangle } from "lucide-react";
 import { Link } from "react-router-dom";
-import { serviceService, type ServiceDto } from "../../services/services";
+import { serviceService, type ServiceDto, type OperationLog } from "../../services/services";
 import { calculateUptimeForLogs } from "../../utils/uptime";
 
 const PAGE_SIZE = 10;
 
 // Subcomponente de fila para renderizado de Uptime de forma diferida/optimizada por servicio
-const ServiceUptimeRow: FC<{ service: ServiceDto; rangeDays: 1 | 7 | 30; sinceDate: string }> = ({ service, rangeDays, sinceDate }) => {
-  const operationsQuery = useQuery({
-    queryKey: ["operation-logs", service.id, sinceDate],
-    queryFn: () => serviceService.fetchOperationLogs(service.id, sinceDate),
-    refetchInterval: 10000, // Menos frecuente para optimizar
-  });
+interface RowProps {
+  service: ServiceDto;
+  rangeDays: 1 | 7 | 30;
+  logs: OperationLog[];
+  isLoading: boolean;
+}
 
+const ServiceUptimeRow: FC<RowProps> = ({ service, rangeDays, logs, isLoading }) => {
   const uptimeStat = useMemo(() => {
-    if (!operationsQuery.data) return null;
-    const stats = calculateUptimeForLogs(operationsQuery.data, undefined, undefined, service.created);
+    const stats = calculateUptimeForLogs(logs, undefined, undefined, service.created);
     if (rangeDays === 1) return stats.last24h;
     if (rangeDays === 7) return stats.last7d;
     return stats.last30d;
-  }, [operationsQuery.data, rangeDays, service.created]);
+  }, [logs, rangeDays, service.created]);
 
   const percent = uptimeStat?.percent ?? 0; // Asumir 0% si no hay logs/operaciones
 
@@ -50,7 +50,7 @@ const ServiceUptimeRow: FC<{ service: ServiceDto; rangeDays: 1 | 7 | 30; sinceDa
         </span>
       </td>
       <td>
-        {operationsQuery.isLoading ? (
+        {isLoading ? (
           <span className="loading loading-ring loading-xs text-base-content/40"></span>
         ) : (
           <span className={classNames("badge badge-sm font-mono font-bold", getUptimeBadgeClass(percent))}>
@@ -104,6 +104,19 @@ export const UptimePage: FC = () => {
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  const serviceIdsFilter = useMemo(() => {
+    if (paginated.length === 0) return "";
+    const idsQuery = paginated.map(s => `service="${s.id}"`).join("||");
+    return `(${idsQuery})&&created>="${sinceDate}"`;
+  }, [paginated, sinceDate]);
+
+  const operationsQuery = useQuery({
+    queryKey: ["operation-logs-batch", serviceIdsFilter],
+    queryFn: () => serviceService.fetchAllOperationLogs(serviceIdsFilter),
+    enabled: serviceIdsFilter !== "",
+    refetchInterval: 10000,
+  });
 
   const handleSearch = (val: string) => {
     setSearch(val);
@@ -184,14 +197,20 @@ export const UptimePage: FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {paginated.map(service => (
-                      <ServiceUptimeRow
-                        key={service.id}
-                        service={service}
-                        rangeDays={rangeDays}
-                        sinceDate={sinceDate}
-                      />
-                    ))}
+                    {paginated.map(service => {
+                      const serviceLogs = (operationsQuery.data ?? []).filter(
+                        l => l.service === service.id
+                      );
+                      return (
+                        <ServiceUptimeRow
+                          key={service.id}
+                          service={service}
+                          rangeDays={rangeDays}
+                          logs={serviceLogs}
+                          isLoading={operationsQuery.isLoading}
+                        />
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

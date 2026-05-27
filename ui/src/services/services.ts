@@ -280,8 +280,9 @@ export const serviceService = {
       sort: "-created",
     });
   },
-  fetchAllOperationLogs: async (): Promise<OperationLog[]> => {
+  fetchAllOperationLogs: async (filter?: string): Promise<OperationLog[]> => {
     return pb.collection(OPERATION_LOGS_COLLECTION).getFullList<OperationLog>({
+      filter: filter,
       expand: "service",
       fields:
         "id,service,operation,status,message,metadata,created,expand.service.id,expand.service.name",
