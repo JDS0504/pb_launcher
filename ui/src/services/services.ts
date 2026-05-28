@@ -26,12 +26,14 @@ interface _Service {
   ip: string;
   port: number;
 
-  created: string;
-
   repository: string;
   repository_id: string;
   release_id: string;
   release_version: string;
+  cpu_quota?: string;
+  memory_limit?: string;
+
+  created: string;
 
   // expand
   expand: {
@@ -82,12 +84,16 @@ export const serviceService = {
     name: string;
     release: string;
     restart_policy: string;
+    cpu_quota?: string;
+    memory_limit?: string;
   }) => {
     const services = pb.collection(SERVICES_COLLECTION);
     return await services.create({
       name: data.name,
       release: data.release,
       restart_policy: data.restart_policy,
+      cpu_quota: data.cpu_quota,
+      memory_limit: data.memory_limit,
     });
   },
   updateServiceInstance: async (data: {
@@ -95,12 +101,16 @@ export const serviceService = {
     name: string;
     release: string;
     restart_policy: string;
+    cpu_quota?: string;
+    memory_limit?: string;
   }) => {
     const services = pb.collection(SERVICES_COLLECTION);
     await services.update(data.id, {
       name: data.name,
       release: data.release,
       restart_policy: data.restart_policy,
+      cpu_quota: data.cpu_quota,
+      memory_limit: data.memory_limit,
     });
   },
 
@@ -118,6 +128,8 @@ export const serviceService = {
     "port",
     "created",
     "release",
+    "cpu_quota",
+    "memory_limit",
         "expand.release.id",
         "expand.release.version",
         "expand.release.expand.repository.id",
@@ -161,6 +173,8 @@ export const serviceService = {
       release_id: service.expand.release.id,
       release_version: service.expand.release.version,
       domains: domains,
+      cpu_quota: service.cpu_quota,
+      memory_limit: service.memory_limit,
     };
   },
 
@@ -203,6 +217,8 @@ export const serviceService = {
         domains: domains.filter(
           d => d.service === s.id,
         ),
+        cpu_quota: s.cpu_quota,
+        memory_limit: s.memory_limit,
       }),
     );
   },

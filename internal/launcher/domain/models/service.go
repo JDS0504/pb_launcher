@@ -36,6 +36,8 @@ type Service struct {
 	Deleted           string
 	IP                string
 	Port              string
+	CpuQuota          string
+	MemoryLimit       string
 }
 
 type Release struct {

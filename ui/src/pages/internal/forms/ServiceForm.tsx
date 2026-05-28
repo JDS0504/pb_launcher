@@ -33,6 +33,8 @@ const schema = object({
   instanceSource: stringRequired(), // Source for the instance (template, version, etc.)
   restartPolicy: stringRequired(), // Restart policy: "no" or "on-failure"
   superuserPassword: string().optional(),
+  cpuQuota: string().optional(),
+  memoryLimit: string().optional(),
 });
 
 type Props = {
@@ -54,6 +56,8 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
       instanceSource: record?.release_id ?? savedDefaults.instanceSource ?? "",
       restartPolicy: record?.restart_policy ?? savedDefaults.restartPolicy ?? "on-failure",
       superuserPassword: savedDefaults.superuserPassword ?? "",
+      cpuQuota: record?.cpu_quota ?? savedDefaults.cpuQuota ?? "default",
+      memoryLimit: record?.memory_limit ?? savedDefaults.memoryLimit ?? "default",
     },
   });
   const selectedRepository = form.watch("repository");
@@ -108,11 +112,15 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
       release: string;
       restart_policy: string;
       superuserPassword?: string;
+      cpu_quota?: string;
+      memory_limit?: string;
     }) => {
       const newService = await serviceService.createServiceInstance({
         name: data.name,
         release: data.release,
         restart_policy: data.restart_policy,
+        cpu_quota: data.cpu_quota,
+        memory_limit: data.memory_limit,
       });
 
       if (data.superuserPassword && newService?.id) {
@@ -147,7 +155,7 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
   });
 
   const handleFormSubmit = form.handleSubmit(
-    async ({ instanceSource, name, restartPolicy, superuserPassword }) => {
+    async ({ instanceSource, name, restartPolicy, superuserPassword, cpuQuota, memoryLimit }) => {
       if (record == null) {
         if (!superuserPassword) {
           form.setError("superuserPassword", {
@@ -165,6 +173,8 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
               instanceSource,
               restartPolicy,
               superuserPassword,
+              cpuQuota,
+              memoryLimit,
             }),
           );
         } catch (e) {
@@ -176,6 +186,8 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
           release: instanceSource,
           restart_policy: restartPolicy,
           superuserPassword,
+          cpu_quota: cpuQuota,
+          memory_limit: memoryLimit,
         });
       } else {
         updateInstanceMutation.mutate({
@@ -183,6 +195,8 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
           name,
           release: instanceSource,
           restart_policy: restartPolicy,
+          cpu_quota: cpuQuota,
+          memory_limit: memoryLimit,
         });
       }
     },
@@ -240,6 +254,41 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
           registration={form.register("restartPolicy")}
           autoComplete="off"
           error={form.formState.errors.restartPolicy}
+        />
+
+        <SelectField
+          label="Límite de CPU"
+          options={[
+            { label: "Predeterminado del Servidor", value: "default" },
+            { label: "10% de CPU del Servidor", value: "10%" },
+            { label: "20% de CPU del Servidor", value: "20%" },
+            { label: "30% de CPU del Servidor", value: "30%" },
+            { label: "50% de CPU del Servidor", value: "50%" },
+            { label: "80% de CPU del Servidor", value: "80%" },
+            { label: "100% de CPU del Servidor (1 vCPU)", value: "100%" },
+            { label: "Sin límite (Uso libre)", value: "none" },
+          ]}
+          registration={form.register("cpuQuota")}
+          autoComplete="off"
+          error={form.formState.errors.cpuQuota}
+        />
+
+        <SelectField
+          label="Límite de RAM"
+          options={[
+            { label: "Predeterminado del Servidor", value: "default" },
+            { label: "128 MB", value: "128M" },
+            { label: "256 MB", value: "256M" },
+            { label: "384 MB", value: "384M" },
+            { label: "512 MB", value: "512M" },
+            { label: "768 MB", value: "768M" },
+            { label: "1024 MB (1 GB)", value: "1024M" },
+            { label: "2048 MB (2 GB)", value: "2048M" },
+            { label: "Sin límite (Uso libre)", value: "none" },
+          ]}
+          registration={form.register("memoryLimit")}
+          autoComplete="off"
+          error={form.formState.errors.memoryLimit}
         />
         <div
           className={classNames("mt-8", {

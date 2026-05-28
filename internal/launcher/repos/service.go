@@ -43,7 +43,9 @@ func (s *ServiceRepository) services(ids ...string) ([]models.Service, error) {
 			s.boot_user_password,
 			s.deleted,
 			s.ip,
-			s.port
+			s.port,
+			s.cpu_quota,
+			s.memory_limit
 		from services s
 		inner join releases r on s."release" = r.id
 		inner join repositories rpo on rpo.id = r.repository`
@@ -82,6 +84,8 @@ func (s *ServiceRepository) services(ids ...string) ([]models.Service, error) {
 		deleted, _ := row["deleted"]
 		ip, _ := row["ip"]
 		port, _ := row["port"]
+		cpuQuota, _ := row["cpu_quota"]
+		memoryLimit, _ := row["memory_limit"]
 
 		ExecFilePattern, err := regexp.Compile(execPattern.String)
 		if err != nil {
@@ -104,6 +108,8 @@ func (s *ServiceRepository) services(ids ...string) ([]models.Service, error) {
 			Deleted:           deleted.String,
 			IP:                ip.String,
 			Port:              port.String,
+			CpuQuota:          cpuQuota.String,
+			MemoryLimit:       memoryLimit.String,
 		})
 	}
 

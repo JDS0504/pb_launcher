@@ -17,6 +17,7 @@ import (
 	download "pb_launcher/internal/download/domain"
 	"pb_launcher/internal/launcher/domain/models"
 	"pb_launcher/internal/launcher/domain/repositories"
+	"runtime"
 	"pb_launcher/internal/launcher/domain/services"
 	"pb_launcher/internal/operationlog"
 	"pb_launcher/utils/iouitls"
@@ -308,6 +309,21 @@ func (lm *LauncherManager) startServiceLocked(ctx context.Context, service model
 		lm.buildStdoutHandler(service.ID),
 	)
 
+	// Configurar límites de recursos dinámicos por instancia con fallback global
+	cpuQuota := lm.cpuQuota
+	if service.CpuQuota != "" && !strings.EqualFold(service.CpuQuota, "default") {
+		cpuQuota = service.CpuQuota
+	}
+	realCpuQuota := calculatePortabilityCpuQuota(cpuQuota)
+
+	memoryLimit := lm.memoryLimit
+	if service.MemoryLimit != "" && !strings.EqualFold(service.MemoryLimit, "default") {
+		memoryLimit = service.MemoryLimit
+	}
+	if strings.EqualFold(memoryLimit, "none") || strings.EqualFold(memoryLimit, "disabled") {
+		memoryLimit = ""
+	}
+
 	newProcess := process.New(
 		service.ID,
 		executablePath,
@@ -315,8 +331,8 @@ func (lm *LauncherManager) startServiceLocked(ctx context.Context, service model
 		process.WithErrorChan(lm.errChan),
 		process.WithStdout(stdout),
 		process.WithStderr(lm.lstore.NewWriter(service.ID, logstore.StreamStderr)),
-		process.WithCpuQuota(lm.cpuQuota),
-		process.WithMemoryLimit(lm.memoryLimit),
+		process.WithCpuQuota(realCpuQuota),
+		process.WithMemoryLimit(memoryLimit),
 	)
 
 	if err := newProcess.Start(); err != nil {
@@ -782,4 +798,23 @@ func (lm *LauncherManager) FindBinaryPath(ctx context.Context, service models.Se
 func (lm *LauncherManager) BuildServiceArgs(serviceID string) ([]string, error) {
 	return lm.buildArgs(serviceID)
 }
+
+// calculatePortabilityCpuQuota calcula la cuota cgroups de CPU dinámicamente en base a las vCPUs disponibles del host.
+func calculatePortabilityCpuQuota(quotaStr string) string {
+	quotaStr = strings.TrimSpace(quotaStr)
+	if quotaStr == "" || strings.EqualFold(quotaStr, "none") || strings.EqualFold(quotaStr, "disabled") {
+		return ""
+	}
+	if strings.HasSuffix(quotaStr, "%") {
+		percentVal, err := strconv.ParseFloat(strings.TrimSuffix(quotaStr, "%"), 64)
+		if err == nil && percentVal > 0 {
+			// runtime.NumCPU() devuelve el número de CPUs lógicas (vCPUs) en el sistema actual.
+			numCpus := runtime.NumCPU()
+			calculatedPercent := float64(numCpus) * percentVal
+			return fmt.Sprintf("%.0f%%", calculatedPercent)
+		}
+	}
+	return quotaStr
+}
+
 
