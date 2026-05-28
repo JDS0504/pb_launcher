@@ -393,19 +393,10 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
 
           {/* Panel de acciones por lotes */}
           {selectedFilePaths.size > 0 && (
-            <div className="p-2 border-b border-base-300 bg-error/10 flex justify-between items-center shrink-0">
-              <span className="text-[10px] font-semibold text-error">
-                {selectedFilePaths.size} seleccionados
+            <div className="p-2 border-b border-base-300 bg-base-300/50 flex justify-between items-center shrink-0">
+              <span className="text-[10px] font-semibold text-base-content/75">
+                {selectedFilePaths.size} seleccionados (acciones en ventana derecha)
               </span>
-              <button
-                type="button"
-                onClick={handleBulkDelete}
-                className="btn btn-xs btn-error gap-1 text-[10px]"
-                disabled={!isStopped || bulkDeleteMutation.isPending}
-              >
-                <Trash2 className="w-3 h-3" />
-                Eliminar Selección
-              </button>
             </div>
           )}
 
@@ -523,15 +514,39 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
         {/* Editor de Código (Col 8) */}
         <div className="lg:col-span-8 flex flex-col bg-base-200 border border-base-300 rounded-xl overflow-hidden h-full min-h-0">
           {selectedPath == null ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-base-content/60 space-y-2">
-              <FolderOpen className="w-12 h-12 stroke-1 text-base-content/40" />
-              <p className="text-sm">Selecciona un archivo del explorador lateral para comenzar a visualizarlo o editarlo.</p>
-              {!isStopped && (
-                <div className="alert alert-warning text-xs max-w-md mt-2">
-                  Nota: El servicio está encendido. Si necesitas modificar, crear o borrar archivos, deberás apagarlo temporalmente.
+            selectedFilePaths.size > 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-base-content/60 space-y-4">
+                <Trash2 className="w-12 h-12 stroke-1 text-error/80" />
+                <div className="space-y-1">
+                  <p className="font-bold text-sm text-base-content">Selección múltiple activa ({selectedFilePaths.size} elementos)</p>
+                  <p className="text-xs max-w-xs text-base-content/60">Haz clic en el botón inferior para eliminar de forma permanente la selección.</p>
                 </div>
-              )}
-            </div>
+                <button
+                  type="button"
+                  onClick={handleBulkDelete}
+                  className="btn btn-sm btn-error gap-1.5 font-semibold"
+                  disabled={!isStopped || bulkDeleteMutation.isPending}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Eliminar Selección ({selectedFilePaths.size})
+                </button>
+                {!isStopped && (
+                  <div className="alert alert-warning text-xs max-w-md mt-2 justify-center">
+                    El servicio debe estar detenido para poder realizar eliminaciones.
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-base-content/60 space-y-2">
+                <FolderOpen className="w-12 h-12 stroke-1 text-base-content/40" />
+                <p className="text-sm">Selecciona un archivo del explorador lateral para comenzar a visualizarlo o editarlo.</p>
+                {!isStopped && (
+                  <div className="alert alert-warning text-xs max-w-md mt-2">
+                    Nota: El servicio está encendido. Si necesitas modificar, crear o borrar archivos, deberás apagarlo temporalmente.
+                  </div>
+                )}
+              </div>
+            )
           ) : (
             <div className="flex-grow flex flex-col min-h-0">
               {/* Encabezado del Editor */}
@@ -615,6 +630,18 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
                   >
                     Renombrar
                   </button>
+
+                  {selectedFilePaths.size > 0 && (
+                    <button
+                      type="button"
+                      className="btn btn-xs btn-error gap-1 animate-pulse"
+                      disabled={!isStopped || bulkDeleteMutation.isPending}
+                      onClick={handleBulkDelete}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      Borrar Selección ({selectedFilePaths.size})
+                    </button>
+                  )}
 
                   <button
                     type="button"
