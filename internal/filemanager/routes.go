@@ -49,7 +49,7 @@ func RegisterRoutes(app *pocketbase.PocketBase, manager *Manager) {
 		}).Bind(apis.RequireAuth())
 
 		se.Router.POST("/x-api/services/{service_id}/files/upload", func(e *core.RequestEvent) error {
-			if err := e.Request.ParseMultipartForm(50 << 20); err != nil {
+			if err := e.Request.ParseMultipartForm(200 << 20); err != nil {
 				return e.BadRequestError("failed to parse multipart form", err)
 			}
 
