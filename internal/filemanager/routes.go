@@ -88,7 +88,7 @@ func RegisterRoutes(app *pocketbase.PocketBase, manager *Manager) {
 			}
 
 			return e.NoContent(http.StatusOK)
-		}).Bind(apis.RequireAuth())
+		}).Bind(apis.RequireAuth(), apis.BodyLimit(200 << 20))
 
 		se.Router.GET("/x-api/services/{service_id}/files/download", func(e *core.RequestEvent) error {
 			filePath := strings.TrimSpace(e.Request.URL.Query().Get("path"))
