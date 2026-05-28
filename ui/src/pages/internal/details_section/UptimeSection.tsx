@@ -11,16 +11,16 @@ type Props = {
 };
 
 export const UptimeSection: FC<Props> = ({ service_id }) => {
-  // Consultar la vista de Uptime consolidada en lugar de procesar los logs en cliente
+  // Consultar la métrica de Uptime de la instancia específica en lugar de toda la lista
   const uptimeQuery = useQuery({
-    queryKey: ["service-uptime-view"],
-    queryFn: serviceService.fetchServiceUptimeView,
+    queryKey: ["service-uptime", service_id],
+    queryFn: () => serviceService.fetchServiceUptimeByID(service_id),
     refetchInterval: 5000,
+    enabled: !!service_id,
   });
 
   const uptimeStats = useMemo(() => {
-    const list = uptimeQuery.data ?? [];
-    const item = list.find((s) => s.id === service_id);
+    const item = uptimeQuery.data;
     if (!item) return null;
     return {
       last24h: {
@@ -39,7 +39,7 @@ export const UptimeSection: FC<Props> = ({ service_id }) => {
         inactiveHours: item.inactive_hours_30d,
       },
     };
-  }, [uptimeQuery.data, service_id]);
+  }, [uptimeQuery.data]);
 
   if (uptimeQuery.isLoading) return <div className="p-4 text-xs text-base-content/60">Cargando métricas de uptime...</div>;
   if (uptimeQuery.isError) {

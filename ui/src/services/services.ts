@@ -292,6 +292,9 @@ export const serviceService = {
   fetchServiceUptimeView: async (): Promise<ServiceUptimeViewDto[]> => {
     return pb.collection("service_uptime_view").getFullList<ServiceUptimeViewDto>();
   },
+  fetchServiceUptimeByID: async (serviceID: string): Promise<ServiceUptimeViewDto> => {
+    return pb.collection("service_uptime_view").getOne<ServiceUptimeViewDto>(serviceID);
+  },
 };
 
 export interface ServiceUptimeViewDto {
