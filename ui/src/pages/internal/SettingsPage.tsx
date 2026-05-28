@@ -79,12 +79,8 @@ export const SettingsPage = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold">Settings</h2>
-        <p className="text-sm text-base-content/70">
-          Manage global launcher configuration.
-        </p>
-      </div>
+      {/* Cabecera (Sólo título sin iconos en móvil, oculto en PC) */}
+      <h2 className="text-xl font-bold md:hidden block">Settings</h2>
 
       <div className="card bg-base-100 border border-base-300 shadow-sm">
         <div className="card-body gap-4">

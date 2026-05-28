@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo, type FC } from "react";
 import classNames from "classnames";
-import { Search, Activity, ExternalLink, AlertTriangle } from "lucide-react";
+import { Search, ExternalLink, AlertTriangle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { serviceService, type ServiceUptimeViewDto } from "../../services/services";
 
@@ -80,53 +80,36 @@ export const UptimePage: FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Cabecera */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
-        <div>
-          <h2 className="text-xl font-semibold flex items-center gap-2">
-            <Activity className="w-5 h-5 text-primary animate-pulse" /> Monitor de Disponibilidad Global
-          </h2>
-          <p className="text-sm text-base-content/70">
-            Línea de tiempo consolidada y diagnóstico automático de consumo.
-          </p>
+      {/* Cabecera (Sólo título sin iconos en móvil, oculto en PC) */}
+      <h2 className="text-xl font-bold md:hidden block">Uptime</h2>
+
+      <div className="flex flex-row items-center justify-between gap-2 w-full">
+        {/* Buscador + Rango alineados en la misma fila */}
+        <div className="relative flex-1 sm:max-w-xs">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40" />
+          <input
+            id="uptime-global-search"
+            type="search"
+            className="input input-bordered input-sm w-full pl-9"
+            placeholder="Buscar servicio..."
+            value={search}
+            onChange={e => handleSearch(e.target.value)}
+          />
         </div>
 
-        {/* Filtros */}
-        <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto items-stretch sm:items-center">
-          <div className="relative flex-grow sm:flex-none">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40" />
-            <input
-              id="uptime-global-search"
-              type="search"
-              className="input input-bordered input-sm w-full sm:w-56 pl-9"
-              placeholder="Buscar servicio..."
-              value={search}
-              onChange={e => handleSearch(e.target.value)}
-            />
-          </div>
-
-          <div className="flex gap-1 shrink-0 justify-center sm:justify-start">
-            {([1, 7, 30] as const).map(d => (
-              <button
-                key={d}
-                className={classNames("btn btn-xs capitalize", {
-                  "btn-neutral": rangeDays === d,
-                  "btn-ghost": rangeDays !== d,
-                })}
-                onClick={() => setRangeDays(d)}
-              >
-                {d === 1 ? "24 Horas" : `${d} Días`}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Explicación de Riesgo de 100% Uptime */}
-      <div className="alert alert-warning border border-warning/20 bg-warning/5 text-warning-content/90 text-xs py-2 px-3 rounded-lg shadow-sm flex items-start gap-2">
-        <AlertTriangle className="w-4 h-4 shrink-0 text-warning" />
-        <div>
-          <span className="font-bold">Nota de Operación:</span> Los servicios están diseñados para suspenderse (auto-sleep) por inactividad. Un uptime continuo de 100% representa un riesgo potencial de consumo continuo de recursos.
+        <div className="flex gap-1 shrink-0">
+          {([1, 7, 30] as const).map(d => (
+            <button
+              key={d}
+              className={classNames("btn btn-xs capitalize", {
+                "btn-neutral": rangeDays === d,
+                "btn-ghost": rangeDays !== d,
+              })}
+              onClick={() => setRangeDays(d)}
+            >
+              {d === 1 ? "24h" : `${d}d`}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -147,6 +130,7 @@ export const UptimePage: FC = () => {
                       <th>Instancia</th>
                       <th>Estado</th>
                       <th>Uptime ({rangeDays === 1 ? "24h" : `${rangeDays}d`})</th>
+                      <th className="hidden sm:table-cell">Disponibilidad</th>
                       <th>Horas Activas</th>
                       <th>Horas Inactivas</th>
                     </tr>
@@ -177,6 +161,20 @@ export const UptimePage: FC = () => {
                           </td>
                           <td>
                             <UptimePercentageBadge percent={percent} />
+                          </td>
+                          <td className="hidden sm:table-cell">
+                            <div className="flex items-center w-24 md:w-32">
+                              <progress 
+                                className={classNames("progress w-full", {
+                                  "progress-warning": percent === 100,
+                                  "progress-success": percent >= 99 && percent < 100,
+                                  "progress-info": percent >= 95 && percent < 99,
+                                  "progress-error": percent < 95,
+                                })} 
+                                value={percent} 
+                                max="100"
+                              ></progress>
+                            </div>
                           </td>
                           <td className="font-mono text-xs text-success font-semibold">
                             {activeH.toFixed(1)}h
@@ -217,6 +215,13 @@ export const UptimePage: FC = () => {
               )}
             </>
           )}
+        </div>
+      </div>
+      {/* Explicación de Riesgo de 100% Uptime */}
+      <div className="alert alert-warning border border-warning/20 bg-warning/5 text-warning-content/90 text-xs py-2 px-3 rounded-lg shadow-sm flex items-start gap-2">
+        <AlertTriangle className="w-4 h-4 shrink-0 text-warning" />
+        <div>
+          <span className="font-bold">Nota de Operación:</span> Los servicios están diseñados para suspenderse (auto-sleep) por inactividad. Un uptime continuo de 100% representa un riesgo potencial de consumo continuo de recursos.
         </div>
       </div>
     </div>

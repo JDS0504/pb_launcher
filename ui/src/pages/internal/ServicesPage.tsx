@@ -156,6 +156,9 @@ export const ServicesPage = () => {
 
   return (
     <div className="space-y-6">
+      {/* Cabecera (Sólo título sin iconos en móvil, oculto en PC) */}
+      <h2 className="text-xl font-bold md:hidden block">Services</h2>
+
       <div className="flex flex-col md:flex-row md:items-center gap-3.5 w-full">
         {/* Bloque 1: Búsqueda y Filtro de Estado */}
         <div className="flex flex-row items-center gap-2 flex-grow w-full md:w-auto">

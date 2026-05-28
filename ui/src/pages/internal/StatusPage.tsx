@@ -101,12 +101,8 @@ export const StatusPage = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Estado del Servidor</h2>
-          <p className="text-sm text-base-content/60">Monitoreo de recursos de hardware en tiempo real.</p>
-        </div>
-      </div>
+      {/* Cabecera (Sólo título sin iconos en móvil, oculto en PC) */}
+      <h2 className="text-xl font-bold md:hidden block">Status</h2>
 
       <div className="grid grid-cols-3 gap-2 md:gap-6">
         {/* CPU Usage Card */}

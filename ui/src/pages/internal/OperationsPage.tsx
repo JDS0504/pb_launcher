@@ -57,15 +57,11 @@ export const OperationsPage = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
-        <div>
-          <h2 className="text-xl font-semibold">History</h2>
-          <p className="text-sm text-base-content/70">
-            Review launcher actions across all services.
-          </p>
-        </div>
-        <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto items-stretch sm:items-center">
-          <div className="relative flex-grow sm:flex-none">
+      {/* Cabecera (Sólo título sin iconos en móvil, oculto en PC) */}
+      <h2 className="text-xl font-bold md:hidden block">History</h2>
+
+      <div className="flex flex-col sm:flex-row gap-2 w-full items-stretch sm:items-center justify-end">
+        <div className="relative flex-grow sm:flex-none">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40" />
             <input
               id="history-global-search"
@@ -103,7 +99,6 @@ export const OperationsPage = () => {
             ))}
           </div>
         </div>
-      </div>
 
       {/* Contador */}
       {(search || statusFilter !== "all" || selectedServiceId !== "all") && (
