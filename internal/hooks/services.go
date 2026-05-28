@@ -78,6 +78,8 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 		updatedName := e.Record.GetString("name")
 		updatedPolicy := e.Record.Get("restart_policy")
 		deleted := e.Record.GetDateTime("deleted")
+		updatedCpuQuota := e.Record.Get("cpu_quota")
+		updatedMemoryLimit := e.Record.Get("memory_limit")
 
 		currentRecord, err := e.App.FindRecordById(e.Collection, e.Record.GetString("id"))
 		if err != nil {
@@ -165,6 +167,8 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 		currentRecord.Set("name", updatedName)
 		currentRecord.Set("restart_policy", updatedPolicy)
 		currentRecord.Set("deleted", deleted)
+		currentRecord.Set("cpu_quota", updatedCpuQuota)
+		currentRecord.Set("memory_limit", updatedMemoryLimit)
 
 		e.Record = currentRecord
 		if err := e.Next(); err != nil {
