@@ -175,8 +175,12 @@ func (m *Manager) DeleteFile(ctx context.Context, serviceID string, targetPath s
 	if err != nil {
 		return err
 	}
+	// Si el archivo o directorio ya no existe, consideramos que la eliminación fue exitosa
+	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		return nil
+	}
 
-	if err := os.Remove(fullPath); err != nil {
+	if err := os.RemoveAll(fullPath); err != nil {
 		m.logger.Error(ctx, service.ID, "file_delete", err.Error(), map[string]any{"path": filepath.ToSlash(relPath)})
 		return err
 	}
