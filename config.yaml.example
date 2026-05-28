@@ -40,8 +40,8 @@ command_check_interval: 10s
 
 # Instance Resource Limits (Linux/cgroups via systemd-run)
 # Use "none" or "disabled" to run instances without resource constraints.
-instance_cpu_quota: 50%
-instance_memory_limit: 512M
+instance_cpu_quota: 20%
+instance_memory_limit: 256M
 
 # Auto-Sleep settings
 # Las instancias de PocketBase se suspenderán automáticamente tras el tiempo de inactividad especificado.

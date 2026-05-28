@@ -28,19 +28,19 @@ const getLocalStorageDefaults = () => {
 };
 
 const getProfileFromLimits = (cpu?: string, ram?: string): string => {
-  if (!cpu && !ram) return "default";
+  if (!cpu && !ram) return "low";
   if (cpu === "default" && ram === "default") return "default";
-  if (cpu === "10%" && ram === "128M") return "low";
+  if (cpu === "20%" && ram === "256M") return "low";
   if (cpu === "50%" && ram === "512M") return "standard";
   if (cpu === "100%" && ram === "1024M") return "high";
   if (cpu === "none" && ram === "none") return "none";
-  return "default";
+  return "low";
 };
 
 const getLimitsFromProfile = (profile: string): { cpu_quota: string; memory_limit: string } => {
   switch (profile) {
     case "low":
-      return { cpu_quota: "10%", memory_limit: "128M" };
+      return { cpu_quota: "20%", memory_limit: "256M" };
     case "standard":
       return { cpu_quota: "50%", memory_limit: "512M" };
     case "high":
@@ -81,7 +81,7 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
       instanceSource: record?.release_id ?? savedDefaults.instanceSource ?? "",
       restartPolicy: record?.restart_policy ?? savedDefaults.restartPolicy ?? "on-failure",
       superuserPassword: savedDefaults.superuserPassword ?? "",
-      resourceProfile: getProfileFromLimits(record?.cpu_quota, record?.memory_limit) ?? savedDefaults.resourceProfile ?? "default",
+      resourceProfile: getProfileFromLimits(record?.cpu_quota, record?.memory_limit) ?? savedDefaults.resourceProfile ?? "low",
     },
   });
   const selectedRepository = form.watch("repository");
@@ -284,7 +284,7 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
           label="Perfil de Recursos"
           options={[
             { label: "Predeterminado (Usa el fallback global del host)", value: "default" },
-            { label: "Bajo (128 MB RAM + 10% CPU) - Desarrollo o pruebas", value: "low" },
+            { label: "Bajo (256 MB RAM + 20% CPU) - Desarrollo o pruebas", value: "low" },
             { label: "Estándar (512 MB RAM + 50% CPU) - Recomendado", value: "standard" },
             { label: "Alto (1024 MB / 1 GB RAM + 100% CPU) - Producción y alta carga", value: "high" },
             { label: "Sin límites (Uso libre sin restricciones de cgroups)", value: "none" },
