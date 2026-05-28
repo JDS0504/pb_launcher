@@ -106,8 +106,8 @@ type configs struct {
 
 	AcmeEmail string `mapstructure:"acme_email" yaml:"acme_email"`
 
-	InstanceCpuQuota    string `mapstructure:"instance_cpu_quota" yaml:"instance_cpu_quota"`       // default: 30%
-	InstanceMemoryLimit string `mapstructure:"instance_memory_limit" yaml:"instance_memory_limit"` // default: 384M
+	InstanceCpuQuota    string `mapstructure:"instance_cpu_quota" yaml:"instance_cpu_quota"`       // default: 50%
+	InstanceMemoryLimit string `mapstructure:"instance_memory_limit" yaml:"instance_memory_limit"` // default: 512M
 
 	AutoSleepCheckInterval string `mapstructure:"autosleep_check_interval" yaml:"autosleep_check_interval"`
 	AutoSleepIdleTimeout   string `mapstructure:"autosleep_idle_timeout" yaml:"autosleep_idle_timeout"`
@@ -220,7 +220,7 @@ func (c *configs) GetAcmeEmail() string {
 
 func (c *configs) GetInstanceCpuQuota() string {
 	if c.InstanceCpuQuota == "" {
-		return "30%"
+		return "50%"
 	}
 	if strings.EqualFold(c.InstanceCpuQuota, "none") || strings.EqualFold(c.InstanceCpuQuota, "disabled") {
 		return ""
@@ -230,7 +230,7 @@ func (c *configs) GetInstanceCpuQuota() string {
 
 func (c *configs) GetInstanceMemoryLimit() string {
 	if c.InstanceMemoryLimit == "" {
-		return "384M"
+		return "512M"
 	}
 	if strings.EqualFold(c.InstanceMemoryLimit, "none") || strings.EqualFold(c.InstanceMemoryLimit, "disabled") {
 		return ""
