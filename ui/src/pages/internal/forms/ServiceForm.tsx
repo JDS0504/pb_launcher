@@ -283,7 +283,6 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
         <SelectField
           label="Perfil de Recursos"
           options={[
-            { label: "Predeterminado (Usa el fallback global del host)", value: "default" },
             { label: "Bajo (256 MB RAM + 20% CPU) - Desarrollo o pruebas", value: "low" },
             { label: "Estándar (512 MB RAM + 50% CPU) - Recomendado", value: "standard" },
             { label: "Alto (1024 MB / 1 GB RAM + 100% CPU) - Producción y alta carga", value: "high" },
