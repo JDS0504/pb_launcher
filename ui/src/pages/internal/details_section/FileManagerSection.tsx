@@ -631,7 +631,7 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
                     Renombrar
                   </button>
 
-                  {selectedFilePaths.size > 0 && (
+                  {selectedFilePaths.size > 0 ? (
                     <button
                       type="button"
                       className="btn btn-xs btn-error gap-1 animate-pulse"
@@ -641,17 +641,17 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
                       <Trash2 className="w-3 h-3" />
                       Borrar Selección ({selectedFilePaths.size})
                     </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-xs btn-error gap-1"
+                      disabled={!isStopped || deleteMutation.isPending}
+                      onClick={handleDelete}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      Borrar
+                    </button>
                   )}
-
-                  <button
-                    type="button"
-                    className="btn btn-xs btn-error gap-1"
-                    disabled={!isStopped || deleteMutation.isPending}
-                    onClick={handleDelete}
-                  >
-                    <Trash2 className="w-3 h-3" />
-                    Borrar
-                  </button>
 
                   {!isDirSelected && !isBinaryFile && !isImageFile(selectedPath) && (
                     <button
