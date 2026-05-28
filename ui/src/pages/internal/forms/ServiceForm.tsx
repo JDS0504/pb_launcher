@@ -217,7 +217,7 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
         updateInstanceMutation.mutate({
           id: record.id,
           name,
-          release: instanceSource,
+          release: instanceSource || record.release_id,
           restart_policy: restartPolicy,
           cpu_quota: limits.cpu_quota,
           memory_limit: limits.memory_limit,
