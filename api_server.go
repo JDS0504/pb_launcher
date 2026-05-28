@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"pb_launcher/configs"
 	"sync"
+	"time"
 
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
@@ -25,6 +26,9 @@ func StartApiServer(
 
 			pb.OnServe().BindFunc(func(e *core.ServeEvent) error {
 				e.InstallerFunc = nil
+				e.Server.ReadTimeout = 10 * time.Minute
+				e.Server.IdleTimeout = 30 * time.Second
+				e.Server.ReadHeaderTimeout = 15 * time.Second
 				if err := e.Next(); err != nil {
 					return err
 				}
