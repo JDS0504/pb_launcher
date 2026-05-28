@@ -59,9 +59,13 @@ export const UptimePage: FC = () => {
         item.id.toLowerCase().includes(search.toLowerCase())
     );
 
-    // 2. Ordenar de mayor a menor según las horas activas de la última semana (active_hours_7d)
-    return filtered.sort((a, b) => b.active_hours_7d - a.active_hours_7d);
-  }, [uptimeQuery.data, search]);
+    // 2. Ordenar de mayor a menor según las horas activas del rango seleccionado (rangeDays)
+    return filtered.sort((a, b) => {
+      const activeA = rangeDays === 1 ? a.active_hours_24h : rangeDays === 7 ? a.active_hours_7d : a.active_hours_30d;
+      const activeB = rangeDays === 1 ? b.active_hours_24h : rangeDays === 7 ? b.active_hours_7d : b.active_hours_30d;
+      return activeB - activeA;
+    });
+  }, [uptimeQuery.data, search, rangeDays]);
 
   const totalPages = Math.ceil(processedData.length / PAGE_SIZE);
   const paginated = processedData.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);

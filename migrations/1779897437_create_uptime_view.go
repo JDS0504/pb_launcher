@@ -12,36 +12,45 @@ func init() {
 		// 1. Crear la vista SQL en la base de datos
 		createViewQuery := `
 		CREATE VIEW IF NOT EXISTS vista_tabla_service_uptime AS
-		WITH service_limits AS (
+		WITH service_epochs AS (
 		  SELECT 
 		    id AS service_id,
 		    name AS service_name,
 		    status AS service_status,
-		    strftime('%s', created) AS created_epoch,
-		    strftime('%s', 'now') AS now_epoch,
+		    CAST(strftime('%s', created) AS INTEGER) AS created_epoch,
+		    CAST(strftime('%s', 'now') AS INTEGER) AS now_epoch
+		  FROM services
+		  WHERE deleted = ''
+		),
+		service_limits AS (
+		  SELECT 
+		    service_id,
+		    service_name,
+		    service_status,
+		    created_epoch,
+		    now_epoch,
 		    
 		    CASE 
-		      WHEN (strftime('%s', 'now') - 24 * 3600) < strftime('%s', created) THEN strftime('%s', created)
-		      ELSE strftime('%s', 'now') - 24 * 3600
+		      WHEN (now_epoch - 24 * 3600) < created_epoch THEN created_epoch
+		      ELSE now_epoch - 24 * 3600
 		    END AS start_24h,
 
 		    CASE 
-		      WHEN (strftime('%s', 'now') - 7 * 24 * 3600) < strftime('%s', created) THEN strftime('%s', created)
-		      ELSE strftime('%s', 'now') - 7 * 24 * 3600
+		      WHEN (now_epoch - 7 * 24 * 3600) < created_epoch THEN created_epoch
+		      ELSE now_epoch - 7 * 24 * 3600
 		    END AS start_7d,
 
 		    CASE 
-		      WHEN (strftime('%s', 'now') - 30 * 24 * 3600) < strftime('%s', created) THEN strftime('%s', created)
-		      ELSE strftime('%s', 'now') - 30 * 24 * 3600
+		      WHEN (now_epoch - 30 * 24 * 3600) < created_epoch THEN created_epoch
+		      ELSE now_epoch - 30 * 24 * 3600
 		    END AS start_30d
-		  FROM services
-		  WHERE deleted = ''
+		  FROM service_epochs
 		),
 		successful_logs AS (
 		  SELECT 
 		    service,
 		    operation,
-		    strftime('%s', created) AS created_epoch
+		    CAST(strftime('%s', created) AS INTEGER) AS created_epoch
 		  FROM operation_logs
 		  WHERE status = 'success'
 		),
@@ -52,7 +61,7 @@ func init() {
 		    CASE WHEN l.operation IN ('start', 'wakeup', 'restart') THEN 1 ELSE 0 END AS is_active,
 		    COALESCE(
 		      LEAD(l.created_epoch) OVER (PARTITION BY l.service ORDER BY l.created_epoch ASC),
-		      strftime('%s', 'now')
+		      CAST(strftime('%s', 'now') AS INTEGER)
 		    ) AS next_epoch
 		  FROM successful_logs l
 		),
