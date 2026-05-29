@@ -3,6 +3,7 @@ package processstats
 import (
 	"context"
 	"log/slog"
+	"os"
 	"sync"
 	"time"
 )
@@ -74,7 +75,7 @@ func (m *Monitor) sample() {
 		cpuPercent := calculatePercent(snap.processTicks, currProcess, snap.systemTicks, currSys)
 		newResults[pid] = InstanceStats{
 			CPUPercent:  cpuPercent,
-			MemoryBytes: rssPages * uint64(pageSize()),
+			MemoryBytes: rssPages * uint64(os.Getpagesize()),
 		}
 		newPrev[pid] = pidSnapshot{processTicks: currProcess, systemTicks: currSys}
 	}
