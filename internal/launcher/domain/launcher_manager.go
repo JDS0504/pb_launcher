@@ -22,6 +22,7 @@ import (
 	"pb_launcher/internal/operationlog"
 	"pb_launcher/utils/iouitls"
 	"pb_launcher/utils/networktools"
+	"pb_launcher/utils/processstats"
 	"regexp"
 	"strconv"
 	"strings"
@@ -348,6 +349,9 @@ func (lm *LauncherManager) startServiceLocked(ctx context.Context, service model
 	lm.processList[service.ID] = newProcess
 	lm.activityMap[service.ID] = time.Now()
 
+	// Registrar en el monitor de CPU (event-driven, igual que htop al detectar un proceso nuevo)
+	processstats.DefaultMonitor.Register(newProcess.GetPID())
+
 	if err := lm.repository.MarkServiceRunning(ctx, service.ID, ip, fmt.Sprint(port)); err != nil {
 		slog.Error("failed to update service status to running",
 			"serviceID", service.ID,
@@ -372,15 +376,19 @@ func (lm *LauncherManager) stopProcessOnlyLocked(serviceID string) error {
 		return nil
 	}
 	if !existingProcess.IsRunning() {
+		processstats.DefaultMonitor.Unregister(existingProcess.GetPID())
 		delete(lm.processList, serviceID)
 		delete(lm.activityMap, serviceID)
 		return nil
 	}
 
+	pid := existingProcess.GetPID()
 	if err := existingProcess.Stop(); err != nil {
 		return err
 	}
 
+	// Desregistrar del monitor de CPU al detener el proceso
+	processstats.DefaultMonitor.Unregister(pid)
 	delete(lm.processList, serviceID)
 	delete(lm.activityMap, serviceID)
 	return nil

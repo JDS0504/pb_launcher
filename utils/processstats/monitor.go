@@ -57,8 +57,8 @@ func (m *Monitor) Start(ctx context.Context) {
 	}()
 }
 
-// sample realiza una ronda de muestreo para todos los PIDs registrados en el ciclo anterior.
-// Los PIDs que ya no existen se limpian automáticamente.
+// sample realiza una ronda de muestreo para todos los PIDs registrados.
+// Los PIDs cuyo proceso ya no existe se limpian automáticamente.
 func (m *Monitor) sample() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -69,8 +69,7 @@ func (m *Monitor) sample() {
 	for pid, snap := range m.prev {
 		currProcess, currSys, rssPages, ok := sampleForPid(pid)
 		if !ok {
-			// El proceso ya no existe, se limpia automáticamente (no se copia)
-			continue
+			continue // proceso muerto, se limpia solo al no copiarlo
 		}
 		cpuPercent := calculatePercent(snap.processTicks, currProcess, snap.systemTicks, currSys)
 		newResults[pid] = InstanceStats{
@@ -84,43 +83,8 @@ func (m *Monitor) sample() {
 	m.results = newResults
 }
 
-// SyncPIDs actualiza el conjunto de PIDs monitoreados para que coincida exactamente
-// con el mapa dado (serviceID -> PID). Los PIDs nuevos se registran y los que
-// ya no están se eliminan. Es seguro llamarlo desde cualquier goroutine.
-func (m *Monitor) SyncPIDs(active map[string]int) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	// Construir conjunto de PIDs activos
-	activePIDs := make(map[int]struct{}, len(active))
-	for _, pid := range active {
-		activePIDs[pid] = struct{}{}
-	}
-
-	// Eliminar PIDs que ya no están activos
-	for pid := range m.prev {
-		if _, ok := activePIDs[pid]; !ok {
-			delete(m.prev, pid)
-			delete(m.results, pid)
-		}
-	}
-
-	// Registrar PIDs nuevos con una lectura base inicial
-	for _, pid := range active {
-		if pid <= 0 {
-			continue
-		}
-		if _, exists := m.prev[pid]; !exists {
-			process, sys, _, ok := sampleForPid(pid)
-			if ok {
-				m.prev[pid] = pidSnapshot{processTicks: process, systemTicks: sys}
-			}
-		}
-	}
-}
-
 // Register añade un PID al conjunto de procesos monitoreados.
-// Es seguro llamarlo desde cualquier goroutine.
+// Llamar al iniciar un servicio (event-driven, igual que htop al detectar un proceso nuevo).
 func (m *Monitor) Register(pid int) {
 	if pid <= 0 {
 		return
@@ -130,7 +94,7 @@ func (m *Monitor) Register(pid int) {
 	if _, exists := m.prev[pid]; exists {
 		return
 	}
-	// Tomar una lectura inicial para tener base en el próximo ciclo
+	// Tomar lectura base inicial para calcular el delta en el próximo ciclo
 	process, sys, _, ok := sampleForPid(pid)
 	if !ok {
 		return
@@ -139,6 +103,7 @@ func (m *Monitor) Register(pid int) {
 }
 
 // Unregister elimina un PID del conjunto de procesos monitoreados.
+// Llamar al detener o suspender un servicio.
 func (m *Monitor) Unregister(pid int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -147,19 +112,13 @@ func (m *Monitor) Unregister(pid int) {
 }
 
 // Get devuelve el último InstanceStats calculado para un PID.
-// Retorna instantáneamente (0ms). Si el PID aún no tiene datos, devuelve valores en 0.
+// Retorna instantáneamente (0ms de latencia).
 func (m *Monitor) Get(pid int) InstanceStats {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.results[pid]
 }
 
-// GetProcessStats es un alias de conveniencia para compatibilidad con el código anterior.
-// Usa la instancia global del monitor para devolver la última lectura disponible.
-func GetProcessStats(pid int) InstanceStats {
-	return DefaultMonitor.Get(pid)
-}
-
-// DefaultMonitor es la instancia global del monitor, lista para usar directamente.
+// DefaultMonitor es la instancia global del monitor.
 // Debe iniciarse con DefaultMonitor.Start(ctx) al arrancar la aplicación.
 var DefaultMonitor = NewMonitor(0)
