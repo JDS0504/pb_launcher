@@ -66,7 +66,7 @@ func readSystemCpuTicks() (uint64, error) {
 	return 0, fmt.Errorf("empty /proc/stat")
 }
 
-// GetProcessStats obtiene el % de CPU y RAM real (RSS) de un PID usando /proc en Linux de forma instantánea
+// GetProcessStats obtiene el % de CPU y RAM real (RSS) de un PID usando /proc en Linux de forma instantánea y stateless (KISS)
 func GetProcessStats(pid int) InstanceStats {
 	if pid <= 0 {
 		return InstanceStats{}
@@ -87,13 +87,12 @@ func GetProcessStats(pid int) InstanceStats {
 		}
 	}
 
-	// Intervalo de muestreo corto
-	time.Sleep(80 * time.Millisecond)
+	// Intervalo de muestreo para obtener suficiente resolución de ticks en Linux (200ms)
+	time.Sleep(200 * time.Millisecond)
 
 	// Segunda lectura de muestras
 	u2, s2, _, err := readProcStat(pid)
 	if err != nil {
-		// Si el proceso muere durante el sleep, devolvemos el último RSS conocido
 		return InstanceStats{
 			MemoryBytes: rss1 * uint64(os.Getpagesize()),
 		}
@@ -110,7 +109,7 @@ func GetProcessStats(pid int) InstanceStats {
 
 	var cpuPercent float64
 	if systemDelta > 0 {
-		// Multiplicado por el número de CPU cores del host para normalizar
+		// Multiplicado por el número de CPU cores del host para normalizar a 100% de la capacidad de la máquina
 		cpuPercent = (float64(processDelta) / float64(systemDelta)) * 100 * float64(runtime.NumCPU())
 		if cpuPercent > 100 {
 			cpuPercent = 100
