@@ -30,7 +30,7 @@ const getLocalStorageDefaults = () => {
 const getProfileFromLimits = (cpu?: string, ram?: string): string => {
   if (!cpu && !ram) return "low";
   if (cpu === "default" && ram === "default") return "default";
-  if (cpu === "20%" && ram === "256M") return "low";
+  if (cpu === "25%" && ram === "256M") return "low";
   if (cpu === "50%" && ram === "512M") return "standard";
   if (cpu === "100%" && ram === "1024M") return "high";
   if (cpu === "none" && ram === "none") return "none";
@@ -40,7 +40,7 @@ const getProfileFromLimits = (cpu?: string, ram?: string): string => {
 const getLimitsFromProfile = (profile: string): { cpu_quota: string; memory_limit: string } => {
   switch (profile) {
     case "low":
-      return { cpu_quota: "20%", memory_limit: "256M" };
+      return { cpu_quota: "25%", memory_limit: "256M" };
     case "standard":
       return { cpu_quota: "50%", memory_limit: "512M" };
     case "high":
@@ -283,7 +283,7 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
         <SelectField
           label="Perfil de Recursos"
           options={[
-            { label: "Bajo (256 MB RAM + 20% CPU) - Desarrollo o pruebas", value: "low" },
+            { label: "Bajo (256 MB RAM + 25% CPU) - Desarrollo o pruebas", value: "low" },
             { label: "Estándar (512 MB RAM + 50% CPU) - Recomendado", value: "standard" },
             { label: "Alto (1024 MB / 1 GB RAM + 100% CPU) - Producción y alta carga", value: "high" },
             { label: "Sin límites (Uso libre sin restricciones de cgroups)", value: "none" },
