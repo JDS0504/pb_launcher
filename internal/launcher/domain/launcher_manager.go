@@ -361,6 +361,15 @@ func (lm *LauncherManager) startServiceLocked(ctx context.Context, service model
 		)
 	}
 
+	// Aplicar límite de CPU dinámicamente post-healthcheck en segundo plano (arranque al 100% libre)
+	go func() {
+		bgCtx, bgCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer bgCancel()
+		if err := lm.waitForHealthCheck(bgCtx, ip, fmt.Sprint(port)); err == nil {
+			_ = newProcess.SetCpuQuota(realCpuQuota)
+		}
+	}()
+
 	return err
 }
 
@@ -643,6 +652,21 @@ func (lm *LauncherManager) WakeupService(ctx context.Context, serviceID string) 
 	// Esperar al healthcheck
 	if err := lm.waitForHealthCheck(ctx, service.IP, service.Port); err != nil {
 		return "", 0, err
+	}
+
+	// Una vez levantada y sana la instancia, aplicamos el límite configurado de CPU quota
+	lm.rwMtx.RLock()
+	proc, exists := lm.processList[serviceID]
+	lm.rwMtx.RUnlock()
+	if exists && proc.IsRunning() {
+		cpuQuota := lm.cpuQuota
+		if service.CpuQuota != "" && !strings.EqualFold(service.CpuQuota, "default") {
+			cpuQuota = service.CpuQuota
+		}
+		realCpuQuota := calculatePortabilityCpuQuota(cpuQuota)
+		go func() {
+			_ = proc.SetCpuQuota(realCpuQuota)
+		}()
 	}
 
 	if wasSleeping {

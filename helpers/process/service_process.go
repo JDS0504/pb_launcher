@@ -110,9 +110,7 @@ func (p *Process) Start() error {
 				"--scope",
 				"--unit=" + unitName,
 			}
-			if p.options.cpuQuota != "" {
-				systemdArgs = append(systemdArgs, "-p", "CPUQuota="+p.options.cpuQuota)
-			}
+			// NO pasamos el CPUQuota aquí. Iniciamos al 100% de CPU para arranque instantáneo (0ms latency).
 			if p.options.memoryLimit != "" {
 				systemdArgs = append(systemdArgs, "-p", "MemoryMax="+p.options.memoryLimit)
 			}
@@ -216,3 +214,20 @@ func (p *Process) Stop() error {
 	}
 	return nil
 }
+
+// SetCpuQuota aplica dinámicamente el límite de CPU en caliente al Scope de Systemd (KISS).
+// Permite que el proceso inicie al 100% y sea limitado tras el healthcheck exitoso.
+func (p *Process) SetCpuQuota(quota string) error {
+	if !p.isSystemd || quota == "" {
+		return nil
+	}
+	unitName := fmt.Sprintf("pblauncher-%s", p.id)
+	slog.Info("applying dynamic CPU limit", "unit", unitName, "quota", quota)
+	cmd := exec.Command("systemctl", "set-property", "--runtime", unitName+".scope", "CPUQuota="+quota)
+	if err := cmd.Run(); err != nil {
+		slog.Error("failed to apply dynamic CPU quota", "unit", unitName, "error", err)
+		return err
+	}
+	return nil
+}
+
