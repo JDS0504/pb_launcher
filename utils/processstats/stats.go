@@ -87,8 +87,8 @@ func GetProcessStats(pid int) InstanceStats {
 		}
 	}
 
-	// Intervalo de muestreo para obtener suficiente resolución de ticks en Linux (200ms)
-	time.Sleep(200 * time.Millisecond)
+	// Intervalo de muestreo para obtener suficiente resolución de ticks en Linux (300ms)
+	time.Sleep(300 * time.Millisecond)
 
 	// Segunda lectura de muestras
 	u2, s2, _, err := readProcStat(pid)
