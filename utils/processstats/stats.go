@@ -7,7 +7,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // InstanceStats representa el consumo real de recursos de una instancia en ejecución
@@ -66,60 +65,27 @@ func readSystemCpuTicks() (uint64, error) {
 	return 0, fmt.Errorf("empty /proc/stat")
 }
 
-// GetProcessStats obtiene el % de CPU y RAM real (RSS) de un PID usando /proc en Linux de forma instantánea y stateless (KISS)
-// Normaliza la métrica al total de la capacidad del host (100% = todos los cores al máximo)
-func GetProcessStats(pid int) InstanceStats {
-	if pid <= 0 {
-		return InstanceStats{}
-	}
-	if runtime.GOOS == "windows" {
-		return InstanceStats{}
-	}
-
-	// Primera lectura de muestras
-	u1, s1, rss1, err := readProcStat(pid)
+// sampleForPid realiza una lectura puntual de ticks para un PID dado.
+// Es una función pura sin estado ni efectos secundarios.
+func sampleForPid(pid int) (processTicks, systemTicks, rssPages uint64, ok bool) {
+	u, s, rss, err := readProcStat(pid)
 	if err != nil {
-		return InstanceStats{}
+		return 0, 0, 0, false
 	}
-	sys1, err := readSystemCpuTicks()
+	sys, err := readSystemCpuTicks()
 	if err != nil {
-		return InstanceStats{
-			MemoryBytes: rss1 * uint64(os.Getpagesize()),
-		}
+		return 0, 0, 0, false
 	}
+	return u + s, sys, rss, true
+}
 
-	// Intervalo de muestreo para obtener suficiente resolución de ticks en Linux (300ms)
-	time.Sleep(300 * time.Millisecond)
-
-	// Segunda lectura de muestras
-	u2, s2, _, err := readProcStat(pid)
-	if err != nil {
-		return InstanceStats{
-			MemoryBytes: rss1 * uint64(os.Getpagesize()),
-		}
+// calculatePercent calcula el porcentaje de CPU en modo Irix (estándar htop/docker stats).
+// 100% = un core saturado al máximo. En N cores la escala máxima es N*100%.
+func calculatePercent(prevProcess, currProcess, prevSystem, currSystem uint64) float64 {
+	systemDelta := currSystem - prevSystem
+	if systemDelta == 0 {
+		return 0
 	}
-	sys2, err := readSystemCpuTicks()
-	if err != nil {
-		return InstanceStats{
-			MemoryBytes: rss1 * uint64(os.Getpagesize()),
-		}
-	}
-
-	processDelta := (u2 + s2) - (u1 + s1)
-	systemDelta := sys2 - sys1
-
-	var cpuPercent float64
-	if systemDelta > 0 {
-		// Métrica normalizada al total de la capacidad del host (100% = todos los cores al máximo).
-		// De esta forma, las métricas de CPU de las instancias suman proporcionalmente con el indicador de arriba.
-		cpuPercent = (float64(processDelta) / float64(systemDelta)) * 100
-		if cpuPercent > 100 {
-			cpuPercent = 100
-		}
-	}
-
-	return InstanceStats{
-		CPUPercent:  cpuPercent,
-		MemoryBytes: rss1 * uint64(os.Getpagesize()),
-	}
+	processDelta := currProcess - prevProcess
+	return (float64(processDelta) / float64(systemDelta)) * 100 * float64(runtime.NumCPU())
 }
