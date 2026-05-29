@@ -67,6 +67,7 @@ func readSystemCpuTicks() (uint64, error) {
 }
 
 // GetProcessStats obtiene el % de CPU y RAM real (RSS) de un PID usando /proc en Linux de forma instantánea y stateless (KISS)
+// Normaliza la métrica al total de la capacidad del host (100% = todos los cores al máximo)
 func GetProcessStats(pid int) InstanceStats {
 	if pid <= 0 {
 		return InstanceStats{}
@@ -109,8 +110,9 @@ func GetProcessStats(pid int) InstanceStats {
 
 	var cpuPercent float64
 	if systemDelta > 0 {
-		// Multiplicado por el número de CPU cores del host para normalizar a 100% de la capacidad de la máquina
-		cpuPercent = (float64(processDelta) / float64(systemDelta)) * 100 * float64(runtime.NumCPU())
+		// Métrica normalizada al total de la capacidad del host (100% = todos los cores al máximo).
+		// De esta forma, las métricas de CPU de las instancias suman proporcionalmente con el indicador de arriba.
+		cpuPercent = (float64(processDelta) / float64(systemDelta)) * 100
 		if cpuPercent > 100 {
 			cpuPercent = 100
 		}
