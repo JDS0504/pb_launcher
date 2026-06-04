@@ -118,6 +118,18 @@ export const filesService = {
     return response.blob();
   },
 
+  downloadFileInBrowser: async (serviceID: string, path: string): Promise<void> => {
+    const blob = await filesService.downloadFile(serviceID, path);
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = path.split("/").pop() || "download";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
+
   createFolder: async (data: { serviceID: string; path: string }) => {
     const url = joinUrls(pb.baseURL, `/x-api/services/${data.serviceID}/files/folder`);
     const response = await fetch(url, {

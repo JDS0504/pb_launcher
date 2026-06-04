@@ -75,6 +75,7 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [imagePreviewUrl, setImagePreviewUrl] = useState("");
   const [selectedFilePaths, setSelectedFilePaths] = useState<Set<string>>(new Set());
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const isImageFile = (path: string) => {
     const ext = path.toLowerCase().split('.').pop();
@@ -105,17 +106,37 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
   const handleDownload = async () => {
     if (!selectedPath) return;
     try {
-      const blob = await filesService.downloadFile(service_id, selectedPath);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = getFileName(selectedPath);
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      await filesService.downloadFileInBrowser(service_id, selectedPath);
     } catch {
       toast.error("Error al descargar el archivo");
+    }
+  };
+
+  const handleBulkDownload = async () => {
+    if (selectedFilePaths.size === 0) return;
+    setIsDownloading(true);
+
+    const pathsToDownload = Array.from(selectedFilePaths).filter(p => {
+      const entry = files.find(f => f.path === p);
+      return entry && !entry.is_dir;
+    });
+
+    if (pathsToDownload.length === 0) {
+      toast.error("No hay archivos individuales para descargar (las carpetas no se pueden descargar directamente)");
+      setIsDownloading(false);
+      return;
+    }
+
+    const toastId = toast.loading(`Descargando ${pathsToDownload.length} archivo(s)...`);
+    try {
+      for (const p of pathsToDownload) {
+        await filesService.downloadFileInBrowser(service_id, p);
+      }
+      toast.success("Descarga completada", { id: toastId });
+    } catch {
+      toast.error("Error al descargar uno o más archivos", { id: toastId });
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -516,20 +537,34 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
           {selectedPath == null ? (
             selectedFilePaths.size > 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-base-content/60 space-y-4">
-                <Trash2 className="w-12 h-12 stroke-1 text-error/80" />
+                <div className="flex gap-4">
+                  <Trash2 className="w-12 h-12 stroke-1 text-error/80" />
+                  <Download className="w-12 h-12 stroke-1 text-primary/80" />
+                </div>
                 <div className="space-y-1">
                   <p className="font-bold text-sm text-base-content">Selección múltiple activa ({selectedFilePaths.size} elementos)</p>
-                  <p className="text-xs max-w-xs text-base-content/60">Haz clic en el botón inferior para eliminar de forma permanente la selección.</p>
+                  <p className="text-xs max-w-xs text-base-content/60">Elige una acción para aplicar a los elementos seleccionados.</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleBulkDelete}
-                  className="btn btn-sm btn-error gap-1.5 font-semibold"
-                  disabled={!isStopped || bulkDeleteMutation.isPending}
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Eliminar Selección ({selectedFilePaths.size})
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleBulkDownload}
+                    className="btn btn-sm btn-primary gap-1.5 font-semibold"
+                    disabled={isDownloading}
+                  >
+                    <Download className="w-4 h-4" />
+                    Descargar Selección ({selectedFilePaths.size})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBulkDelete}
+                    className="btn btn-sm btn-error gap-1.5 font-semibold"
+                    disabled={!isStopped || bulkDeleteMutation.isPending || isDownloading}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Eliminar Selección ({selectedFilePaths.size})
+                  </button>
+                </div>
                 {!isStopped && (
                   <div className="alert alert-warning text-xs max-w-md mt-2 justify-center">
                     El servicio debe estar detenido para poder realizar eliminaciones.
@@ -600,22 +635,34 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
                     Recargar
                   </button>
 
-                  {!isDirSelected && (
+                  {selectedFilePaths.size > 0 ? (
                     <button
                       type="button"
-                      className="btn btn-xs btn-neutral gap-1"
-                      onClick={handleDownload}
+                      className="btn btn-xs btn-primary gap-1"
+                      onClick={handleBulkDownload}
+                      disabled={isDownloading}
                     >
                       <Download className="w-3 h-3" />
-                      Descargar
+                      Descargar Selección ({selectedFilePaths.size})
                     </button>
+                  ) : (
+                    !isDirSelected && (
+                      <button
+                        type="button"
+                        className="btn btn-xs btn-neutral gap-1"
+                        onClick={handleDownload}
+                      >
+                        <Download className="w-3 h-3" />
+                        Descargar
+                      </button>
+                    )
                   )}
 
                   {selectedPath.toLowerCase().endsWith(".zip") && (
                     <button
                       type="button"
                       className="btn btn-xs btn-warning gap-1"
-                      disabled={!isStopped || unzipMutation.isPending}
+                      disabled={!isStopped || unzipMutation.isPending || isDownloading}
                       onClick={handleExtractZip}
                     >
                       {unzipMutation.isPending ? "Extrayendo..." : "Descomprimir"}
@@ -625,7 +672,7 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
                   <button
                     type="button"
                     className="btn btn-xs btn-neutral gap-1"
-                    disabled={!isStopped}
+                    disabled={!isStopped || isDownloading}
                     onClick={openRenameModal}
                   >
                     Renombrar
@@ -635,7 +682,7 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
                     <button
                       type="button"
                       className="btn btn-xs btn-error gap-1 animate-pulse"
-                      disabled={!isStopped || bulkDeleteMutation.isPending}
+                      disabled={!isStopped || bulkDeleteMutation.isPending || isDownloading}
                       onClick={handleBulkDelete}
                     >
                       <Trash2 className="w-3 h-3" />
@@ -645,7 +692,7 @@ export const FileManagerSection: FC<Props> = ({ service_id, service }) => {
                     <button
                       type="button"
                       className="btn btn-xs btn-error gap-1"
-                      disabled={!isStopped || deleteMutation.isPending}
+                      disabled={!isStopped || deleteMutation.isPending || isDownloading}
                       onClick={handleDelete}
                     >
                       <Trash2 className="w-3 h-3" />

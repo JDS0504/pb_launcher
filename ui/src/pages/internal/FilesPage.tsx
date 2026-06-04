@@ -264,6 +264,7 @@ export const FilesPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [imagePreviewUrl, setImagePreviewUrl] = useState("");
   const [selectedFilePaths, setSelectedFilePaths] = useState<Set<string>>(new Set());
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const isImageFile = (path: string) => {
     const ext = path.toLowerCase().split('.').pop();
@@ -294,17 +295,43 @@ export const FilesPage = () => {
   const handleDownload = async () => {
     if (!selectedFile) return;
     try {
-      const blob = await filesService.downloadFile(selectedFile.service.id, selectedFile.path);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = getFileName(selectedFile.path);
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      await filesService.downloadFileInBrowser(selectedFile.service.id, selectedFile.path);
     } catch {
       toast.error("Error al descargar el archivo");
+    }
+  };
+
+  const handleBulkDownload = async () => {
+    if (selectedFilePaths.size === 0) return;
+    setIsDownloading(true);
+
+    const pathsToDownload: { serviceId: string; filePath: string }[] = [];
+    for (const p of Array.from(selectedFilePaths)) {
+      const [serviceId, filePath] = p.split("::");
+      const cachedFiles = queryClient.getQueryData<PBFileEntry[]>(["pb-files", serviceId]) || [];
+      const entry = cachedFiles.find(f => f.path === filePath);
+      const isDir = entry ? entry.is_dir === true : false;
+      if (!isDir) {
+        pathsToDownload.push({ serviceId, filePath });
+      }
+    }
+
+    if (pathsToDownload.length === 0) {
+      toast.error("No hay archivos individuales para descargar (las carpetas no se pueden descargar directamente)");
+      setIsDownloading(false);
+      return;
+    }
+
+    const toastId = toast.loading(`Descargando ${pathsToDownload.length} archivo(s)...`);
+    try {
+      for (const item of pathsToDownload) {
+        await filesService.downloadFileInBrowser(item.serviceId, item.filePath);
+      }
+      toast.success("Descarga completada", { id: toastId });
+    } catch {
+      toast.error("Error al descargar uno o más archivos", { id: toastId });
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -673,20 +700,34 @@ export const FilesPage = () => {
           {selectedFile == null ? (
             selectedFilePaths.size > 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-base-content/60 space-y-4">
-                <Trash2 className="w-12 h-12 stroke-1 text-error/80" />
+                <div className="flex gap-4">
+                  <Trash2 className="w-12 h-12 stroke-1 text-error/80" />
+                  <Download className="w-12 h-12 stroke-1 text-primary/80" />
+                </div>
                 <div className="space-y-1">
                   <p className="font-bold text-sm text-base-content">Selección múltiple activa ({selectedFilePaths.size} elementos)</p>
-                  <p className="text-xs max-w-xs text-base-content/60">Haz clic en el botón inferior para eliminar de forma permanente la selección.</p>
+                  <p className="text-xs max-w-xs text-base-content/60">Elige una acción para aplicar a los elementos seleccionados.</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleBulkDelete}
-                  className="btn btn-sm btn-error gap-1.5 font-semibold"
-                  disabled={bulkDeleteMutation.isPending}
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Eliminar Selección ({selectedFilePaths.size})
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleBulkDownload}
+                    className="btn btn-sm btn-primary gap-1.5 font-semibold"
+                    disabled={isDownloading}
+                  >
+                    <Download className="w-4 h-4" />
+                    Descargar Selección ({selectedFilePaths.size})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBulkDelete}
+                    className="btn btn-sm btn-error gap-1.5 font-semibold"
+                    disabled={bulkDeleteMutation.isPending || isDownloading}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Eliminar Selección ({selectedFilePaths.size})
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-base-content/60 space-y-2">
@@ -747,22 +788,34 @@ export const FilesPage = () => {
                     </>
                   )}
 
-                  {!isDirSelected && (
+                  {selectedFilePaths.size > 0 ? (
                     <button
                       type="button"
-                      className="btn btn-xs btn-neutral gap-1"
-                      onClick={handleDownload}
+                      className="btn btn-xs btn-primary gap-1"
+                      onClick={handleBulkDownload}
+                      disabled={isDownloading}
                     >
                       <Download className="w-3 h-3" />
-                      Descargar
+                      Descargar Selección ({selectedFilePaths.size})
                     </button>
+                  ) : (
+                    !isDirSelected && (
+                      <button
+                        type="button"
+                        className="btn btn-xs btn-neutral gap-1"
+                        onClick={handleDownload}
+                      >
+                        <Download className="w-3 h-3" />
+                        Descargar
+                      </button>
+                    )
                   )}
 
                   {selectedFile.path.toLowerCase().endsWith(".zip") && (
                     <button
                       type="button"
                       className="btn btn-xs btn-warning gap-1"
-                      disabled={!isStopped || unzipMutation.isPending}
+                      disabled={!isStopped || unzipMutation.isPending || isDownloading}
                       onClick={handleExtractZip}
                     >
                       {unzipMutation.isPending ? "Extrayendo..." : "Descomprimir"}
@@ -772,7 +825,7 @@ export const FilesPage = () => {
                   <button
                     type="button"
                     className="btn btn-xs btn-neutral gap-1"
-                    disabled={!isStopped}
+                    disabled={!isStopped || isDownloading}
                     onClick={openRenameModal}
                   >
                     Renombrar
@@ -782,7 +835,7 @@ export const FilesPage = () => {
                     <button
                       type="button"
                       className="btn btn-xs btn-error gap-1 animate-pulse"
-                      disabled={bulkDeleteMutation.isPending}
+                      disabled={bulkDeleteMutation.isPending || isDownloading}
                       onClick={handleBulkDelete}
                     >
                       <Trash2 className="w-3 h-3" />
@@ -792,7 +845,7 @@ export const FilesPage = () => {
                     <button
                       type="button"
                       className="btn btn-xs btn-error gap-1"
-                      disabled={!isStopped || deleteMutation.isPending}
+                      disabled={!isStopped || deleteMutation.isPending || isDownloading}
                       onClick={handleDelete}
                     >
                       <Trash2 className="w-3 h-3" />
