@@ -34,7 +34,7 @@ func NewDynamicReverseProxy(
 		useHttps:          cfg.IsHttpsEnabled(),
 		skipHttpsRedirect: cfg.IsHttpsRedirectDisabled(),
 		httpsPort:         cfg.GetHttpsPort(),
-		timeout:           15 * time.Second,
+		timeout:           10 * time.Minute,
 	}
 }
 
