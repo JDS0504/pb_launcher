@@ -49,46 +49,57 @@ func RegisterRoutes(app *pocketbase.PocketBase, manager *Manager) {
 		}).Bind(apis.RequireAuth())
 
 		se.Router.POST("/x-api/services/{service_id}/files/upload", func(e *core.RequestEvent) error {
-			if err := e.Request.ParseMultipartForm(200 << 20); err != nil {
+			// MultipartReader hace streaming parte a parte sin cargar todo en RAM,
+			// a diferencia de ParseMultipartForm que espera recibir el body completo antes de continuar.
+			mr, err := e.Request.MultipartReader()
+			if err != nil {
 				return e.BadRequestError("failed to parse multipart form", err)
 			}
 
-			destPath := strings.TrimSpace(e.Request.FormValue("path"))
-			if destPath == "" {
-				destPath = "pb_public"
+			serviceID := e.Request.PathValue("service_id")
+			destPath := "pb_public"
+			filesUploaded := 0
+
+			for {
+				part, err := mr.NextPart()
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					return e.BadRequestError("failed to read multipart part", err)
+				}
+
+				switch part.FormName() {
+				case "path":
+					// El campo "path" siempre viene antes que los archivos (ver frontend)
+					raw, err := io.ReadAll(part)
+					if err != nil {
+						return e.BadRequestError("failed to read path field", err)
+					}
+					if v := strings.TrimSpace(string(raw)); v != "" {
+						destPath = v
+					}
+
+				case "files":
+					fileName := part.FileName()
+					if fileName == "" {
+						continue
+					}
+					targetFilePath := filepath.ToSlash(filepath.Join(destPath, fileName))
+					// Escribe directamente desde la red a disco sin pasar por RAM
+					if err := manager.SaveFileStream(e.Request.Context(), serviceID, targetFilePath, part); err != nil {
+						return e.BadRequestError(fmt.Sprintf("failed to save file %s: %v", fileName, err), err)
+					}
+					filesUploaded++
+				}
 			}
 
-			multipartForm := e.Request.MultipartForm
-			if multipartForm == nil {
-				return e.BadRequestError("multipart form is empty", nil)
-			}
-
-			files := multipartForm.File["files"]
-			if len(files) == 0 {
+			if filesUploaded == 0 {
 				return e.BadRequestError("no files provided", nil)
 			}
 
-			for _, fh := range files {
-				file, err := fh.Open()
-				if err != nil {
-					return e.BadRequestError(fmt.Sprintf("failed to open file %s", fh.Filename), err)
-				}
-				defer file.Close()
-
-				data, err := io.ReadAll(file)
-				if err != nil {
-					return e.BadRequestError(fmt.Sprintf("failed to read file content for %s", fh.Filename), err)
-				}
-
-				targetFilePath := filepath.ToSlash(filepath.Join(destPath, fh.Filename))
-
-				if err := manager.SaveFileBytes(e.Request.Context(), e.Request.PathValue("service_id"), targetFilePath, data); err != nil {
-					return e.BadRequestError(fmt.Sprintf("failed to save file %s: %v", fh.Filename, err), err)
-				}
-			}
-
 			return e.NoContent(http.StatusOK)
-		}).Bind(apis.RequireAuth(), apis.BodyLimit(200 << 20))
+		}).Bind(apis.RequireAuth(), apis.BodyLimit(300<<20))
 
 		se.Router.GET("/x-api/services/{service_id}/files/download", func(e *core.RequestEvent) error {
 			filePath := strings.TrimSpace(e.Request.URL.Query().Get("path"))

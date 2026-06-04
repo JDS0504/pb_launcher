@@ -3,6 +3,7 @@ package filemanager
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"pb_launcher/configs"
@@ -157,6 +158,41 @@ func (m *Manager) SaveFileBytes(ctx context.Context, serviceID string, targetPat
 
 func (m *Manager) SaveFile(ctx context.Context, serviceID string, targetPath string, content string) error {
 	return m.SaveFileBytes(ctx, serviceID, targetPath, []byte(content))
+}
+
+// SaveFileStream escribe el contenido de src directamente al disco mediante streaming (io.Copy),
+// sin cargar el archivo completo en RAM. Ideal para uploads de archivos grandes.
+func (m *Manager) SaveFileStream(ctx context.Context, serviceID string, targetPath string, src io.Reader) error {
+	service, err := m.serviceRepo.FindService(ctx, serviceID)
+	if err != nil {
+		return err
+	}
+	if service.Status != models.Stopped {
+		return fmt.Errorf("el servicio debe estar detenido para poder modificar archivos")
+	}
+	relPath, err := validateFilePath(targetPath)
+	if err != nil {
+		return err
+	}
+	fullPath, err := safeJoin(m.serviceDir(serviceID), relPath)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+		return err
+	}
+	dst, err := os.Create(fullPath)
+	if err != nil {
+		m.logger.Error(ctx, service.ID, "file_save", err.Error(), map[string]any{"path": filepath.ToSlash(relPath)})
+		return err
+	}
+	defer dst.Close()
+	if _, err := io.Copy(dst, src); err != nil {
+		m.logger.Error(ctx, service.ID, "file_save", err.Error(), map[string]any{"path": filepath.ToSlash(relPath)})
+		return err
+	}
+	m.logger.Success(ctx, service.ID, "file_save", "Archivo guardado exitosamente", map[string]any{"path": filepath.ToSlash(relPath)})
+	return nil
 }
 
 func (m *Manager) DeleteFile(ctx context.Context, serviceID string, targetPath string) error {

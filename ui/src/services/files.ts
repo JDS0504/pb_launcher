@@ -78,6 +78,7 @@ export const filesService = {
     serviceID: string,
     destPath: string,
     files: File[],
+    onProgress?: (percent: number) => void,
   ): Promise<void> => {
     const url = joinUrls(pb.baseURL, `/x-api/services/${serviceID}/files/upload`);
     const formData = new FormData();
@@ -86,22 +87,30 @@ export const filesService = {
       formData.append("files", file);
     }
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: pb.authStore.token,
-      },
-      body: formData,
-    });
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", url);
+      xhr.setRequestHeader("Authorization", pb.authStore.token);
 
-    if (!response.ok) {
-      const json = await response.json().catch(() => null);
-      throw new HttpError(
-        response.status,
-        json?.message || "Failed to upload files",
-        json,
-      );
-    }
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && onProgress) {
+          onProgress(Math.round((event.loaded / event.total) * 100));
+        }
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve();
+          return;
+        }
+        let json: { message?: string } | null = null;
+        try { json = JSON.parse(xhr.responseText); } catch { /* no-op */ }
+        reject(new HttpError(xhr.status, json?.message ?? "Failed to upload files", json));
+      };
+
+      xhr.onerror = () => reject(new Error("Error de red durante el upload"));
+      xhr.send(formData);
+    });
   },
 
   downloadFile: async (serviceID: string, path: string): Promise<Blob> => {

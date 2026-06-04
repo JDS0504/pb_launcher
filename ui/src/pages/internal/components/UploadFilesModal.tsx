@@ -28,16 +28,20 @@ export const UploadFilesModal: FC<UploadFilesModalProps> = ({
   const [subfolder, setSubfolder] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [isDragActive, setIsDragActive] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const uploadMutation = useMutation({
     mutationFn: (variables: { destPath: string; files: File[] }) =>
-      filesService.uploadFiles(serviceID, variables.destPath, variables.files),
+      filesService.uploadFiles(serviceID, variables.destPath, variables.files, setUploadProgress),
     onSuccess: () => {
       toast.success("Archivos subidos con éxito");
       onUploaded();
       closeModal();
     },
-    onError: (error) => toast.error(getErrorMessage(error)),
+    onError: (error) => {
+      setUploadProgress(0);
+      toast.error(getErrorMessage(error));
+    },
   });
 
   const handleDrag = (e: React.DragEvent) => {
@@ -191,7 +195,7 @@ export const UploadFilesModal: FC<UploadFilesModalProps> = ({
       )}
 
       <div className="flex justify-end gap-2 pt-2">
-        <button type="button" className="btn btn-sm btn-ghost" onClick={closeModal}>
+        <button type="button" className="btn btn-sm btn-ghost" onClick={closeModal} disabled={uploadMutation.isPending}>
           Cancelar
         </button>
         <button
@@ -199,9 +203,19 @@ export const UploadFilesModal: FC<UploadFilesModalProps> = ({
           className="btn btn-sm btn-primary"
           disabled={!isStopped || uploadMutation.isPending || files.length === 0}
         >
-          {uploadMutation.isPending ? "Subiendo..." : `Subir ${files.length} archivos`}
+          {uploadMutation.isPending ? `Subiendo... ${uploadProgress}%` : `Subir ${files.length} archivos`}
         </button>
       </div>
+
+      {/* Barra de progreso */}
+      {uploadMutation.isPending && (
+        <div className="w-full bg-base-300 rounded-full h-2 overflow-hidden">
+          <div
+            className="bg-primary h-2 rounded-full transition-all duration-300"
+            style={{ width: `${uploadProgress}%` }}
+          />
+        </div>
+      )}
     </form>
   );
 };
