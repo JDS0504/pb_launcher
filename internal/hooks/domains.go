@@ -64,10 +64,10 @@ func AddServiceDomainsHooks(
 		})
 
 	app.OnRecordCreateRequest(collections.ServicesDomains).
-		BindFunc(validateServiceOrProxyEntry)
+		BindFunc(validateService)
 
 	app.OnRecordUpdateRequest(collections.ServicesDomains).
-		BindFunc(validateServiceOrProxyEntry)
+		BindFunc(validateService)
 
 	app.OnRecordAfterCreateSuccess(collections.ServicesDomains).BindFunc(func(e *core.RecordEvent) error {
 
@@ -113,17 +113,10 @@ func AddServiceDomainsHooks(
 	})
 }
 
-func validateServiceOrProxyEntry(e *core.RecordRequestEvent) error {
+func validateService(e *core.RecordRequestEvent) error {
 	service := e.Record.GetString("service")
-	proxyEntry := e.Record.GetString("proxy_entry")
-	serveStatic := e.Record.GetBool("serve_static")
-	switch {
-	case service == "" && proxyEntry == "":
-		return apis.NewBadRequestError("either 'service' or 'proxy_entry' is required", nil)
-	case service != "" && proxyEntry != "":
-		return apis.NewBadRequestError("only one of 'service' or 'proxy_entry' must be set", nil)
-	case serveStatic && proxyEntry != "":
-		return apis.NewBadRequestError("'serve_static' can only be used with a 'service', not with a 'proxy_entry'", nil)
+	if service == "" {
+		return apis.NewBadRequestError("'service' is required", nil)
 	}
 	return e.Next()
 }

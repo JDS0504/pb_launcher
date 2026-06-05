@@ -24,7 +24,6 @@ const schema = object({
 
 type Props = {
   service_id: string;
-  proxy_id: string;
   use_https: "yes" | "no";
   record?: DomainDto;
   onSaveRecord?: () => void;
@@ -33,7 +32,6 @@ type Props = {
 
 export const DomainForm: FC<Props> = ({
   service_id,
-  proxy_id,
   record,
   width,
   use_https,
@@ -72,7 +70,6 @@ export const DomainForm: FC<Props> = ({
       createMutation.mutate({
         domain,
         service: service_id,
-        proxy_entry: proxy_id,
         use_https,
       });
     else updateMutation.mutate({ id: record.id, use_https });
