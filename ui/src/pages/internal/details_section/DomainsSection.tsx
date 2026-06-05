@@ -17,13 +17,11 @@ import { useConfirmModal } from "../../../hooks/useConfirmModal";
 
 type Props = {
   service_id: string;
-  proxy_id: string;
   url_route_suffix: string;
 };
 
 export const DomainsSection: FC<Props> = ({
   service_id,
-  proxy_id,
   url_route_suffix,
 }) => {
   const queryClient = useQueryClient();
@@ -31,18 +29,14 @@ export const DomainsSection: FC<Props> = ({
   const { openModal } = useModal();
   const proxy = useProxyConfigs();
   const queryKey = useMemo(() => {
-    if (service_id !== "") return ["services", service_id, "domains"];
-    if (proxy_id !== "") return ["proxy_entries", proxy_id, "domains"];
-    return ["unknown"];
-  }, [service_id, proxy_id]);
+    return ["services", service_id, "domains"];
+  }, [service_id]);
 
   const domainsQuery = useQuery({
     queryKey,
     queryFn: async () => {
       if (service_id !== "")
         return domainsService.fetchAllByServiceID(service_id!);
-      if (proxy_id !== "")
-        return domainsService.fetchAllDomainsByProxyID(proxy_id!);
       return [];
     },
   });
@@ -56,21 +50,18 @@ export const DomainsSection: FC<Props> = ({
   };
 
   const proxyDomain = useMemo((): DomainDto => {
-    const strid = service_id !== "" ? service_id : proxy_id;
     return {
       id: "__",
       service: "",
-      proxy_entry: "",
-      domain: proxy.base_domain ? `${strid}.${proxy.base_domain}` : "--",
+      domain: proxy.base_domain ? `${service_id}.${proxy.base_domain}` : "--",
       use_https: proxy.use_https ? "yes" : "no",
     };
-  }, [proxy.base_domain, proxy.use_https, service_id, proxy_id]);
+  }, [proxy.base_domain, proxy.use_https, service_id]);
 
   const openCreateModal = () => {
     openModal(
       <DomainForm
         service_id={service_id}
-        proxy_id={proxy_id}
         onSaveRecord={handleSuccess}
         use_https={proxy.use_https ? "yes" : "no"}
         width={360}
@@ -85,7 +76,6 @@ export const DomainsSection: FC<Props> = ({
     openModal(
       <DomainForm
         service_id={service_id}
-        proxy_id={proxy_id}
         width={360}
         record={record}
         onSaveRecord={handleSuccess}

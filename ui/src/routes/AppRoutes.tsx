@@ -10,8 +10,6 @@ import { QueryErrorView } from "../components/QueryErrorView";
 import { DashboardLayout } from "../layouts/DashboardLayout";
 import { ServicesPage } from "../pages/internal/ServicesPage";
 import { ServiceDetailPage } from "../pages/internal/ServiceDetailPage";
-import { ProxyPage } from "../pages/internal/ProxyPage";
-import { ProxyDetailsPage } from "../pages/internal/ProxyDetailsPage";
 import { SettingsPage } from "../pages/internal/SettingsPage";
 import { OperationsPage } from "../pages/internal/OperationsPage";
 import { StatusPage } from "../pages/internal/StatusPage";
@@ -97,14 +95,12 @@ export const AppRoutes = () => {
           }
         >
           <Route index element={<ServicesPage />} />
-          <Route path="/proxy" element={<ProxyPage />} />
           <Route path="/files" element={<FilesPage />} />
           <Route path="/operations" element={<OperationsPage />} />
           <Route path="/uptime" element={<UptimePage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/status" element={<StatusPage />} />
           <Route path="/services/:service_id" element={<ServiceDetailPage />} />
-          <Route path="/proxy/:proxy_id" element={<ProxyDetailsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

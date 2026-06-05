@@ -52,7 +52,6 @@ func (s *spaFileServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 type DynamicReverseProxyDiscovery struct {
 	serviceDiscovery    *proxydomain.ServiceDiscovery
-	proxyEntryDiscovery *proxydomain.ProxyEntryDiscovery
 	domainDiscovery     *proxydomain.DomainServiceDiscovery
 	installTokenUsecase *launcherdomain.CleanServiceInstallTokenUsecase
 	launcherManager     *launcherdomain.LauncherManager
@@ -63,7 +62,6 @@ type DynamicReverseProxyDiscovery struct {
 
 func NewDynamicReverseProxyDiscovery(
 	serviceDiscovery *proxydomain.ServiceDiscovery,
-	proxyEntryDiscovery *proxydomain.ProxyEntryDiscovery,
 	domainDiscovery *proxydomain.DomainServiceDiscovery,
 	installTokenUsecase *launcherdomain.CleanServiceInstallTokenUsecase,
 	launcherManager *launcherdomain.LauncherManager,
@@ -76,7 +74,6 @@ func NewDynamicReverseProxyDiscovery(
 
 	return &DynamicReverseProxyDiscovery{
 		serviceDiscovery:    serviceDiscovery,
-		proxyEntryDiscovery: proxyEntryDiscovery,
 		domainDiscovery:     domainDiscovery,
 		installTokenUsecase: installTokenUsecase,
 		launcherManager:     launcherManager,
@@ -294,13 +291,9 @@ func (rp *DynamicReverseProxyDiscovery) proxyModifyResponse(r *http.Response) er
 	return nil
 }
 
-// ResolveTarget determina el destino al que hay que redirigir la petición
-// para el host dado. Retorna un *httputil.ReverseProxy o un error si no
-// se pudo resolver el destino.
-//
-// Nota: la interfaz retorna *httputil.ReverseProxy por compatibilidad con el
-// caller existente. Para el modo serve_static devolvemos nil y el caller
-// detecta ese caso usando resolveHandler, que acepta http.Handler genérico.
+// ResolveTarget determina el destino para el host dado:
+//   - Dominio del sistema (ej: icar.sistemasimpulsa.com) → despierta PocketBase bajo demanda.
+//   - Dominio personalizado (ej: icar-peru.com) → sirve estáticos desde disco sin despertar PocketBase.
 func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host string) (*httputil.ReverseProxy, error) {
 	if host == rp.apiDomain {
 		return rp.buildReverseProxy(&url.URL{
@@ -314,61 +307,19 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 		return nil, err
 	}
 
+	// Dominio personalizado: nunca despierta PocketBase, sirve estáticos directamente desde disco.
 	if id == "" {
 		target, err := rp.domainDiscovery.FindTargetByDomain(ctx, host)
 		if err != nil {
 			return nil, fmt.Errorf("no target found for domain: %s", host)
 		}
-		if target.Service != nil {
-			serviceID := *target.Service
-
-			// Modo estático: servir pb_public directamente desde disco, sin despertar PocketBase.
-			if target.ServeStatic {
-				return rp.resolveStaticHandler(serviceID)
-			}
-
-			service, err := rp.serviceDiscovery.FindRunningServiceByID(ctx, serviceID)
-
-			// Si no hay error en BD y el servicio realmente corre en memoria
-			if err == nil && rp.launcherManager.IsServiceRunning(serviceID) {
-				rp.launcherManager.RecordActivity(serviceID)
-				return rp.buildReverseProxy(&url.URL{
-					Scheme: "http",
-					Host:   net.JoinHostPort(service.IP, strconv.Itoa(service.Port)),
-				}, serviceID), nil
-			}
-
-			// Si no corre en memoria, o no esta marcado en ejecucion en BD, lo despertamos
-			if errors.Is(err, repositories.ErrNotFound) || (err == nil && !rp.launcherManager.IsServiceRunning(serviceID)) {
-				ip, port, wakeupErr := rp.launcherManager.WakeupService(ctx, serviceID)
-				if wakeupErr == nil {
-					rp.launcherManager.RecordActivity(serviceID)
-					_ = rp.serviceDiscovery.InvalidateServiceCacheByID(serviceID)
-					return rp.buildReverseProxy(&url.URL{
-						Scheme: "http",
-						Host:   net.JoinHostPort(ip, strconv.Itoa(port)),
-					}, serviceID), nil
-				}
-				return nil, fmt.Errorf("failed to wake up service %s: %w", serviceID, wakeupErr)
-			}
-			if err != nil {
-				return nil, fmt.Errorf("service not found for id: %s", serviceID)
-			}
+		if target.Service == nil {
+			return nil, fmt.Errorf("no service configured for domain: %s", host)
 		}
-		if target.ProxyEntry != nil {
-			entry, err := rp.proxyEntryDiscovery.FindEnabledProxyEntryByID(ctx, *target.ProxyEntry)
-			if err != nil {
-				return nil, fmt.Errorf("proxy entry not found for id: %s", *target.ProxyEntry)
-			}
-			targetURL, err := url.Parse(entry.TargetUrl)
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse target URL: %s", entry.TargetUrl)
-			}
-			return rp.buildReverseProxy(targetURL, ""), nil
-		}
-		return nil, fmt.Errorf("no target found for domain: %s", host)
+		return rp.resolveStaticHandler(*target.Service)
 	}
 
+	// Subdominio del sistema: despierta PocketBase bajo demanda.
 	service, err := rp.serviceDiscovery.FindRunningServiceByID(ctx, id)
 	if err == nil && rp.launcherManager.IsServiceRunning(id) {
 		rp.launcherManager.RecordActivity(id)
@@ -378,7 +329,6 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 		}, id), nil
 	}
 
-	// Si no corre en memoria, o no esta marcado en ejecucion en BD
 	if errors.Is(err, repositories.ErrNotFound) || (err == nil && !rp.launcherManager.IsServiceRunning(id)) {
 		ip, port, wakeupErr := rp.launcherManager.WakeupService(ctx, id)
 		if wakeupErr == nil {
@@ -391,18 +341,6 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 		}
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to resolve service by id: %s", id)
-	}
-
-	entry, err := rp.proxyEntryDiscovery.FindEnabledProxyEntryByID(ctx, id)
-	if err == nil {
-		targetURL, err := url.Parse(entry.TargetUrl)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse target URL: %s", entry.TargetUrl)
-		}
-		return rp.buildReverseProxy(targetURL, ""), nil
-	}
-	if !errors.Is(err, repositories.ErrNotFound) {
-		return nil, fmt.Errorf("failed to resolve proxy entry by id: %s", id)
 	}
 	return nil, fmt.Errorf("no target found for host: %s with id: %s", host, id)
 }

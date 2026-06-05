@@ -16,10 +16,6 @@ var Module = fx.Module(
 			fx.As(new(repositories.ServiceRepository)),
 		),
 		fx.Annotate(
-			repos.NewProxyEntriesRepository,
-			fx.As(new(repositories.ProxyEntriesRepository)),
-		),
-		fx.Annotate(
 			repos.NewDomainTargetRepository,
 			fx.As(new(repositories.DomainTargetRepository)),
 		),
@@ -27,7 +23,6 @@ var Module = fx.Module(
 	fx.Provide(
 		domain.NewServiceDiscovery,
 		domain.NewDomainServiceDiscovery,
-		domain.NewProxyEntryDiscovery,
 	),
 	fx.Provide(NewDynamicReverseProxyDiscovery),
 	fx.Provide(NewDynamicReverseProxy),
