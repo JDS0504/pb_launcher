@@ -15,19 +15,33 @@ func init() {
 			return err
 		}
 
-		// Desmarcar como campos de sistema para poder eliminarlos
+		// Paso A: Desmarcar como campos de sistema
+		hasSystemFields := false
 		for _, f := range servicesDomains.Fields {
 			if f.GetName() == "serve_static" || f.GetName() == "proxy_entry" {
-				if bf, ok := f.(*core.BoolField); ok {
+				if bf, ok := f.(*core.BoolField); ok && bf.System {
 					bf.System = false
+					hasSystemFields = true
 				}
-				if rf, ok := f.(*core.RelationField); ok {
+				if rf, ok := f.(*core.RelationField); ok && rf.System {
 					rf.System = false
+					hasSystemFields = true
 				}
 			}
 		}
 
-		// Remover campos proxy_entry y serve_static
+		if hasSystemFields {
+			if err := app.Save(servicesDomains); err != nil {
+				return err
+			}
+			// Volver a cargar la colección para tener el estado actualizado
+			servicesDomains, err = app.FindCollectionByNameOrId(collections.ServicesDomains)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Paso B: Remover campos proxy_entry y serve_static
 		servicesDomains.Fields.RemoveByName("proxy_entry")
 		servicesDomains.Fields.RemoveByName("serve_static")
 
