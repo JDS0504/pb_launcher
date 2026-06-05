@@ -162,11 +162,19 @@ func (rp *DynamicReverseProxyDiscovery) proxyModifyResponse(r *http.Response) er
 	// Si reescribimos la URL a .gz y PocketBase respondió con éxito:
 	// corregir Content-Type al tipo original del archivo y añadir Content-Encoding.
 	// Content-Length se mantiene: es el tamaño del .gz, que es lo que el browser recibe.
+	//
+	// GUARD SPA: PocketBase devuelve index.html con 200 para rutas no encontradas (SPA mode).
+	// Si el Content-Type de respuesta es text/html pero esperábamos JS/CSS/etc,
+	// es un SPA fallback — NO aplicar gzip o el browser falla con ERR_CONTENT_DECODING_FAILED.
 	if origMime := r.Request.Header.Get(gzipOriginalMimeHeader); origMime != "" && r.StatusCode == http.StatusOK {
-		r.Header.Set("Content-Encoding", "gzip")
-		r.Header.Set("Content-Type", origMime)
-		// Vary indica a proxies/CDN que la respuesta varía según el encoding soportado.
-		r.Header.Set("Vary", "Accept-Encoding")
+		respContentType := r.Header.Get("Content-Type")
+		isSpaFallback := strings.HasPrefix(respContentType, "text/html") && !strings.HasPrefix(origMime, "text/html")
+		if !isSpaFallback {
+			r.Header.Set("Content-Encoding", "gzip")
+			r.Header.Set("Content-Type", origMime)
+			// Vary indica a proxies/CDN que la respuesta varía según el encoding soportado.
+			r.Header.Set("Vary", "Accept-Encoding")
+		}
 	}
 
 	if r.Request.Method == http.MethodPost &&
