@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"errors"
@@ -160,9 +161,10 @@ func isCompressibleMime(contentType string) bool {
 		strings.HasPrefix(ct, "image/svg")
 }
 
-// gzDiskPath calcula la ruta en disco del .gz para un serviceID y URL path dados.
+// gzDiskPath calcula la ruta en disco del .gz para un dataDir, serviceID y URL path dados.
 // Retorna ("", false) si el path no es elegible para compresion (API, admin, extension no comprimible).
-func (rp *DynamicReverseProxyDiscovery) gzDiskPath(serviceID, urlPath string) (string, bool) {
+// Es una funcion de paquete (sin receptor) para poder reutilizarse desde buildReverseProxy y staticTransport.
+func gzDiskPath(dataDir, serviceID, urlPath string) (string, bool) {
 	if serviceID == "" {
 		return "", false
 	}
@@ -174,7 +176,7 @@ func (rp *DynamicReverseProxyDiscovery) gzDiskPath(serviceID, urlPath string) (s
 		return "", false
 	}
 	cleanPath := filepath.FromSlash(strings.TrimPrefix(urlPath, "/"))
-	diskPath := filepath.Join(rp.dataDir, serviceID, "pb_public", cleanPath) + ".gz"
+	diskPath := filepath.Join(dataDir, serviceID, "pb_public", cleanPath) + ".gz"
 	return diskPath, true
 }
 
@@ -194,7 +196,7 @@ func (rp *DynamicReverseProxyDiscovery) buildReverseProxy(target *url.URL, servi
 		if !strings.Contains(req.Header.Get("Accept-Encoding"), "gzip") {
 			return
 		}
-		diskPath, ok := rp.gzDiskPath(serviceID, req.URL.Path)
+		diskPath, ok := gzDiskPath(rp.dataDir, serviceID, req.URL.Path)
 		if !ok {
 			return
 		}
@@ -392,16 +394,16 @@ func (rp *DynamicReverseProxyDiscovery) resolveStaticHandler(serviceID string) (
 		slog.Warn("serve_static: pb_public directory does not exist", "serviceID", serviceID, "path", staticDir)
 		return nil, fmt.Errorf("static directory not found for service %s", serviceID)
 	}
-	return buildStaticProxy(newSpaFileServer(staticDir)), nil
+	return buildStaticProxy(newSpaFileServer(staticDir), rp.dataDir, serviceID), nil
 }
 
 // buildStaticProxy crea un httputil.ReverseProxy que sirve archivos estáticos
 // directamente desde un http.Handler (FileServer) usando un Transport falso
 // que intercepta las peticiones y las inyecta en el handler de forma in-process.
-func buildStaticProxy(handler http.Handler) *httputil.ReverseProxy {
+func buildStaticProxy(handler http.Handler, dataDir, serviceID string) *httputil.ReverseProxy {
 	dummyTarget, _ := url.Parse("http://localhost")
 	p := httputil.NewSingleHostReverseProxy(dummyTarget)
-	p.Transport = &staticTransport{handler: handler}
+	p.Transport = &staticTransport{handler: handler, dataDir: dataDir, serviceID: serviceID}
 	p.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		http.Error(w, "static file error: "+err.Error(), http.StatusInternalServerError)
 	}
@@ -410,11 +412,84 @@ func buildStaticProxy(handler http.Handler) *httputil.ReverseProxy {
 
 // staticTransport implementa http.RoundTripper redirigiendo la petición al FileServer
 // en memoria, sin realizar ninguna conexión de red real.
+// Aplica el mismo patrón lazy-compress + cache a disco que buildReverseProxy:
+//   - Primer visitante: comprime on-the-fly (nivel 9) y guarda .gz a disco.
+//   - Visitantes siguientes: sirve el .gz precomprimido (0 CPU).
 type staticTransport struct {
-	handler http.Handler
+	handler   http.Handler
+	dataDir   string
+	serviceID string
 }
 
 func (t *staticTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Solo aplicar compresión si el cliente acepta gzip y la ruta es elegible.
+	acceptsGzip := strings.Contains(req.Header.Get("Accept-Encoding"), "gzip")
+	if acceptsGzip {
+		diskPath, ok := gzDiskPath(t.dataDir, t.serviceID, req.URL.Path)
+		if ok {
+			ext := path.Ext(req.URL.Path)
+
+			if _, statErr := os.Stat(diskPath); statErr == nil {
+				// Caso 1: .gz precomprimido existe en disco → servir directamente (0 CPU).
+				gzData, readErr := os.ReadFile(diskPath)
+				if readErr == nil {
+					mimeType := mime.TypeByExtension(ext)
+					if mimeType == "" {
+						mimeType = "application/octet-stream"
+					}
+					h := make(http.Header)
+					h.Set("Content-Type", mimeType)
+					h.Set("Content-Encoding", "gzip")
+					h.Set("Vary", "Accept-Encoding")
+					return &http.Response{
+						StatusCode:    http.StatusOK,
+						Header:        h,
+						Body:          io.NopCloser(bytes.NewReader(gzData)),
+						ContentLength: int64(len(gzData)),
+						Request:       req,
+						Proto:         "HTTP/1.1",
+						ProtoMajor:    1,
+						ProtoMinor:    1,
+					}, nil
+				}
+			}
+
+			// Caso 2: .gz no existe → servir el archivo original, comprimir on-the-fly
+			// y guardar .gz a disco para los próximos requests.
+			rw := newResponseRecorder()
+			t.handler.ServeHTTP(rw, req)
+			resp := rw.toResponse(req)
+
+			if resp.StatusCode == http.StatusOK && isCompressibleMime(resp.Header.Get("Content-Type")) {
+				if mkErr := os.MkdirAll(filepath.Dir(diskPath), 0755); mkErr == nil {
+					if gzFile, createErr := os.Create(diskPath); createErr == nil {
+						pr, pw := io.Pipe()
+						// BestCompression = nivel 9: se paga solo una vez, luego siempre se sirve el .gz.
+						// MultiWriter: bytes comprimidos van a pw (browser) y gzFile (disco) simultáneamente.
+						gz, _ := gzip.NewWriterLevel(io.MultiWriter(pw, gzFile), gzip.BestCompression)
+						origBody := resp.Body
+						go func() {
+							if _, copyErr := io.Copy(gz, origBody); copyErr != nil {
+								slog.Warn("static: error comprimiendo on-the-fly", "error", copyErr, "path", req.URL.Path)
+							}
+							gz.Close()     // escribe footer gzip — obligatorio
+							gzFile.Close()
+							pw.Close()
+							origBody.Close()
+						}()
+						resp.Body = pr
+						resp.Header.Set("Content-Encoding", "gzip")
+						resp.Header.Set("Vary", "Accept-Encoding")
+						resp.Header.Del("Content-Length")
+						resp.ContentLength = -1
+					}
+				}
+			}
+			return resp, nil
+		}
+	}
+
+	// Sin compresión: proxy transparente (rutas no elegibles, cliente sin gzip, etc.).
 	rw := newResponseRecorder()
 	t.handler.ServeHTTP(rw, req)
 	return rw.toResponse(req), nil
