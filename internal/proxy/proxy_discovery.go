@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"mime"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"path"
 	"pb_launcher/configs"
 	launcherdomain "pb_launcher/internal/launcher/domain"
 	proxydomain "pb_launcher/internal/proxy/domain"
@@ -95,11 +97,76 @@ func (rp *DynamicReverseProxyDiscovery) proxyErrorHandler(w http.ResponseWriter,
 
 const superusersEndpoint = "/api/collections/_superusers/records"
 
+// gzipCompressible contiene las extensiones para las que se sirve el .gz pre-comprimido.
+// Debe coincidir con compressibleForGzip en internal/filemanager/manager.go (SSOT en docs).
+var gzipCompressible = map[string]bool{
+	".html": true,
+	".js":   true,
+	".css":  true,
+	".json": true,
+	".svg":  true,
+	".xml":  true,
+	".txt":  true,
+	".wasm": true,
+	".map":  true,
+}
+
+// gzipOriginalMimeHeader es el header interno usado para pasar el MIME type original
+// desde el Director hasta ModifyResponse. PocketBase lo ignora.
+const gzipOriginalMimeHeader = "X-Gz-Orig-Mime"
+
+// rewriteRequestForGzip reescribe el path a <path>.gz cuando:
+//  1. El browser acepta gzip (Accept-Encoding: gzip)
+//  2. La extensión del archivo es comprimible
+//  3. No es una ruta de API o panel admin de PocketBase
+//
+// PocketBase sirve el .gz como archivo estático. ModifyResponse
+// corrige el Content-Type y añade Content-Encoding: gzip.
+func rewriteRequestForGzip(req *http.Request) {
+	if !strings.Contains(req.Header.Get("Accept-Encoding"), "gzip") {
+		return
+	}
+	urlPath := req.URL.Path
+	// No tocar rutas de API ni panel admin de PocketBase.
+	if strings.HasPrefix(urlPath, "/api/") || strings.HasPrefix(urlPath, "/_/") {
+		return
+	}
+	ext := path.Ext(urlPath)
+	if ext == "" || !gzipCompressible[strings.ToLower(ext)] {
+		return
+	}
+
+	mimeType := mime.TypeByExtension(ext)
+	if mimeType == "" {
+		mimeType = "application/octet-stream"
+	}
+
+	// Guardar el MIME original para restaurarlo en ModifyResponse.
+	req.Header.Set(gzipOriginalMimeHeader, mimeType)
+	// PocketBase servirá el .gz como archivo estático.
+	req.URL.Path = urlPath + ".gz"
+	if req.URL.RawPath != "" {
+		req.URL.RawPath = req.URL.RawPath + ".gz"
+	}
+	// Eliminar Accept-Encoding para que PocketBase no intente comprimir el .gz ya comprimido.
+	req.Header.Del("Accept-Encoding")
+}
+
 func (rp *DynamicReverseProxyDiscovery) proxyModifyResponse(r *http.Response) error {
 	origin := r.Request.Header.Get("Origin")
 	if origin != "" {
 		r.Header.Set("Access-Control-Allow-Origin", origin)
 		r.Header.Set("Access-Control-Allow-Credentials", "true")
+	}
+
+	// Si reescribimos la URL a .gz y PocketBase respondió con éxito:
+	// corregir Content-Type al tipo original del archivo y añadir Content-Encoding.
+	// Content-Length se mantiene: es el tamaño del .gz, que es lo que el browser recibe.
+	if origMime := r.Request.Header.Get(gzipOriginalMimeHeader); origMime != "" && r.StatusCode == http.StatusOK {
+		r.Header.Set("Content-Encoding", "gzip")
+		r.Header.Set("Content-Type", origMime)
+		// Vary indica a proxies/CDN que la respuesta varía según el encoding soportado.
+		r.Header.Set("Vary", "Accept-Encoding")
 	}
 
 	if r.Request.Method == http.MethodPost &&
@@ -118,6 +185,8 @@ func (rp *DynamicReverseProxyDiscovery) buildReverseProxy(target *url.URL) *http
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)
 		networktools.PrepareProxyHeaders(req, target)
+		// Reescribir a .gz si el browser acepta gzip y el archivo es comprimible.
+		rewriteRequestForGzip(req)
 	}
 	proxy.ModifyResponse = rp.proxyModifyResponse
 	proxy.ErrorHandler = rp.proxyErrorHandler

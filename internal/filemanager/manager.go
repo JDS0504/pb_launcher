@@ -1,9 +1,11 @@
 package filemanager
 
 import (
+	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"pb_launcher/configs"
@@ -14,6 +16,60 @@ import (
 	"strings"
 	"time"
 )
+
+// compressibleForGzip contiene las extensiones que vale la pena comprimir en pb_public.
+// Las imágenes (png, jpg, webp) ya están comprimidas internamente y no se benefician.
+var compressibleForGzip = map[string]bool{
+	".html": true,
+	".js":   true,
+	".css":  true,
+	".json": true,
+	".svg":  true,
+	".xml":  true,
+	".txt":  true,
+	".wasm": true,
+	".map":  true,
+}
+
+// isPbPublicPath informa si una ruta relativa pertenece a pb_public.
+func isPbPublicPath(relPath string) bool {
+	return relPath == "pb_public" || strings.HasPrefix(relPath, "pb_public"+string(os.PathSeparator))
+}
+
+// compressToGzip genera <fullPath>.gz con nivel de compresión máximo (BestCompression).
+// Si la extensión no es comprimible, retorna nil sin hacer nada.
+// La operación es one-shot: se realiza una vez al guardar, sin costo en cada request.
+func compressToGzip(fullPath string) error {
+	ext := strings.ToLower(filepath.Ext(fullPath))
+	if !compressibleForGzip[ext] {
+		return nil
+	}
+
+	src, err := os.Open(fullPath)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	dst, err := os.Create(fullPath + ".gz")
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+
+	gz, err := gzip.NewWriterLevel(dst, gzip.BestCompression)
+	if err != nil {
+		return err
+	}
+
+	if _, err := io.Copy(gz, src); err != nil {
+		gz.Close()
+		return err
+	}
+
+	// gz.Close() escribe el footer de gzip — es obligatorio llamarlo explícitamente.
+	return gz.Close()
+}
 
 type FileEntry struct {
 	Path      string    `json:"path"`
@@ -152,6 +208,14 @@ func (m *Manager) SaveFileBytes(ctx context.Context, serviceID string, targetPat
 		m.logger.Error(ctx, service.ID, "file_save", err.Error(), map[string]any{"path": filepath.ToSlash(relPath)})
 		return err
 	}
+
+	// Comprimir en pb_public una sola vez al guardar (gzip nivel 9, stdlib).
+	if isPbPublicPath(relPath) {
+		if gzErr := compressToGzip(fullPath); gzErr != nil {
+			slog.Warn("filemanager: no se pudo comprimir archivo", "path", fullPath, "error", gzErr)
+		}
+	}
+
 	m.logger.Success(ctx, service.ID, "file_save", "Archivo guardado exitosamente", map[string]any{"path": filepath.ToSlash(relPath)})
 	return nil
 }
@@ -186,11 +250,21 @@ func (m *Manager) SaveFileStream(ctx context.Context, serviceID string, targetPa
 		m.logger.Error(ctx, service.ID, "file_save", err.Error(), map[string]any{"path": filepath.ToSlash(relPath)})
 		return err
 	}
-	defer dst.Close()
 	if _, err := io.Copy(dst, src); err != nil {
+		dst.Close()
 		m.logger.Error(ctx, service.ID, "file_save", err.Error(), map[string]any{"path": filepath.ToSlash(relPath)})
 		return err
 	}
+	// Cierre explícito antes de comprimir: el archivo debe estar completamente escrito en disco.
+	dst.Close()
+
+	// Comprimir en pb_public una sola vez al guardar (gzip nivel 9, stdlib).
+	if isPbPublicPath(relPath) {
+		if gzErr := compressToGzip(fullPath); gzErr != nil {
+			slog.Warn("filemanager: no se pudo comprimir archivo", "path", fullPath, "error", gzErr)
+		}
+	}
+
 	m.logger.Success(ctx, service.ID, "file_save", "Archivo guardado exitosamente", map[string]any{"path": filepath.ToSlash(relPath)})
 	return nil
 }
@@ -220,6 +294,8 @@ func (m *Manager) DeleteFile(ctx context.Context, serviceID string, targetPath s
 		m.logger.Error(ctx, service.ID, "file_delete", err.Error(), map[string]any{"path": filepath.ToSlash(relPath)})
 		return err
 	}
+	// Eliminar el .gz generado automáticamente si existe.
+	_ = os.Remove(fullPath + ".gz")
 	cleanEmptyParents(m.serviceDir(serviceID), filepath.Dir(fullPath))
 	m.logger.Success(ctx, service.ID, "file_delete", "Archivo eliminado exitosamente", map[string]any{"path": filepath.ToSlash(relPath)})
 	return nil
