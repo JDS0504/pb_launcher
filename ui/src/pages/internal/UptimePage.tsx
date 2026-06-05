@@ -3,8 +3,9 @@ import { useState, useMemo, type FC } from "react";
 import classNames from "classnames";
 import { Search, ExternalLink, AlertTriangle } from "lucide-react";
 import { useProxyConfigs } from "../../hooks/useProxyConfigs";
-import { formatUrl } from "../../utils/url";
+import { getServiceUrls } from "../../hooks/useServiceUrls";
 import { serviceService, type ServiceUptimeViewDto } from "../../services/services";
+
 
 const PAGE_SIZE = 10;
 
@@ -45,6 +46,12 @@ export const UptimePage: FC = () => {
     refetchInterval: 5000,
   });
 
+  const servicesQuery = useQuery({
+    queryKey: ["services"],
+    queryFn: serviceService.fetchAllServices,
+    refetchInterval: 5000,
+  });
+
   const handleSearch = (val: string) => {
     setSearch(val);
     setPage(0);
@@ -72,7 +79,7 @@ export const UptimePage: FC = () => {
   const totalPages = Math.ceil(processedData.length / PAGE_SIZE);
   const paginated = processedData.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-  if (uptimeQuery.isLoading) {
+  if (uptimeQuery.isLoading || servicesQuery.isLoading) {
     return (
       <div className="flex h-[50vh] w-full items-center justify-center">
         <span className="loading loading-ring loading-lg text-primary"></span>
@@ -143,18 +150,26 @@ export const UptimePage: FC = () => {
                       const activeH = rangeDays === 1 ? item.active_hours_24h : rangeDays === 7 ? item.active_hours_7d : item.active_hours_30d;
                       const inactiveH = rangeDays === 1 ? item.inactive_hours_24h : rangeDays === 7 ? item.inactive_hours_7d : item.inactive_hours_30d;
 
+                      const service = servicesQuery.data?.find(s => s.id === item.id);
+                      const urls = getServiceUrls(service, proxy);
+                      const adminUrl = urls.length > 0 ? urls[0] : null;
+
                       return (
                         <tr key={item.id} className="hover:bg-base-200/40">
                           <td className="font-bold text-primary truncate max-w-[150px]">
-                            <a
-                              href={`${formatUrl(proxy.use_https ? "https" : "http", `${item.id}.${proxy.base_domain ?? ""}`, proxy.use_https ? proxy.https_port : proxy.http_port)}/_/`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="hover:underline flex items-center gap-1.5"
-                            >
-                              {item.service_name}
-                              <ExternalLink className="w-3 h-3 opacity-50" />
-                            </a>
+                            {adminUrl ? (
+                              <a
+                                href={adminUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="hover:underline flex items-center gap-1.5"
+                              >
+                                {item.service_name}
+                                <ExternalLink className="w-3 h-3 opacity-50" />
+                              </a>
+                            ) : (
+                              item.service_name
+                            )}
                           </td>
                           <td>
                             <span

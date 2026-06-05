@@ -2,10 +2,11 @@ import { useQuery } from "@tanstack/react-query";
 import { statusService } from "../../services/status";
 import { serviceService } from "../../services/services";
 import { useProxyConfigs } from "../../hooks/useProxyConfigs";
-import { formatUrl } from "../../utils/url";
+import { getServiceUrls } from "../../hooks/useServiceUrls";
 import { Cpu, HardDrive, Server, Activity, Power, ExternalLink } from "lucide-react";
 import classNames from "classnames";
 import React from "react";
+
 
 const formatBytes = (bytes: number, decimals = 2) => {
   if (!bytes) return "0 B";
@@ -238,12 +239,14 @@ export const StatusPage = () => {
                 <tbody>
                   {runningServices.map(service => {
                     const stats = data.instances_stats?.[service.id];
+                    const urls = getServiceUrls(service, proxy);
+                    const adminUrl = urls.length > 0 ? urls[0] : null;
                     return (
                       <tr key={service.id} className="hover:bg-base-200/35">
                         <td className="font-bold text-primary max-w-[120px] truncate" title={service.name}>
-                          {proxy.base_domain ? (
+                          {adminUrl ? (
                             <a
-                              href={`${formatUrl(proxy.use_https ? "https" : "http", `${service.id}.${proxy.base_domain}`, proxy.use_https ? proxy.https_port : proxy.http_port)}/_/`}
+                              href={adminUrl}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="hover:underline flex items-center gap-1"
