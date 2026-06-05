@@ -236,9 +236,11 @@ func (rp *DynamicReverseProxyDiscovery) proxyModifyResponse(r *http.Response) er
 			if mkErr := os.MkdirAll(filepath.Dir(diskPath), 0755); mkErr == nil {
 				if gzFile, createErr := os.Create(diskPath); createErr == nil {
 					pr, pw := io.Pipe()
-					// DefaultCompression = nivel 6: balance ideal velocidad/ratio para on-the-fly.
+					// BestCompression = nivel 9: maximo ratio posible.
+					// Justificado porque solo se comprime UNA VEZ (primer request) y se cachea a disco.
+					// El costo extra de CPU es ~5ms por archivo — insignificante frente al beneficio permanente.
 					// MultiWriter en la SALIDA del gzip: bytes comprimidos van a pw (browser) y gzFile (disco).
-					gz, _ := gzip.NewWriterLevel(io.MultiWriter(pw, gzFile), gzip.DefaultCompression)
+					gz, _ := gzip.NewWriterLevel(io.MultiWriter(pw, gzFile), gzip.BestCompression)
 					origBody := r.Body
 					go func() {
 						if _, copyErr := io.Copy(gz, origBody); copyErr != nil {
