@@ -15,6 +15,18 @@ func init() {
 			return err
 		}
 
+		// Desmarcar como campos de sistema para poder eliminarlos
+		for _, f := range servicesDomains.Fields {
+			if f.GetName() == "serve_static" || f.GetName() == "proxy_entry" {
+				if bf, ok := f.(*core.BoolField); ok {
+					bf.System = false
+				}
+				if rf, ok := f.(*core.RelationField); ok {
+					rf.System = false
+				}
+			}
+		}
+
 		// Remover campos proxy_entry y serve_static
 		servicesDomains.Fields.RemoveByName("proxy_entry")
 		servicesDomains.Fields.RemoveByName("serve_static")
