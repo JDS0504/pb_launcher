@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { statusService } from "../../services/status";
 import { serviceService } from "../../services/services";
-import { Cpu, HardDrive, Server, Activity, Power } from "lucide-react";
+import { useProxyConfigs } from "../../hooks/useProxyConfigs";
+import { formatUrl } from "../../utils/url";
+import { Cpu, HardDrive, Server, Activity, Power, ExternalLink } from "lucide-react";
 import classNames from "classnames";
 import React from "react";
 
@@ -41,6 +43,8 @@ export const StatusPage = () => {
     queryFn: serviceService.fetchAllServices,
     refetchInterval: 3000,
   });
+
+  const proxy = useProxyConfigs();
 
   const getStatusColor = (percent: number) => {
     if (percent < 70) return "text-success border-success/30 bg-success/5";
@@ -236,8 +240,20 @@ export const StatusPage = () => {
                     const stats = data.instances_stats?.[service.id];
                     return (
                       <tr key={service.id} className="hover:bg-base-200/35">
-                        <td className="font-bold text-primary max-w-[100px] truncate" title={service.name}>
-                          {service.name}
+                        <td className="font-bold text-primary max-w-[120px] truncate" title={service.name}>
+                          {proxy.base_domain ? (
+                            <a
+                              href={`${formatUrl(proxy.use_https ? "https" : "http", `${service.id}.${proxy.base_domain}`, proxy.use_https ? proxy.https_port : proxy.http_port)}/_/`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="hover:underline flex items-center gap-1"
+                            >
+                              {service.name}
+                              <ExternalLink className="w-3 h-3 opacity-50 shrink-0" />
+                            </a>
+                          ) : (
+                            service.name
+                          )}
                         </td>
                         <td className="text-right text-success font-semibold whitespace-nowrap">
                           {stats ? formatBytes(stats.memory_bytes) : "0 B"}

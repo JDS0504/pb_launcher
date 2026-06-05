@@ -2,7 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo, type FC } from "react";
 import classNames from "classnames";
 import { Search, ExternalLink, AlertTriangle } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useProxyConfigs } from "../../hooks/useProxyConfigs";
+import { formatUrl } from "../../utils/url";
 import { serviceService, type ServiceUptimeViewDto } from "../../services/services";
 
 const PAGE_SIZE = 10;
@@ -35,6 +36,7 @@ export const UptimePage: FC = () => {
   const [search, setSearch] = useState("");
   const [rangeDays, setRangeDays] = useState<1 | 7 | 30>(7);
   const [page, setPage] = useState(0);
+  const proxy = useProxyConfigs();
 
   // Cargar datos consolidados desde la vista SQL
   const uptimeQuery = useQuery({
@@ -144,9 +146,15 @@ export const UptimePage: FC = () => {
                       return (
                         <tr key={item.id} className="hover:bg-base-200/40">
                           <td className="font-bold text-primary truncate max-w-[150px]">
-                            <Link to={`/services/${item.id}?section=uptime`} className="hover:underline flex items-center gap-1.5">
-                              {item.service_name} <ExternalLink className="w-3 h-3 opacity-50" />
-                            </Link>
+                            <a
+                              href={`${formatUrl(proxy.use_https ? "https" : "http", `${item.id}.${proxy.base_domain ?? ""}`, proxy.use_https ? proxy.https_port : proxy.http_port)}/_/`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="hover:underline flex items-center gap-1.5"
+                            >
+                              {item.service_name}
+                              <ExternalLink className="w-3 h-3 opacity-50" />
+                            </a>
                           </td>
                           <td>
                             <span
