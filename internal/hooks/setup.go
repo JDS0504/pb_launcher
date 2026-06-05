@@ -4,8 +4,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"pb_launcher/configs"
+	"sync"
 
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
@@ -13,13 +15,30 @@ import (
 )
 
 func RegisterAdminExistsRoute(app *pocketbase.PocketBase, c configs.Config) {
+	var (
+		serverIPOnce sync.Once
+		serverIP     string
+	)
+
+	resolveServerIP := func(domain string) string {
+		serverIPOnce.Do(func() {
+			addrs, err := net.LookupHost(domain)
+			if err == nil && len(addrs) > 0 {
+				serverIP = addrs[0]
+			}
+		})
+		return serverIP
+	}
+
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		se.Router.GET("/x-api/proxy_configs", func(e *core.RequestEvent) error {
+			baseDomain := c.GetDomain()
 			response := map[string]any{
 				"use_https":   c.IsHttpsEnabled(),
 				"http_port":   c.GetHttpPort(),
 				"https_port":  c.GetHttpsPort(),
-				"base_domain": c.GetDomain(),
+				"base_domain": baseDomain,
+				"server_ip":   resolveServerIP(baseDomain),
 			}
 			return e.JSON(http.StatusOK, response)
 		})

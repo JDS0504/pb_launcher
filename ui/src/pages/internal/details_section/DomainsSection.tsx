@@ -124,7 +124,7 @@ export const DomainsSection: FC<Props> = ({
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <DnsSetupGuideButton serverIp={proxy.base_domain ?? "YOUR_SERVER_IP"} />
+        <DnsSetupGuideButton serverIp={proxy.server_ip ?? proxy.base_domain ?? "YOUR_SERVER_IP"} />
         <button
           className="btn btn-sm btn-primary gap-2"
           onClick={openCreateModal}
