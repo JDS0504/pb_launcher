@@ -1,16 +1,20 @@
 package proxy
 
 import (
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"mime"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"path"
+	"path/filepath"
 	"pb_launcher/configs"
 	launcherdomain "pb_launcher/internal/launcher/domain"
 	proxydomain "pb_launcher/internal/proxy/domain"
@@ -30,6 +34,7 @@ type DynamicReverseProxyDiscovery struct {
 	launcherManager     *launcherdomain.LauncherManager
 	apiDomain           string
 	internalApiAddress  string
+	dataDir             string
 }
 
 func NewDynamicReverseProxyDiscovery(
@@ -40,7 +45,7 @@ func NewDynamicReverseProxyDiscovery(
 	launcherManager *launcherdomain.LauncherManager,
 	cfg configs.Config,
 	pbConf *apis.ServeConfig) *DynamicReverseProxyDiscovery {
-	
+
 	launcherManager.SetOnServiceDeactivated(func(serviceID string) {
 		_ = serviceDiscovery.InvalidateServiceCacheByID(serviceID)
 	})
@@ -53,8 +58,8 @@ func NewDynamicReverseProxyDiscovery(
 		launcherManager:     launcherManager,
 		apiDomain:           cfg.GetDomain(),
 		internalApiAddress:  pbConf.HttpAddr,
+		dataDir:             cfg.GetDataDir(),
 	}
-
 }
 
 func (rp *DynamicReverseProxyDiscovery) extractID(host string) (string, error) {
@@ -97,9 +102,21 @@ func (rp *DynamicReverseProxyDiscovery) proxyErrorHandler(w http.ResponseWriter,
 
 const superusersEndpoint = "/api/collections/_superusers/records"
 
-// gzipCompressible contiene las extensiones para las que se sirve el .gz pre-comprimido.
-// Debe coincidir con compressibleForGzip en internal/filemanager/manager.go (SSOT en docs).
-var gzipCompressible = map[string]bool{
+// Headers internos para coordinar Director <-> ModifyResponse.
+// PocketBase los ignora al recibirlos como headers de request forwarded.
+const (
+	// gzHeaderOrigPath: ruta URL original antes de reescribir a .gz
+	gzHeaderOrigPath = "X-Gz-Orig-Path"
+	// gzHeaderPrecomp: el .gz ya estaba en disco — solo fijar headers de respuesta
+	gzHeaderPrecomp = "X-Gz-Precomp"
+	// gzHeaderCachePath: ruta en disco donde guardar el .gz generado on-the-fly
+	gzHeaderCachePath = "X-Gz-Cache-Path"
+	// gzHeaderAccept: el browser original aceptaba gzip (guardado antes de eliminar Accept-Encoding)
+	gzHeaderAccept = "X-Gz-Accept"
+)
+
+// gzipCompressibleExts contiene extensiones que vale la pena comprimir.
+var gzipCompressibleExts = map[string]bool{
 	".html": true,
 	".js":   true,
 	".css":  true,
@@ -111,45 +128,77 @@ var gzipCompressible = map[string]bool{
 	".map":  true,
 }
 
-// gzipOriginalMimeHeader es el header interno usado para pasar el MIME type original
-// desde el Director hasta ModifyResponse. PocketBase lo ignora.
-const gzipOriginalMimeHeader = "X-Gz-Orig-Mime"
+// isCompressibleMime retorna true para Content-Types que valen la pena comprimir.
+func isCompressibleMime(contentType string) bool {
+	ct := strings.ToLower(contentType)
+	return strings.HasPrefix(ct, "text/") ||
+		strings.HasPrefix(ct, "application/javascript") ||
+		strings.HasPrefix(ct, "application/json") ||
+		strings.HasPrefix(ct, "application/xml") ||
+		strings.HasPrefix(ct, "application/wasm") ||
+		strings.HasPrefix(ct, "image/svg")
+}
 
-// rewriteRequestForGzip reescribe el path a <path>.gz cuando:
-//  1. El browser acepta gzip (Accept-Encoding: gzip)
-//  2. La extensión del archivo es comprimible
-//  3. No es una ruta de API o panel admin de PocketBase
-//
-// PocketBase sirve el .gz como archivo estático. ModifyResponse
-// corrige el Content-Type y añade Content-Encoding: gzip.
-func rewriteRequestForGzip(req *http.Request) {
-	if !strings.Contains(req.Header.Get("Accept-Encoding"), "gzip") {
-		return
+// gzDiskPath calcula la ruta en disco del .gz para un serviceID y URL path dados.
+// Retorna ("", false) si el path no es elegible para compresion (API, admin, extension no comprimible).
+func (rp *DynamicReverseProxyDiscovery) gzDiskPath(serviceID, urlPath string) (string, bool) {
+	if serviceID == "" {
+		return "", false
 	}
-	urlPath := req.URL.Path
-	// No tocar rutas de API ni panel admin de PocketBase.
 	if strings.HasPrefix(urlPath, "/api/") || strings.HasPrefix(urlPath, "/_/") {
-		return
+		return "", false
 	}
 	ext := path.Ext(urlPath)
-	if ext == "" || !gzipCompressible[strings.ToLower(ext)] {
-		return
+	if ext == "" || !gzipCompressibleExts[strings.ToLower(ext)] {
+		return "", false
 	}
+	cleanPath := filepath.FromSlash(strings.TrimPrefix(urlPath, "/"))
+	diskPath := filepath.Join(rp.dataDir, serviceID, "pb_public", cleanPath) + ".gz"
+	return diskPath, true
+}
 
-	mimeType := mime.TypeByExtension(ext)
-	if mimeType == "" {
-		mimeType = "application/octet-stream"
-	}
+// buildReverseProxy crea un proxy hacia target.
+// serviceID habilita el patron lazy-compress + cache a disco:
+//   - Si .gz existe en disco -> reescribe URL a .gz (0 CPU, maxima velocidad)
+//   - Si .gz no existe -> comprime on-the-fly nivel 6 + guarda .gz a disco para proximos requests
+//   - Si serviceID == "" -> proxy transparente sin compresion (entradas proxy, API domain)
+func (rp *DynamicReverseProxyDiscovery) buildReverseProxy(target *url.URL, serviceID string) *httputil.ReverseProxy {
+	proxy := httputil.NewSingleHostReverseProxy(target)
 
-	// Guardar el MIME original para restaurarlo en ModifyResponse.
-	req.Header.Set(gzipOriginalMimeHeader, mimeType)
-	// PocketBase servirá el .gz como archivo estático.
-	req.URL.Path = urlPath + ".gz"
-	if req.URL.RawPath != "" {
-		req.URL.RawPath = req.URL.RawPath + ".gz"
+	originalDirector := proxy.Director
+	proxy.Director = func(req *http.Request) {
+		originalDirector(req)
+		networktools.PrepareProxyHeaders(req, target)
+
+		if !strings.Contains(req.Header.Get("Accept-Encoding"), "gzip") {
+			return
+		}
+		diskPath, ok := rp.gzDiskPath(serviceID, req.URL.Path)
+		if !ok {
+			return
+		}
+
+		origPath := req.URL.Path
+		// Eliminar Accept-Encoding: nosotros manejamos la compresion, no PocketBase.
+		req.Header.Del("Accept-Encoding")
+
+		if _, statErr := os.Stat(diskPath); statErr == nil {
+			// .gz ya existe en disco -> servir directamente, 0 CPU de compresion.
+			req.Header.Set(gzHeaderOrigPath, origPath)
+			req.Header.Set(gzHeaderPrecomp, "1")
+			req.URL.Path = origPath + ".gz"
+			if req.URL.RawPath != "" {
+				req.URL.RawPath = req.URL.RawPath + ".gz"
+			}
+		} else {
+			// .gz no existe -> comprimir on-the-fly y guardar en disco para proximos requests.
+			req.Header.Set(gzHeaderAccept, "1")
+			req.Header.Set(gzHeaderCachePath, diskPath)
+		}
 	}
-	// Eliminar Accept-Encoding para que PocketBase no intente comprimir el .gz ya comprimido.
-	req.Header.Del("Accept-Encoding")
+	proxy.ModifyResponse = rp.proxyModifyResponse
+	proxy.ErrorHandler = rp.proxyErrorHandler
+	return proxy
 }
 
 func (rp *DynamicReverseProxyDiscovery) proxyModifyResponse(r *http.Response) error {
@@ -159,21 +208,55 @@ func (rp *DynamicReverseProxyDiscovery) proxyModifyResponse(r *http.Response) er
 		r.Header.Set("Access-Control-Allow-Credentials", "true")
 	}
 
-	// Si reescribimos la URL a .gz y PocketBase respondió con éxito:
-	// corregir Content-Type al tipo original del archivo y añadir Content-Encoding.
-	// Content-Length se mantiene: es el tamaño del .gz, que es lo que el browser recibe.
-	//
-	// GUARD SPA: PocketBase devuelve index.html con 200 para rutas no encontradas (SPA mode).
-	// Si el Content-Type de respuesta es text/html pero esperábamos JS/CSS/etc,
-	// es un SPA fallback — NO aplicar gzip o el browser falla con ERR_CONTENT_DECODING_FAILED.
-	if origMime := r.Request.Header.Get(gzipOriginalMimeHeader); origMime != "" && r.StatusCode == http.StatusOK {
-		respContentType := r.Header.Get("Content-Type")
-		isSpaFallback := strings.HasPrefix(respContentType, "text/html") && !strings.HasPrefix(origMime, "text/html")
+	// Caso 1: .gz existia en disco — PocketBase lo sirvio, solo corregir headers.
+	// Guard SPA: si PocketBase hizo fallback a index.html (text/html) para un .gz
+	// inexistente, no aplicar gzip headers para evitar ERR_CONTENT_DECODING_FAILED.
+	if r.Request.Header.Get(gzHeaderPrecomp) == "1" && r.StatusCode == http.StatusOK {
+		origPath := r.Request.Header.Get(gzHeaderOrigPath)
+		ext := path.Ext(origPath)
+		mimeType := mime.TypeByExtension(ext)
+		if mimeType == "" {
+			mimeType = "application/octet-stream"
+		}
+		respCT := r.Header.Get("Content-Type")
+		isSpaFallback := strings.HasPrefix(respCT, "text/html") && !strings.HasPrefix(mimeType, "text/html")
 		if !isSpaFallback {
 			r.Header.Set("Content-Encoding", "gzip")
-			r.Header.Set("Content-Type", origMime)
-			// Vary indica a proxies/CDN que la respuesta varía según el encoding soportado.
+			r.Header.Set("Content-Type", mimeType)
 			r.Header.Set("Vary", "Accept-Encoding")
+		}
+	}
+
+	// Caso 2: .gz no existia — comprimir on-the-fly (nivel 6, rapido) y cachear a disco.
+	// io.MultiWriter hace tee: los bytes comprimidos van al browser Y al archivo .gz simultaneamente.
+	// Proximos requests encontraran el .gz en disco y usaran el Caso 1 (0 CPU).
+	if r.Request.Header.Get(gzHeaderAccept) == "1" && r.StatusCode == http.StatusOK {
+		if isCompressibleMime(r.Header.Get("Content-Type")) {
+			diskPath := r.Request.Header.Get(gzHeaderCachePath)
+			if mkErr := os.MkdirAll(filepath.Dir(diskPath), 0755); mkErr == nil {
+				if gzFile, createErr := os.Create(diskPath); createErr == nil {
+					pr, pw := io.Pipe()
+					// DefaultCompression = nivel 6: balance ideal velocidad/ratio para on-the-fly.
+					gz, _ := gzip.NewWriterLevel(pw, gzip.DefaultCompression)
+					origBody := r.Body
+					go func() {
+						// MultiWriter: cada byte comprimido va a pw (-> browser) y gzFile (disco) a la vez.
+						mw := io.MultiWriter(gz, gzFile)
+						if _, copyErr := io.Copy(mw, origBody); copyErr != nil {
+							slog.Warn("proxy: error comprimiendo respuesta on-the-fly", "error", copyErr)
+						}
+						gz.Close()
+						gzFile.Close()
+						pw.Close()
+						origBody.Close()
+					}()
+					r.Body = pr
+					r.Header.Set("Content-Encoding", "gzip")
+					r.Header.Set("Vary", "Accept-Encoding")
+					r.Header.Del("Content-Length") // tamano varia al comprimir
+					r.ContentLength = -1
+				}
+			}
 		}
 	}
 
@@ -186,27 +269,12 @@ func (rp *DynamicReverseProxyDiscovery) proxyModifyResponse(r *http.Response) er
 	return nil
 }
 
-func (rp *DynamicReverseProxyDiscovery) buildReverseProxy(target *url.URL) *httputil.ReverseProxy {
-	proxy := httputil.NewSingleHostReverseProxy(target)
-
-	originalDirector := proxy.Director
-	proxy.Director = func(req *http.Request) {
-		originalDirector(req)
-		networktools.PrepareProxyHeaders(req, target)
-		// Reescribir a .gz si el browser acepta gzip y el archivo es comprimible.
-		rewriteRequestForGzip(req)
-	}
-	proxy.ModifyResponse = rp.proxyModifyResponse
-	proxy.ErrorHandler = rp.proxyErrorHandler
-	return proxy
-}
-
 func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host string) (*httputil.ReverseProxy, error) {
 	if host == rp.apiDomain {
 		return rp.buildReverseProxy(&url.URL{
 			Scheme: "http",
 			Host:   rp.internalApiAddress,
-		}), nil
+		}, ""), nil
 	}
 
 	id, err := rp.extractID(host)
@@ -222,17 +290,17 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 		if target.Service != nil {
 			serviceID := *target.Service
 			service, err := rp.serviceDiscovery.FindRunningServiceByID(ctx, serviceID)
-			
+
 			// Si no hay error en BD y el servicio realmente corre en memoria
 			if err == nil && rp.launcherManager.IsServiceRunning(serviceID) {
 				rp.launcherManager.RecordActivity(serviceID)
 				return rp.buildReverseProxy(&url.URL{
 					Scheme: "http",
 					Host:   net.JoinHostPort(service.IP, strconv.Itoa(service.Port)),
-				}), nil
+				}, serviceID), nil
 			}
 
-			// Si no corre en memoria, o no está marcado en ejecución en BD, lo despertamos
+			// Si no corre en memoria, o no esta marcado en ejecucion en BD, lo despertamos
 			if errors.Is(err, repositories.ErrNotFound) || (err == nil && !rp.launcherManager.IsServiceRunning(serviceID)) {
 				ip, port, wakeupErr := rp.launcherManager.WakeupService(ctx, serviceID)
 				if wakeupErr == nil {
@@ -241,7 +309,7 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 					return rp.buildReverseProxy(&url.URL{
 						Scheme: "http",
 						Host:   net.JoinHostPort(ip, strconv.Itoa(port)),
-					}), nil
+					}, serviceID), nil
 				}
 				return nil, fmt.Errorf("failed to wake up service %s: %w", serviceID, wakeupErr)
 			}
@@ -258,7 +326,7 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse target URL: %s", entry.TargetUrl)
 			}
-			return rp.buildReverseProxy(targetURL), nil
+			return rp.buildReverseProxy(targetURL, ""), nil
 		}
 		return nil, fmt.Errorf("no target found for domain: %s", host)
 	}
@@ -269,10 +337,10 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 		return rp.buildReverseProxy(&url.URL{
 			Scheme: "http",
 			Host:   net.JoinHostPort(service.IP, strconv.Itoa(service.Port)),
-		}), nil
+		}, id), nil
 	}
 
-	// Si no corre en memoria, o no está marcado en ejecución en BD
+	// Si no corre en memoria, o no esta marcado en ejecucion en BD
 	if errors.Is(err, repositories.ErrNotFound) || (err == nil && !rp.launcherManager.IsServiceRunning(id)) {
 		ip, port, wakeupErr := rp.launcherManager.WakeupService(ctx, id)
 		if wakeupErr == nil {
@@ -281,7 +349,7 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 			return rp.buildReverseProxy(&url.URL{
 				Scheme: "http",
 				Host:   net.JoinHostPort(ip, strconv.Itoa(port)),
-			}), nil
+			}, id), nil
 		}
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to resolve service by id: %s", id)
@@ -293,7 +361,7 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse target URL: %s", entry.TargetUrl)
 		}
-		return rp.buildReverseProxy(targetURL), nil
+		return rp.buildReverseProxy(targetURL, ""), nil
 	}
 	if !errors.Is(err, repositories.ErrNotFound) {
 		return nil, fmt.Errorf("failed to resolve proxy entry by id: %s", id)
