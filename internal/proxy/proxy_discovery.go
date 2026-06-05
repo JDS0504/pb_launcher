@@ -26,6 +26,30 @@ import (
 	"github.com/pocketbase/pocketbase/apis"
 )
 
+// spaFileServer es un http.Handler que sirve archivos estáticos desde staticDir.
+// Si el archivo pedido no existe, entrega index.html para soportar SPAs con client-side routing.
+type spaFileServer struct {
+	staticDir string
+	inner     http.Handler
+}
+
+func newSpaFileServer(staticDir string) http.Handler {
+	return &spaFileServer{
+		staticDir: staticDir,
+		inner:     http.FileServer(http.Dir(staticDir)),
+	}
+}
+
+func (s *spaFileServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	cleanPath := filepath.Join(s.staticDir, filepath.FromSlash(path.Clean("/"+r.URL.Path)))
+	if _, err := os.Stat(cleanPath); os.IsNotExist(err) {
+		// Archivo no encontrado → entregar index.html (SPA fallback)
+		http.ServeFile(w, r, filepath.Join(s.staticDir, "index.html"))
+		return
+	}
+	s.inner.ServeHTTP(w, r)
+}
+
 type DynamicReverseProxyDiscovery struct {
 	serviceDiscovery    *proxydomain.ServiceDiscovery
 	proxyEntryDiscovery *proxydomain.ProxyEntryDiscovery
@@ -270,6 +294,13 @@ func (rp *DynamicReverseProxyDiscovery) proxyModifyResponse(r *http.Response) er
 	return nil
 }
 
+// ResolveTarget determina el destino al que hay que redirigir la petición
+// para el host dado. Retorna un *httputil.ReverseProxy o un error si no
+// se pudo resolver el destino.
+//
+// Nota: la interfaz retorna *httputil.ReverseProxy por compatibilidad con el
+// caller existente. Para el modo serve_static devolvemos nil y el caller
+// detecta ese caso usando resolveHandler, que acepta http.Handler genérico.
 func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host string) (*httputil.ReverseProxy, error) {
 	if host == rp.apiDomain {
 		return rp.buildReverseProxy(&url.URL{
@@ -290,6 +321,12 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 		}
 		if target.Service != nil {
 			serviceID := *target.Service
+
+			// Modo estático: servir pb_public directamente desde disco, sin despertar PocketBase.
+			if target.ServeStatic {
+				return rp.resolveStaticHandler(serviceID)
+			}
+
 			service, err := rp.serviceDiscovery.FindRunningServiceByID(ctx, serviceID)
 
 			// Si no hay error en BD y el servicio realmente corre en memoria
@@ -368,4 +405,41 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 		return nil, fmt.Errorf("failed to resolve proxy entry by id: %s", id)
 	}
 	return nil, fmt.Errorf("no target found for host: %s with id: %s", host, id)
+}
+
+// resolveStaticHandler construye un *httputil.ReverseProxy que sirve los
+// archivos estáticos de pb_public directamente desde disco, sin despertar
+// la instancia de PocketBase.
+func (rp *DynamicReverseProxyDiscovery) resolveStaticHandler(serviceID string) (*httputil.ReverseProxy, error) {
+	staticDir := filepath.Join(rp.dataDir, serviceID, "pb_public")
+	if _, err := os.Stat(staticDir); os.IsNotExist(err) {
+		slog.Warn("serve_static: pb_public directory does not exist", "serviceID", serviceID, "path", staticDir)
+		return nil, fmt.Errorf("static directory not found for service %s", serviceID)
+	}
+	return buildStaticProxy(newSpaFileServer(staticDir)), nil
+}
+
+// buildStaticProxy crea un httputil.ReverseProxy que sirve archivos estáticos
+// directamente desde un http.Handler (FileServer) usando un Transport falso
+// que intercepta las peticiones y las inyecta en el handler de forma in-process.
+func buildStaticProxy(handler http.Handler) *httputil.ReverseProxy {
+	dummyTarget, _ := url.Parse("http://localhost")
+	p := httputil.NewSingleHostReverseProxy(dummyTarget)
+	p.Transport = &staticTransport{handler: handler}
+	p.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		http.Error(w, "static file error: "+err.Error(), http.StatusInternalServerError)
+	}
+	return p
+}
+
+// staticTransport implementa http.RoundTripper redirigiendo la petición al FileServer
+// en memoria, sin realizar ninguna conexión de red real.
+type staticTransport struct {
+	handler http.Handler
+}
+
+func (t *staticTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	rw := newResponseRecorder()
+	t.handler.ServeHTTP(rw, req)
+	return rw.toResponse(req), nil
 }
