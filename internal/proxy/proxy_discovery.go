@@ -237,15 +237,14 @@ func (rp *DynamicReverseProxyDiscovery) proxyModifyResponse(r *http.Response) er
 				if gzFile, createErr := os.Create(diskPath); createErr == nil {
 					pr, pw := io.Pipe()
 					// DefaultCompression = nivel 6: balance ideal velocidad/ratio para on-the-fly.
-					gz, _ := gzip.NewWriterLevel(pw, gzip.DefaultCompression)
+					// MultiWriter en la SALIDA del gzip: bytes comprimidos van a pw (browser) y gzFile (disco).
+					gz, _ := gzip.NewWriterLevel(io.MultiWriter(pw, gzFile), gzip.DefaultCompression)
 					origBody := r.Body
 					go func() {
-						// MultiWriter: cada byte comprimido va a pw (-> browser) y gzFile (disco) a la vez.
-						mw := io.MultiWriter(gz, gzFile)
-						if _, copyErr := io.Copy(mw, origBody); copyErr != nil {
+						if _, copyErr := io.Copy(gz, origBody); copyErr != nil {
 							slog.Warn("proxy: error comprimiendo respuesta on-the-fly", "error", copyErr)
 						}
-						gz.Close()
+						gz.Close()    // escribe footer gzip — obligatorio
 						gzFile.Close()
 						pw.Close()
 						origBody.Close()
