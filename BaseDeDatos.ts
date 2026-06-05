@@ -14,7 +14,6 @@ export enum Collections {
 	CertRequests = "cert_requests",
 	Comands = "comands",
 	OperationLogs = "operation_logs",
-	ProxyEntries = "proxy_entries",
 	Releases = "releases",
 	Repositories = "repositories",
 	ServiceUptimeView = "service_uptime_view",
@@ -153,18 +152,6 @@ export type OperationLogsRecord<Tmetadata = unknown> = {
 	status: OperationLogsStatusOptions
 }
 
-export enum ProxyEntriesEnabledOptions {
-	"yes" = "yes",
-	"no" = "no",
-}
-export type ProxyEntriesRecord = {
-	deleted?: IsoDateString
-	enabled: ProxyEntriesEnabledOptions
-	id: string
-	name: string
-	target_url: string
-}
-
 export type ReleasesRecord = {
 	asset_file_name: string
 	asset_id: string
@@ -251,8 +238,7 @@ export enum ServicesDomainsUseHttpsOptions {
 export type ServicesDomainsRecord = {
 	domain: string
 	id: string
-	proxy_entry?: RecordIdString[]
-	service?: RecordIdString[]
+	service: RecordIdString
 	use_https: ServicesDomainsUseHttpsOptions
 }
 
@@ -293,7 +279,6 @@ export type SuperusersResponse<Texpand = unknown> = Required<SuperusersRecord> &
 export type CertRequestsResponse<Texpand = unknown> = Required<CertRequestsRecord> & BaseSystemFields<Texpand>
 export type ComandsResponse<Texpand = unknown> = Required<ComandsRecord> & BaseSystemFields<Texpand>
 export type OperationLogsResponse<Tmetadata = unknown, Texpand = unknown> = Required<OperationLogsRecord<Tmetadata>> & BaseSystemFields<Texpand>
-export type ProxyEntriesResponse<Texpand = unknown> = Required<ProxyEntriesRecord> & BaseSystemFields<Texpand>
 export type ReleasesResponse<Texpand = unknown> = Required<ReleasesRecord> & BaseSystemFields<Texpand>
 export type RepositoriesResponse<Texpand = unknown> = Required<RepositoriesRecord> & BaseSystemFields<Texpand>
 export type ServiceUptimeViewResponse<Tactive_hours_24h = unknown, Tactive_hours_30d = unknown, Tactive_hours_7d = unknown, Tinactive_hours_24h = unknown, Tinactive_hours_30d = unknown, Tinactive_hours_7d = unknown, Tservice_name = unknown, Tservice_status = unknown, Tuptime_24h = unknown, Tuptime_30d = unknown, Tuptime_7d = unknown, Texpand = unknown> = Required<ServiceUptimeViewRecord<Tactive_hours_24h, Tactive_hours_30d, Tactive_hours_7d, Tinactive_hours_24h, Tinactive_hours_30d, Tinactive_hours_7d, Tservice_name, Tservice_status, Tuptime_24h, Tuptime_30d, Tuptime_7d>> & BaseSystemFields<Texpand>
@@ -313,7 +298,6 @@ export type CollectionRecords = {
 	cert_requests: CertRequestsRecord
 	comands: ComandsRecord
 	operation_logs: OperationLogsRecord
-	proxy_entries: ProxyEntriesRecord
 	releases: ReleasesRecord
 	repositories: RepositoriesRecord
 	service_uptime_view: ServiceUptimeViewRecord
@@ -332,7 +316,6 @@ export type CollectionResponses = {
 	cert_requests: CertRequestsResponse
 	comands: ComandsResponse
 	operation_logs: OperationLogsResponse
-	proxy_entries: ProxyEntriesResponse
 	releases: ReleasesResponse
 	repositories: RepositoriesResponse
 	service_uptime_view: ServiceUptimeViewResponse
@@ -354,7 +337,6 @@ export type TypedPocketBase = PocketBase & {
 	collection(idOrName: 'cert_requests'): RecordService<CertRequestsResponse>
 	collection(idOrName: 'comands'): RecordService<ComandsResponse>
 	collection(idOrName: 'operation_logs'): RecordService<OperationLogsResponse>
-	collection(idOrName: 'proxy_entries'): RecordService<ProxyEntriesResponse>
 	collection(idOrName: 'releases'): RecordService<ReleasesResponse>
 	collection(idOrName: 'repositories'): RecordService<RepositoriesResponse>
 	collection(idOrName: 'service_uptime_view'): RecordService<ServiceUptimeViewResponse>

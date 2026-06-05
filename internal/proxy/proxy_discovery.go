@@ -52,7 +52,6 @@ func (s *spaFileServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 type DynamicReverseProxyDiscovery struct {
 	serviceDiscovery    *proxydomain.ServiceDiscovery
-	proxyEntryDiscovery *proxydomain.ProxyEntryDiscovery
 	domainDiscovery     *proxydomain.DomainServiceDiscovery
 	installTokenUsecase *launcherdomain.CleanServiceInstallTokenUsecase
 	launcherManager     *launcherdomain.LauncherManager
@@ -63,7 +62,6 @@ type DynamicReverseProxyDiscovery struct {
 
 func NewDynamicReverseProxyDiscovery(
 	serviceDiscovery *proxydomain.ServiceDiscovery,
-	proxyEntryDiscovery *proxydomain.ProxyEntryDiscovery,
 	domainDiscovery *proxydomain.DomainServiceDiscovery,
 	installTokenUsecase *launcherdomain.CleanServiceInstallTokenUsecase,
 	launcherManager *launcherdomain.LauncherManager,
@@ -76,7 +74,6 @@ func NewDynamicReverseProxyDiscovery(
 
 	return &DynamicReverseProxyDiscovery{
 		serviceDiscovery:    serviceDiscovery,
-		proxyEntryDiscovery: proxyEntryDiscovery,
 		domainDiscovery:     domainDiscovery,
 		installTokenUsecase: installTokenUsecase,
 		launcherManager:     launcherManager,
@@ -301,7 +298,7 @@ func (rp *DynamicReverseProxyDiscovery) proxyModifyResponse(r *http.Response) er
 // Nota: la interfaz retorna *httputil.ReverseProxy por compatibilidad con el
 // caller existente. Para el modo serve_static devolvemos nil y el caller
 // detecta ese caso usando resolveHandler, que acepta http.Handler genérico.
-func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host string) (*httputil.ReverseProxy, error) {
+func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host string, urlPath string) (*httputil.ReverseProxy, error) {
 	if host == rp.apiDomain {
 		return rp.buildReverseProxy(&url.URL{
 			Scheme: "http",
@@ -319,52 +316,42 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 		if err != nil {
 			return nil, fmt.Errorf("no target found for domain: %s", host)
 		}
-		if target.Service != nil {
-			serviceID := *target.Service
+		if target.Service != "" {
+			serviceID := target.Service
 
-			// Modo estático: servir pb_public directamente desde disco, sin despertar PocketBase.
-			if target.ServeStatic {
-				return rp.resolveStaticHandler(serviceID)
-			}
+			// Si es una ruta de API o administración, ruteamos a PocketBase (y despertamos si es necesario)
+			if strings.HasPrefix(urlPath, "/api/") || strings.HasPrefix(urlPath, "/_/") {
+				service, err := rp.serviceDiscovery.FindRunningServiceByID(ctx, serviceID)
 
-			service, err := rp.serviceDiscovery.FindRunningServiceByID(ctx, serviceID)
-
-			// Si no hay error en BD y el servicio realmente corre en memoria
-			if err == nil && rp.launcherManager.IsServiceRunning(serviceID) {
-				rp.launcherManager.RecordActivity(serviceID)
-				return rp.buildReverseProxy(&url.URL{
-					Scheme: "http",
-					Host:   net.JoinHostPort(service.IP, strconv.Itoa(service.Port)),
-				}, serviceID), nil
-			}
-
-			// Si no corre en memoria, o no esta marcado en ejecucion en BD, lo despertamos
-			if errors.Is(err, repositories.ErrNotFound) || (err == nil && !rp.launcherManager.IsServiceRunning(serviceID)) {
-				ip, port, wakeupErr := rp.launcherManager.WakeupService(ctx, serviceID)
-				if wakeupErr == nil {
+				// Si no hay error en BD y el servicio realmente corre en memoria
+				if err == nil && rp.launcherManager.IsServiceRunning(serviceID) {
 					rp.launcherManager.RecordActivity(serviceID)
-					_ = rp.serviceDiscovery.InvalidateServiceCacheByID(serviceID)
 					return rp.buildReverseProxy(&url.URL{
 						Scheme: "http",
-						Host:   net.JoinHostPort(ip, strconv.Itoa(port)),
+						Host:   net.JoinHostPort(service.IP, strconv.Itoa(service.Port)),
 					}, serviceID), nil
 				}
-				return nil, fmt.Errorf("failed to wake up service %s: %w", serviceID, wakeupErr)
+
+				// Si no corre en memoria, o no esta marcado en ejecucion en BD, lo despertamos
+				if errors.Is(err, repositories.ErrNotFound) || (err == nil && !rp.launcherManager.IsServiceRunning(serviceID)) {
+					ip, port, wakeupErr := rp.launcherManager.WakeupService(ctx, serviceID)
+					if wakeupErr == nil {
+						rp.launcherManager.RecordActivity(serviceID)
+						_ = rp.serviceDiscovery.InvalidateServiceCacheByID(serviceID)
+						return rp.buildReverseProxy(&url.URL{
+							Scheme: "http",
+							Host:   net.JoinHostPort(ip, strconv.Itoa(port)),
+						}, serviceID), nil
+					}
+					return nil, fmt.Errorf("failed to wake up service %s: %w", serviceID, wakeupErr)
+				}
+				if err != nil {
+					return nil, fmt.Errorf("service not found for id: %s", serviceID)
+				}
 			}
-			if err != nil {
-				return nil, fmt.Errorf("service not found for id: %s", serviceID)
-			}
-		}
-		if target.ProxyEntry != nil {
-			entry, err := rp.proxyEntryDiscovery.FindEnabledProxyEntryByID(ctx, *target.ProxyEntry)
-			if err != nil {
-				return nil, fmt.Errorf("proxy entry not found for id: %s", *target.ProxyEntry)
-			}
-			targetURL, err := url.Parse(entry.TargetUrl)
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse target URL: %s", entry.TargetUrl)
-			}
-			return rp.buildReverseProxy(targetURL, ""), nil
+
+			// Para cualquier otra ruta, servimos estáticos desde disco directamente
+			return rp.resolveStaticHandler(serviceID)
 		}
 		return nil, fmt.Errorf("no target found for domain: %s", host)
 	}
@@ -393,17 +380,6 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 		return nil, fmt.Errorf("failed to resolve service by id: %s", id)
 	}
 
-	entry, err := rp.proxyEntryDiscovery.FindEnabledProxyEntryByID(ctx, id)
-	if err == nil {
-		targetURL, err := url.Parse(entry.TargetUrl)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse target URL: %s", entry.TargetUrl)
-		}
-		return rp.buildReverseProxy(targetURL, ""), nil
-	}
-	if !errors.Is(err, repositories.ErrNotFound) {
-		return nil, fmt.Errorf("failed to resolve proxy entry by id: %s", id)
-	}
 	return nil, fmt.Errorf("no target found for host: %s with id: %s", host, id)
 }
 

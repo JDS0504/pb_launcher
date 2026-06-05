@@ -86,7 +86,7 @@ func (rp *DynamicReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		proxy = httputil.NewSingleHostReverseProxy(targetURL) // For some reason, Let's Encrypt doesn't seem to work well with my buildReverseProxy
 	} else {
 		var err error
-		proxy, err = rp.proxyResolver.ResolveTarget(ctx, cleanHost)
+		proxy, err = rp.proxyResolver.ResolveTarget(ctx, cleanHost, r.URL.Path)
 		if err != nil || proxy == nil {
 			slog.Warn("target resolution failed", "host", r.Host, "error", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)

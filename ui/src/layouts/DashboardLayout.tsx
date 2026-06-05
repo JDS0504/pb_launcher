@@ -15,7 +15,6 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
   const confirm = useConfirmModal();
   const selected = useMemo(() => {
     if (pathname === "/" || pathname.startsWith("/services/")) return "service";
-    if (pathname === "/proxy" || pathname.startsWith("/proxy/")) return "proxy";
     if (pathname === "/files" || pathname.startsWith("/files/")) return "files";
     if (pathname === "/operations") return "operations";
     if (pathname === "/uptime") return "uptime";
@@ -52,19 +51,6 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
             >
               <Server className="w-4 h-4" />
               <span className="hidden sm:inline">Services</span>
-            </NavLink>
-
-            <NavLink
-              to="/proxy"
-              className={classNames(
-                "btn btn-sm btn-ghost shrink-0 gap-2 text-base-content transition-colors",
-                {
-                  "bg-base-200 text-primary": selected === "proxy",
-                },
-              )}
-            >
-              <Waypoints className="w-4 h-4" />
-              <span className="hidden sm:inline">Proxy</span>
             </NavLink>
 
             <NavLink
