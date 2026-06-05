@@ -1,6 +1,6 @@
 import { useMemo, type PropsWithChildren } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { History, Server, Waypoints, User, LogOut, Settings, Activity, FolderOpen, Clock } from "lucide-react";
+import { History, Server, User, LogOut, Settings, Activity, FolderOpen, Clock } from "lucide-react";
 import { useConfirmModal } from "../hooks/useConfirmModal";
 import { authService } from "../services/auth";
 import { useViewportHeight } from "../hooks/useViewportHeight";

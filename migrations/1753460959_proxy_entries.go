@@ -10,7 +10,7 @@ import (
 
 func init() {
 	m.Register(func(app core.App) error {
-		proxyEntries := core.NewBaseCollection(collections.ProxyEntries)
+		proxyEntries := core.NewBaseCollection("proxy_entries")
 		proxyEntries.Fields.Add(
 			&core.TextField{
 				Name:        "name",
@@ -69,7 +69,7 @@ func init() {
 		if err := app.Save(servicesDomains); err != nil {
 			return err
 		}
-		proxyEntries, err := app.FindCollectionByNameOrId(collections.ProxyEntries)
+		proxyEntries, err := app.FindCollectionByNameOrId("proxy_entries")
 		if err != nil {
 			return err
 		}
