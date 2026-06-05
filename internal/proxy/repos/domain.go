@@ -28,9 +28,21 @@ func (r *DomainTargetRepository) FindByDomain(ctx context.Context, domain string
 	if len(records) == 0 {
 		return nil, repositories.ErrNotFound
 	}
-	service := records[0].GetString("service")
+	rec := records[0]
+	service := rec.GetString("service")
 	if service != "" {
-		return &repositories.DomainTarget{Service: &service}, nil
+		serveStatic := rec.GetBool("serve_static")
+		return &repositories.DomainTarget{
+			Service:     &service,
+			ServeStatic: serveStatic,
+		}, nil
+	}
+	proxyEntry := rec.GetString("proxy_entry")
+	if proxyEntry != "" {
+		return &repositories.DomainTarget{
+			ProxyEntry: &proxyEntry,
+		}, nil
 	}
 	return nil, repositories.ErrNotFound
 }
+

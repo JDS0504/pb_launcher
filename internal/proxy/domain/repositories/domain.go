@@ -3,7 +3,9 @@ package repositories
 import "context"
 
 type DomainTarget struct {
-	Service *string
+	Service     *string
+	ProxyEntry  *string
+	ServeStatic bool // cuando true, sirve pb_public desde disco sin encender PocketBase
 }
 
 type DomainTargetRepository interface {

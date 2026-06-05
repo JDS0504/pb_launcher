@@ -163,6 +163,7 @@ export const ServiceDetailPage = () => {
             <div className="md:px-4 rounded-box min-w-0">
               <DomainsSection
                 service_id={service_id}
+                proxy_id=""
                 url_route_suffix="/_/"
               />
             </div>
