@@ -1,5 +1,6 @@
 import { useMemo, type FC } from "react";
 import { DomainCard } from "../components/DomainCard";
+import { DnsSetupGuideButton } from "../components/DnsSetupGuide";
 import { useProxyConfigs } from "../../../hooks/useProxyConfigs";
 import { formatUrl } from "../../../utils/url";
 import { Plus } from "lucide-react";
@@ -122,16 +123,15 @@ export const DomainsSection: FC<Props> = ({
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
-        <div className="flex gap-2">
-          <button
-            className="btn btn-sm btn-primary gap-2 w-full sm:w-auto"
-            onClick={openCreateModal}
-          >
-            <Plus className="w-4 h-4" />
-            New instance
-          </button>
-        </div>
+      <div className="flex justify-between items-center">
+        <DnsSetupGuideButton serverIp={proxy.base_domain ?? "YOUR_SERVER_IP"} />
+        <button
+          className="btn btn-sm btn-primary gap-2"
+          onClick={openCreateModal}
+        >
+          <Plus className="w-4 h-4" />
+          New instance
+        </button>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 min-w-0">
         <DomainCard
