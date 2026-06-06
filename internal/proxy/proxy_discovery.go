@@ -176,7 +176,14 @@ func gzDiskPath(dataDir, serviceID, urlPath string) (string, bool) {
 		return "", false
 	}
 	cleanPath := filepath.FromSlash(strings.TrimPrefix(urlPath, "/"))
-	diskPath := filepath.Join(dataDir, serviceID, "pb_public", cleanPath) + ".gz"
+	
+	// Solo generar cache .gz si el archivo original existe en el directorio pb_public
+	originalFile := filepath.Join(dataDir, serviceID, "pb_public", cleanPath)
+	if _, err := os.Stat(originalFile); err != nil {
+		return "", false
+	}
+
+	diskPath := originalFile + ".gz"
 	return diskPath, true
 }
 
