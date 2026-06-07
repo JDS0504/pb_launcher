@@ -164,27 +164,36 @@ func isCompressibleMime(contentType string) bool {
 // gzDiskPath calcula la ruta en disco del .gz para un dataDir, serviceID y URL path dados.
 // Retorna ("", false) si el path no es elegible para compresion (API, admin, extension no comprimible).
 // Es una funcion de paquete (sin receptor) para poder reutilizarse desde buildReverseProxy y staticTransport.
-func gzDiskPath(dataDir, serviceID, urlPath string) (string, bool) {
+func gzDiskPath(dataDir, serviceID, urlPath string) (diskPath string, gzUrlPath string, ok bool) {
 	if serviceID == "" {
-		return "", false
+		return "", "", false
 	}
 	if strings.HasPrefix(urlPath, "/api/") || strings.HasPrefix(urlPath, "/_/") {
-		return "", false
-	}
-	ext := path.Ext(urlPath)
-	if ext == "" || !gzipCompressibleExts[strings.ToLower(ext)] {
-		return "", false
-	}
-	cleanPath := filepath.FromSlash(strings.TrimPrefix(urlPath, "/"))
-	
-	// Solo generar cache .gz si el archivo original existe en el directorio pb_public
-	originalFile := filepath.Join(dataDir, serviceID, "pb_public", cleanPath)
-	if _, err := os.Stat(originalFile); err != nil {
-		return "", false
+		return "", "", false
 	}
 
-	diskPath := originalFile + ".gz"
-	return diskPath, true
+	cleanPath := filepath.FromSlash(path.Clean("/" + urlPath))
+	originalFile := filepath.Join(dataDir, serviceID, "pb_public", cleanPath)
+
+	fi, err := os.Stat(originalFile)
+	resolvedUrlPath := urlPath
+	// Si el archivo no existe o es un directorio, asumimos fallback a index.html (SPA)
+	if os.IsNotExist(err) || (err == nil && fi.IsDir()) {
+		originalFile = filepath.Join(dataDir, serviceID, "pb_public", "index.html")
+		if _, err := os.Stat(originalFile); err != nil {
+			return "", "", false
+		}
+		resolvedUrlPath = "/index.html"
+	}
+
+	ext := filepath.Ext(originalFile)
+	if !gzipCompressibleExts[strings.ToLower(ext)] {
+		return "", "", false
+	}
+
+	diskPath = originalFile + ".gz"
+	gzUrlPath = resolvedUrlPath + ".gz"
+	return diskPath, gzUrlPath, true
 }
 
 // buildReverseProxy crea un proxy hacia target.
@@ -203,7 +212,7 @@ func (rp *DynamicReverseProxyDiscovery) buildReverseProxy(target *url.URL, servi
 		if !strings.Contains(req.Header.Get("Accept-Encoding"), "gzip") {
 			return
 		}
-		diskPath, ok := gzDiskPath(rp.dataDir, serviceID, req.URL.Path)
+		diskPath, gzUrl, ok := gzDiskPath(rp.dataDir, serviceID, req.URL.Path)
 		if !ok {
 			return
 		}
@@ -216,9 +225,9 @@ func (rp *DynamicReverseProxyDiscovery) buildReverseProxy(target *url.URL, servi
 			// .gz ya existe en disco -> servir directamente, 0 CPU de compresion.
 			req.Header.Set(gzHeaderOrigPath, origPath)
 			req.Header.Set(gzHeaderPrecomp, "1")
-			req.URL.Path = origPath + ".gz"
+			req.URL.Path = gzUrl
 			if req.URL.RawPath != "" {
-				req.URL.RawPath = req.URL.RawPath + ".gz"
+				req.URL.RawPath = url.PathEscape(gzUrl)
 			}
 		} else {
 			// .gz no existe -> comprimir on-the-fly y guardar en disco para proximos requests.
@@ -242,8 +251,9 @@ func (rp *DynamicReverseProxyDiscovery) proxyModifyResponse(r *http.Response) er
 	// Guard SPA: si PocketBase hizo fallback a index.html (text/html) para un .gz
 	// inexistente, no aplicar gzip headers para evitar ERR_CONTENT_DECODING_FAILED.
 	if r.Request.Header.Get(gzHeaderPrecomp) == "1" && r.StatusCode == http.StatusOK {
-		origPath := r.Request.Header.Get(gzHeaderOrigPath)
-		ext := path.Ext(origPath)
+		reqPath := r.Request.URL.Path
+		origFilePath := strings.TrimSuffix(reqPath, ".gz")
+		ext := path.Ext(origFilePath)
 		mimeType := mime.TypeByExtension(ext)
 		if mimeType == "" {
 			mimeType = "application/octet-stream"
@@ -315,81 +325,56 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 		}, ""), nil
 	}
 
-	id, err := rp.extractID(host)
+	serviceID, err := rp.extractID(host)
 	if err != nil {
 		return nil, err
 	}
 
-	if id == "" {
+	// Si no es un subdominio, buscamos por dominio personalizado
+	if serviceID == "" {
 		target, err := rp.domainDiscovery.FindTargetByDomain(ctx, host)
 		if err != nil {
 			return nil, fmt.Errorf("no target found for domain: %s", host)
 		}
-		if target.Service != "" {
-			serviceID := target.Service
-
-			// Si es una ruta de API o administración, ruteamos a PocketBase (y despertamos si es necesario)
-			if strings.HasPrefix(urlPath, "/api/") || strings.HasPrefix(urlPath, "/_/") {
-				service, err := rp.serviceDiscovery.FindRunningServiceByID(ctx, serviceID)
-
-				// Si no hay error en BD y el servicio realmente corre en memoria
-				if err == nil && rp.launcherManager.IsServiceRunning(serviceID) {
-					rp.launcherManager.RecordActivity(serviceID)
-					return rp.buildReverseProxy(&url.URL{
-						Scheme: "http",
-						Host:   net.JoinHostPort(service.IP, strconv.Itoa(service.Port)),
-					}, serviceID), nil
-				}
-
-				// Si no corre en memoria, o no esta marcado en ejecucion en BD, lo despertamos
-				if errors.Is(err, repositories.ErrNotFound) || (err == nil && !rp.launcherManager.IsServiceRunning(serviceID)) {
-					ip, port, wakeupErr := rp.launcherManager.WakeupService(ctx, serviceID)
-					if wakeupErr == nil {
-						rp.launcherManager.RecordActivity(serviceID)
-						_ = rp.serviceDiscovery.InvalidateServiceCacheByID(serviceID)
-						return rp.buildReverseProxy(&url.URL{
-							Scheme: "http",
-							Host:   net.JoinHostPort(ip, strconv.Itoa(port)),
-						}, serviceID), nil
-					}
-					return nil, fmt.Errorf("failed to wake up service %s: %w", serviceID, wakeupErr)
-				}
-				if err != nil {
-					return nil, fmt.Errorf("service not found for id: %s", serviceID)
-				}
-			}
-
-			// Para cualquier otra ruta, servimos estáticos desde disco directamente
-			return rp.resolveStaticHandler(serviceID)
+		if target.Service == "" {
+			return nil, fmt.Errorf("no service associated with domain: %s", host)
 		}
-		return nil, fmt.Errorf("no target found for domain: %s", host)
+		serviceID = target.Service
 	}
 
-	service, err := rp.serviceDiscovery.FindRunningServiceByID(ctx, id)
-	if err == nil && rp.launcherManager.IsServiceRunning(id) {
-		rp.launcherManager.RecordActivity(id)
-		return rp.buildReverseProxy(&url.URL{
-			Scheme: "http",
-			Host:   net.JoinHostPort(service.IP, strconv.Itoa(service.Port)),
-		}, id), nil
-	}
+	// Si es una ruta de API o administración, ruteamos a PocketBase (y despertamos si es necesario)
+	if strings.HasPrefix(urlPath, "/api/") || strings.HasPrefix(urlPath, "/_/") {
+		service, err := rp.serviceDiscovery.FindRunningServiceByID(ctx, serviceID)
 
-	// Si no corre en memoria, o no esta marcado en ejecucion en BD
-	if errors.Is(err, repositories.ErrNotFound) || (err == nil && !rp.launcherManager.IsServiceRunning(id)) {
-		ip, port, wakeupErr := rp.launcherManager.WakeupService(ctx, id)
-		if wakeupErr == nil {
-			rp.launcherManager.RecordActivity(id)
-			_ = rp.serviceDiscovery.InvalidateServiceCacheByID(id)
+		// Si no hay error en BD y el servicio realmente corre en memoria
+		if err == nil && rp.launcherManager.IsServiceRunning(serviceID) {
+			rp.launcherManager.RecordActivity(serviceID)
 			return rp.buildReverseProxy(&url.URL{
 				Scheme: "http",
-				Host:   net.JoinHostPort(ip, strconv.Itoa(port)),
-			}, id), nil
+				Host:   net.JoinHostPort(service.IP, strconv.Itoa(service.Port)),
+			}, serviceID), nil
 		}
-	} else if err != nil {
-		return nil, fmt.Errorf("failed to resolve service by id: %s", id)
+
+		// Si no corre en memoria, o no esta marcado en ejecucion en BD, lo despertamos
+		if errors.Is(err, repositories.ErrNotFound) || (err == nil && !rp.launcherManager.IsServiceRunning(serviceID)) {
+			ip, port, wakeupErr := rp.launcherManager.WakeupService(ctx, serviceID)
+			if wakeupErr == nil {
+				rp.launcherManager.RecordActivity(serviceID)
+				_ = rp.serviceDiscovery.InvalidateServiceCacheByID(serviceID)
+				return rp.buildReverseProxy(&url.URL{
+					Scheme: "http",
+					Host:   net.JoinHostPort(ip, strconv.Itoa(port)),
+				}, serviceID), nil
+			}
+			return nil, fmt.Errorf("failed to wake up service %s: %w", serviceID, wakeupErr)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("service not found for id: %s", serviceID)
+		}
 	}
 
-	return nil, fmt.Errorf("no target found for host: %s with id: %s", host, id)
+	// Para cualquier otra ruta (estáticos), servimos desde disco directamente
+	return rp.resolveStaticHandler(serviceID)
 }
 
 // resolveStaticHandler construye un *httputil.ReverseProxy que sirve los
@@ -432,9 +417,10 @@ func (t *staticTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Solo aplicar compresión si el cliente acepta gzip y la ruta es elegible.
 	acceptsGzip := strings.Contains(req.Header.Get("Accept-Encoding"), "gzip")
 	if acceptsGzip {
-		diskPath, ok := gzDiskPath(t.dataDir, t.serviceID, req.URL.Path)
+		diskPath, gzUrl, ok := gzDiskPath(t.dataDir, t.serviceID, req.URL.Path)
 		if ok {
-			ext := path.Ext(req.URL.Path)
+			origFilePath := strings.TrimSuffix(gzUrl, ".gz")
+			ext := path.Ext(origFilePath)
 
 			if _, statErr := os.Stat(diskPath); statErr == nil {
 				// Caso 1: .gz precomprimido existe en disco → servir directamente (0 CPU).
