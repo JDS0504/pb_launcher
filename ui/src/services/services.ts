@@ -286,19 +286,23 @@ export const serviceService = {
     return json as ServiceLog[];
   },
   fetchOperationLogs: async (service_id: string, sinceDate?: string): Promise<OperationLog[]> => {
-    let filter = `service="${service_id}"`;
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().replace("T", " ").slice(0, 19);
+    let filter = `service="${service_id}"&&created>="${sevenDaysAgo}"`;
     if (sinceDate) {
       filter += `&&created>="${sinceDate}"`;
     }
     return pb.collection(OPERATION_LOGS_COLLECTION).getFullList<OperationLog>({
-      filter: filter,
+      filter,
       fields: "id,service,operation,status,message,metadata,created",
       sort: "-created",
     });
   },
   fetchAllOperationLogs: async (filter?: string): Promise<OperationLog[]> => {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().replace("T", " ").slice(0, 19);
+    const baseFilter = `created>="${sevenDaysAgo}"`;
+    const combined = filter ? `(${filter})&&${baseFilter}` : baseFilter;
     return pb.collection(OPERATION_LOGS_COLLECTION).getFullList<OperationLog>({
-      filter: filter,
+      filter: combined,
       expand: "service",
       fields:
         "id,service,operation,status,message,metadata,created,expand.service.id,expand.service.name",
@@ -323,8 +327,5 @@ export interface ServiceUptimeViewDto {
   uptime_7d: number;
   active_hours_7d: number;
   inactive_hours_7d: number;
-  uptime_30d: number;
-  active_hours_30d: number;
-  inactive_hours_30d: number;
 }
 

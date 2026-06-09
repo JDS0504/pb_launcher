@@ -33,11 +33,6 @@ export const UptimeSection: FC<Props> = ({ service_id }) => {
         activeHours: item.active_hours_7d,
         inactiveHours: item.inactive_hours_7d,
       },
-      last30d: {
-        percent: item.uptime_30d,
-        activeHours: item.active_hours_30d,
-        inactiveHours: item.inactive_hours_30d,
-      },
     };
   }, [uptimeQuery.data]);
 
@@ -118,11 +113,10 @@ export const UptimeSection: FC<Props> = ({ service_id }) => {
         </h4>
       </div>
 
-      {/* Grid de 3 Tarjetas de Disponibilidad */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Grid de 2 Tarjetas de Disponibilidad */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {renderCard("Últimas 24 Horas", uptimeStats.last24h)}
         {renderCard("Últimos 7 Días", uptimeStats.last7d)}
-        {renderCard("Últimos 30 Días", uptimeStats.last30d)}
       </div>
 
       {/* Resumen explicativo */}

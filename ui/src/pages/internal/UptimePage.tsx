@@ -35,7 +35,7 @@ const UptimePercentageBadge: FC<{ percent: number }> = ({ percent }) => {
 
 export const UptimePage: FC = () => {
   const [search, setSearch] = useState("");
-  const [rangeDays, setRangeDays] = useState<1 | 7 | 30>(7);
+  const [rangeDays, setRangeDays] = useState<1 | 7>(7);
   const [page, setPage] = useState(0);
   const proxy = useProxyConfigs();
 
@@ -70,8 +70,8 @@ export const UptimePage: FC = () => {
 
     // 2. Ordenar de mayor a menor según las horas activas del rango seleccionado (rangeDays)
     return filtered.sort((a, b) => {
-      const activeA = rangeDays === 1 ? a.active_hours_24h : rangeDays === 7 ? a.active_hours_7d : a.active_hours_30d;
-      const activeB = rangeDays === 1 ? b.active_hours_24h : rangeDays === 7 ? b.active_hours_7d : b.active_hours_30d;
+      const activeA = rangeDays === 1 ? a.active_hours_24h : a.active_hours_7d;
+      const activeB = rangeDays === 1 ? b.active_hours_24h : b.active_hours_7d;
       return activeB - activeA;
     });
   }, [uptimeQuery.data, search, rangeDays]);
@@ -107,7 +107,7 @@ export const UptimePage: FC = () => {
         </div>
 
         <div className="flex gap-1 shrink-0">
-          {([1, 7, 30] as const).map(d => (
+          {([1, 7] as const).map(d => (
             <button
               key={d}
               className={classNames("btn btn-xs capitalize", {
@@ -146,9 +146,9 @@ export const UptimePage: FC = () => {
                   </thead>
                   <tbody>
                     {paginated.map((item: ServiceUptimeViewDto) => {
-                      const percent = rangeDays === 1 ? item.uptime_24h : rangeDays === 7 ? item.uptime_7d : item.uptime_30d;
-                      const activeH = rangeDays === 1 ? item.active_hours_24h : rangeDays === 7 ? item.active_hours_7d : item.active_hours_30d;
-                      const inactiveH = rangeDays === 1 ? item.inactive_hours_24h : rangeDays === 7 ? item.inactive_hours_7d : item.inactive_hours_30d;
+                      const percent   = rangeDays === 1 ? item.uptime_24h       : item.uptime_7d;
+                      const activeH   = rangeDays === 1 ? item.active_hours_24h  : item.active_hours_7d;
+                      const inactiveH = rangeDays === 1 ? item.inactive_hours_24h : item.inactive_hours_7d;
 
                       const service = servicesQuery.data?.find(s => s.id === item.id);
                       const urls = getServiceUrls(service, proxy);
