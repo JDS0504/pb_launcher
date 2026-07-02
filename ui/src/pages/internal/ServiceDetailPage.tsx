@@ -216,14 +216,7 @@ export const ServiceDetailPage = () => {
           </div>
         )}
 
-        {activeSection === "settings" && (
-          <div className="mb-8 min-w-0">
-            <h3 className="text-lg font-semibold mb-6">Settings</h3>
-            <div className="rounded-box bg-base-200 p-3 sm:p-4 md:py-8 min-w-0">
-              Settings panel
-            </div>
-          </div>
-        )}
+
       </main>
     </div>
   );
