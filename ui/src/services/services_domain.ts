@@ -8,6 +8,7 @@ export interface DomainDto {
   domain: string;
 
   service: string;
+  cert_status?: "pending" | "approved" | "failed";
   x_cert_request_state?: "pending" | "approved" | "failed";
   x_has_valid_ssl_cert?: boolean;
   x_reached_max_attempt?: boolean;

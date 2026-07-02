@@ -54,6 +54,8 @@ export const DomainsSection: FC<Props> = ({
       service: "",
       domain: proxy.base_domain ? `${service_name}.${proxy.base_domain}` : "--",
       use_https: proxy.use_https ? "yes" : "no",
+      cert_status: "approved",
+      x_has_valid_ssl_cert: true,
     };
   }, [proxy.base_domain, proxy.use_https, service_name]);
 

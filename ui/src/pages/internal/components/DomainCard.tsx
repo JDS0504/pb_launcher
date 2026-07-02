@@ -28,7 +28,10 @@ export const DomainCard: FC<Props> = ({
 }) => {
   const { openModal } = useModal();
   const fmtdomain = useMemo(() => {
-    let status = domain.x_cert_request_state;
+    let status = domain.x_cert_request_state || domain.cert_status;
+    if (!status && domain.use_https === "yes") {
+      status = "pending";
+    }
     if (status == "failed" && !domain.x_reached_max_attempt) {
       status = "pending";
     }

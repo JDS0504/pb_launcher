@@ -268,7 +268,11 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
               "w-[200px]": width == null || width > 400,
             })}
           >
-            <Button type="submit" label="Guardar" loading={false} />
+             <Button
+              type="submit"
+              label="Guardar"
+              loading={createInstanceMutation.isPending || updateInstanceMutation.isPending}
+            />
           </div>
         </div>
       </form>
