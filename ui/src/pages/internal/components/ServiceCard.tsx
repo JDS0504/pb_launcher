@@ -112,12 +112,12 @@ export const ServiceCard: FC<Props> = ({
                     Start
                   </button>
                 </li>
-                <li>
+                 <li>
                   <button
-                    disabled={service.status !== "running"}
+                    disabled={service.status !== "running" && service.status !== "sleeping"}
                     className={classNames(
                       "flex items-center gap-2 w-full justify-start px-2 py-1 rounded-md text-left",
-                      service.status !== "running"
+                      service.status !== "running" && service.status !== "sleeping"
                         ? "text-base-content/40 cursor-not-allowed"
                         : "text-warning hover:bg-warning/10 hover:text-warning",
                     )}
@@ -129,10 +129,10 @@ export const ServiceCard: FC<Props> = ({
                 </li>
                 <li>
                   <button
-                    disabled={service.status !== "running"}
+                    disabled={service.status !== "running" && service.status !== "sleeping"}
                     className={classNames(
                       "flex items-center gap-2 w-full justify-start px-2 py-1 rounded-md text-left",
-                      service.status !== "running"
+                      service.status !== "running" && service.status !== "sleeping"
                         ? "text-base-content/40 cursor-not-allowed"
                         : "text-error hover:bg-error/10 hover:text-error",
                     )}

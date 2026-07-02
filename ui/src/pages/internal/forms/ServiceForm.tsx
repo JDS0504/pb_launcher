@@ -55,7 +55,6 @@ const getLimitsFromProfile = (profile: string): { cpu_quota: string; memory_limi
 
 const schema = object({
   name: stringRequired(), // Name of the new PocketBase instance
-  repository: stringRequired(), // Repository/source for the instance
   instanceSource: stringRequired(), // Source for the instance (template, version, etc.)
   restartPolicy: stringRequired(), // Restart policy: "no" or "on-failure"
   superuserPassword: string().optional(),
@@ -77,7 +76,6 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
   const form = useCustomForm(schema, {
     defaultValues: {
       name: record?.name ?? "",
-      repository: "pocketbase",
       instanceSource: record?.release_id ?? savedDefaults.instanceSource ?? "",
       restartPolicy: record?.restart_policy ?? savedDefaults.restartPolicy ?? "on-failure",
       superuserPassword: savedDefaults.superuserPassword ?? "",
@@ -176,7 +174,6 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
           localStorage.setItem(
             LOCAL_STORAGE_KEY,
             JSON.stringify({
-              repository: form.getValues("repository"),
               instanceSource,
               restartPolicy,
               superuserPassword,
