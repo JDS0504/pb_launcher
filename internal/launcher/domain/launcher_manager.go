@@ -53,6 +53,9 @@ type LauncherManager struct {
 	checkTickerInterval time.Duration
 	idleTimeout         time.Duration
 	stopChan            chan struct{}
+	// vacuumingSet registra qué instancias tienen un VACUUM SQLite en curso.
+	// WakeupService espera a que finalice antes de arrancar el proceso.
+	vacuumingSet sync.Map
 	// Callback invocado cuando una instancia se suspende o detiene.
 	// Permite que el proxy invalide su cache sin generar una dependencia circular.
 	onServiceDeactivated func(serviceID string)
@@ -600,6 +603,20 @@ func (lm *LauncherManager) Dispose() error {
 }
 
 func (lm *LauncherManager) WakeupService(ctx context.Context, serviceID string) (string, int, error) {
+	// Esperar a que finalice cualquier VACUUM en curso para esta instancia
+	// (evita SQLITE_BUSY al arrancar PocketBase mientras se compacta el .db).
+	const vacuumWaitTimeout = 30 * time.Second
+	const vacuumPollInterval = 200 * time.Millisecond
+	deadline := time.Now().Add(vacuumWaitTimeout)
+	for lm.IsVacuuming(serviceID) {
+		if time.Now().After(deadline) {
+			slog.Warn("wakeup: timeout esperando que termine el vacuum, continuando de todas formas",
+				"serviceID", serviceID)
+			break
+		}
+		time.Sleep(vacuumPollInterval)
+	}
+
 	lm.rwMtx.Lock()
 
 	// Si ya está corriendo
@@ -793,6 +810,22 @@ func (lm *LauncherManager) IsServiceRunning(serviceID string) bool {
 // DataDir devuelve el directorio raíz donde residen los datos de cada instancia.
 func (lm *LauncherManager) DataDir() string {
 	return lm.dataDir
+}
+
+// LockVacuum marca la instancia como "vacuum en curso". Llamar antes de abrir el .db.
+func (lm *LauncherManager) LockVacuum(serviceID string) {
+	lm.vacuumingSet.Store(serviceID, struct{}{})
+}
+
+// UnlockVacuum libera la marca de vacuum. Llamar siempre con defer.
+func (lm *LauncherManager) UnlockVacuum(serviceID string) {
+	lm.vacuumingSet.Delete(serviceID)
+}
+
+// IsVacuuming informa si hay un VACUUM SQLite activo para la instancia dada.
+func (lm *LauncherManager) IsVacuuming(serviceID string) bool {
+	_, ok := lm.vacuumingSet.Load(serviceID)
+	return ok
 }
 
 // GetActiveInstancesCount devuelve el recuento exacto de procesos de servicios activos en memoria.
