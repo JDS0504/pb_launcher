@@ -206,7 +206,7 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 			if err := e.Next(); err != nil {
 				return err
 			}
-			serviceDiscovery.InvalidateServiceCacheByID(e.Record.Id)
+			_ = serviceDiscovery.InvalidateServiceCache(e.Record.Id, e.Record.GetString("name"))
 			return nil
 		})
 
