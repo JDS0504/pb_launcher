@@ -14,7 +14,6 @@ export enum Collections {
 	Comands = "comands",
 	OperationLogs = "operation_logs",
 	Releases = "releases",
-	Repositories = "repositories",
 	ServiceUptimeView = "service_uptime_view",
 	Services = "services",
 	ServicesDomains = "services_domains",
@@ -142,28 +141,7 @@ export type ReleasesRecord = {
 	id: string
 	published_at: IsoDateString
 	release_name: string
-	repository?: RecordIdString
 	version: string
-}
-
-export enum RepositoriesLastSyncStatusOptions {
-	"never" = "never",
-	"syncing" = "syncing",
-	"success" = "success",
-	"error" = "error",
-}
-export type RepositoriesRecord = {
-	disabled?: boolean
-	exec_file_pattern: string
-	id: string
-	last_sync_at?: IsoDateString
-	last_sync_error?: string
-	last_sync_status?: RepositoriesLastSyncStatusOptions
-	name: string
-	release_file_pattern: string
-	repository: string
-	retention?: number
-	token?: string
 }
 
 export type ServiceUptimeViewRecord<Tactive_hours_24h = unknown, Tactive_hours_7d = unknown, Tinactive_hours_24h = unknown, Tinactive_hours_7d = unknown, Tservice_name = unknown, Tservice_status = unknown, Tuptime_24h = unknown, Tuptime_7d = unknown> = {
@@ -256,7 +234,6 @@ export type SuperusersResponse<Texpand = unknown> = Required<SuperusersRecord> &
 export type ComandsResponse<Texpand = unknown> = Required<ComandsRecord> & BaseSystemFields<Texpand>
 export type OperationLogsResponse<Tmetadata = unknown, Texpand = unknown> = Required<OperationLogsRecord<Tmetadata>> & BaseSystemFields<Texpand>
 export type ReleasesResponse<Texpand = unknown> = Required<ReleasesRecord> & BaseSystemFields<Texpand>
-export type RepositoriesResponse<Texpand = unknown> = Required<RepositoriesRecord> & BaseSystemFields<Texpand>
 export type ServiceUptimeViewResponse<Tactive_hours_24h = unknown, Tactive_hours_7d = unknown, Tinactive_hours_24h = unknown, Tinactive_hours_7d = unknown, Tservice_name = unknown, Tservice_status = unknown, Tuptime_24h = unknown, Tuptime_7d = unknown, Texpand = unknown> = Required<ServiceUptimeViewRecord<Tactive_hours_24h, Tactive_hours_7d, Tinactive_hours_24h, Tinactive_hours_7d, Tservice_name, Tservice_status, Tuptime_24h, Tuptime_7d>> & BaseSystemFields<Texpand>
 export type ServicesResponse<Texpand = unknown> = Required<ServicesRecord> & BaseSystemFields<Texpand>
 export type ServicesDomainsResponse<Texpand = unknown> = Required<ServicesDomainsRecord> & BaseSystemFields<Texpand>
@@ -273,7 +250,6 @@ export type CollectionRecords = {
 	comands: ComandsRecord
 	operation_logs: OperationLogsRecord
 	releases: ReleasesRecord
-	repositories: RepositoriesRecord
 	service_uptime_view: ServiceUptimeViewRecord
 	services: ServicesRecord
 	services_domains: ServicesDomainsRecord
@@ -289,7 +265,6 @@ export type CollectionResponses = {
 	comands: ComandsResponse
 	operation_logs: OperationLogsResponse
 	releases: ReleasesResponse
-	repositories: RepositoriesResponse
 	service_uptime_view: ServiceUptimeViewResponse
 	services: ServicesResponse
 	services_domains: ServicesDomainsResponse
@@ -308,7 +283,6 @@ export type TypedPocketBase = PocketBase & {
 	collection(idOrName: 'comands'): RecordService<ComandsResponse>
 	collection(idOrName: 'operation_logs'): RecordService<OperationLogsResponse>
 	collection(idOrName: 'releases'): RecordService<ReleasesResponse>
-	collection(idOrName: 'repositories'): RecordService<RepositoriesResponse>
 	collection(idOrName: 'service_uptime_view'): RecordService<ServiceUptimeViewResponse>
 	collection(idOrName: 'services'): RecordService<ServicesResponse>
 	collection(idOrName: 'services_domains'): RecordService<ServicesDomainsResponse>

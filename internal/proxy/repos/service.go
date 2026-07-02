@@ -23,7 +23,7 @@ func NewServiceRepository(app *pocketbase.PocketBase) *ServiceRepository {
 }
 
 func (r *ServiceRepository) FindRunningServiceByID(ctx context.Context, idOrName string) (*dtos.RunningServiceDto, error) {
-	record, err := r.app.FindFirstRecordByFilter(collections.Services, "(id = {:idOrName} OR name = {:idOrName}) AND (deleted IS NULL OR deleted = '') AND status = 'running'", dbx.Params{"idOrName": idOrName})
+	record, err := r.app.FindFirstRecordByFilter(collections.Services, "(id = {:idOrName} || name = {:idOrName}) && (deleted = null || deleted = '') && status = 'running'", dbx.Params{"idOrName": idOrName})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) || err.Error() == "sql: no rows in result set" {
 			return nil, repositories.ErrNotFound
