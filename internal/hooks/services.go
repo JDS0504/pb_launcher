@@ -93,7 +93,7 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 		oldName := currentRecord.GetString("name")
 		if oldName != updatedName {
 			// Detener el proceso con el nombre antiguo
-			lm.StopServiceIfRunning(oldName)
+			lm.StopServiceIfRunning(currentRecord.Id)
 
 			// Renombrar la carpeta físicamente
 			oldDir := filepath.Join(lm.DataDir(), oldName)
@@ -213,8 +213,7 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 	// Detener el proceso ANTES de que PocketBase elimine el registro.
 	app.OnRecordDeleteRequest(collections.Services).
 		BindFunc(func(e *core.RecordRequestEvent) error {
-			name := e.Record.GetString("name")
-			lm.StopServiceIfRunning(name)
+			lm.StopServiceIfRunning(e.Record.Id)
 			return e.Next()
 		})
 

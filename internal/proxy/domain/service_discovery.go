@@ -44,8 +44,8 @@ func NewServiceDiscovery(repo repositories.ServiceRepository) (*ServiceDiscovery
 	}, nil
 }
 
-func (s *ServiceDiscovery) FindRunningServiceByID(ctx context.Context, id string) (*dtos.RunningServiceDto, error) {
-	if data, err := s.cache.Get(id); err == nil {
+func (s *ServiceDiscovery) findCachedRunningService(ctx context.Context, key string, fetchFunc func() (*dtos.RunningServiceDto, error)) (*dtos.RunningServiceDto, error) {
+	if data, err := s.cache.Get(key); err == nil {
 		buf := bytes.NewBuffer(data)
 		dec := gob.NewDecoder(buf)
 		var dto dtos.RunningServiceDto
@@ -53,10 +53,10 @@ func (s *ServiceDiscovery) FindRunningServiceByID(ctx context.Context, id string
 			return &dto, nil
 		}
 	} else if !errors.Is(err, bigcache.ErrEntryNotFound) {
-		slog.Warn("failed to access cache", "id", id, "error", err)
+		slog.Warn("failed to access cache", "key", key, "error", err)
 	}
 
-	dto, err := s.repo.FindRunningServiceByID(ctx, id)
+	dto, err := fetchFunc()
 	if err != nil {
 		return nil, err
 	}
@@ -64,12 +64,24 @@ func (s *ServiceDiscovery) FindRunningServiceByID(ctx context.Context, id string
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	if err := enc.Encode(dto); err == nil {
-		if err := s.cache.Set(id, buf.Bytes()); err != nil {
-			slog.Warn("failed to cache service", "id", id, "error", err)
+		if err := s.cache.Set(key, buf.Bytes()); err != nil {
+			slog.Warn("failed to cache service", "key", key, "error", err)
 		}
 	}
 
 	return dto, nil
+}
+
+func (s *ServiceDiscovery) FindRunningServiceByID(ctx context.Context, id string) (*dtos.RunningServiceDto, error) {
+	return s.findCachedRunningService(ctx, id, func() (*dtos.RunningServiceDto, error) {
+		return s.repo.FindRunningServiceByID(ctx, id)
+	})
+}
+
+func (s *ServiceDiscovery) FindRunningServiceByName(ctx context.Context, name string) (*dtos.RunningServiceDto, error) {
+	return s.findCachedRunningService(ctx, name, func() (*dtos.RunningServiceDto, error) {
+		return s.repo.FindRunningServiceByName(ctx, name)
+	})
 }
 
 func (s *ServiceDiscovery) InvalidateServiceCacheByID(id string) error {

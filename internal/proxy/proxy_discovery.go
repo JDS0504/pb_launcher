@@ -19,6 +19,7 @@ import (
 	"pb_launcher/configs"
 	launcherdomain "pb_launcher/internal/launcher/domain"
 	proxydomain "pb_launcher/internal/proxy/domain"
+	"pb_launcher/internal/proxy/domain/dtos"
 	"pb_launcher/internal/proxy/domain/repositories"
 	"pb_launcher/utils/networktools"
 	"strconv"
@@ -334,8 +335,11 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 	}
 
 	var serviceName string
+	isCustomDomain := false
+
 	// Si no es un subdominio, buscamos por dominio personalizado
 	if serviceID == "" {
+		isCustomDomain = true
 		target, err := rp.domainDiscovery.FindTargetByDomain(ctx, host)
 		if err != nil {
 			return nil, fmt.Errorf("no target found for domain: %s", host)
@@ -352,32 +356,60 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 
 	// Si es una ruta de API o administración, ruteamos a PocketBase (y despertamos si es necesario)
 	if strings.HasPrefix(urlPath, "/api/") || strings.HasPrefix(urlPath, "/_/") {
-		service, err := rp.serviceDiscovery.FindRunningServiceByID(ctx, serviceID)
+		var service *dtos.RunningServiceDto
+		var err error
+
+		if isCustomDomain {
+			service, err = rp.serviceDiscovery.FindRunningServiceByID(ctx, serviceID)
+		} else {
+			service, err = rp.serviceDiscovery.FindRunningServiceByName(ctx, serviceName)
+		}
 
 		// Si no hay error en BD y el servicio realmente corre en memoria
-		if err == nil && rp.launcherManager.IsServiceRunning(serviceID) {
-			rp.launcherManager.RecordActivity(serviceID)
-			return rp.buildReverseProxy(&url.URL{
-				Scheme: "http",
-				Host:   net.JoinHostPort(service.IP, strconv.Itoa(service.Port)),
-			}, serviceID), nil
+		if err == nil {
+			if rp.launcherManager.IsServiceRunning(service.ID) {
+				rp.launcherManager.RecordActivity(service.ID)
+				return rp.buildReverseProxy(&url.URL{
+					Scheme: "http",
+					Host:   net.JoinHostPort(service.IP, strconv.Itoa(service.Port)),
+				}, serviceName), nil
+			}
 		}
 
 		// Si no corre en memoria, o no esta marcado en ejecucion en BD, lo despertamos
-		if errors.Is(err, repositories.ErrNotFound) || (err == nil && !rp.launcherManager.IsServiceRunning(serviceID)) {
-			ip, port, wakeupErr := rp.launcherManager.WakeupService(ctx, serviceID)
+		if errors.Is(err, repositories.ErrNotFound) || err == nil {
+			wakeupKey := serviceName
+			if isCustomDomain {
+				wakeupKey = serviceID
+			}
+
+			ip, port, wakeupErr := rp.launcherManager.WakeupService(ctx, wakeupKey)
 			if wakeupErr == nil {
-				rp.launcherManager.RecordActivity(serviceID)
-				_ = rp.serviceDiscovery.InvalidateServiceCacheByID(serviceID)
+				if err == nil {
+					rp.launcherManager.RecordActivity(service.ID)
+					_ = rp.serviceDiscovery.InvalidateServiceCacheByID(service.ID)
+				} else {
+					var svc *dtos.RunningServiceDto
+					var getSvcErr error
+					if isCustomDomain {
+						svc, getSvcErr = rp.serviceDiscovery.FindRunningServiceByID(ctx, serviceID)
+					} else {
+						svc, getSvcErr = rp.serviceDiscovery.FindRunningServiceByName(ctx, serviceName)
+					}
+					if getSvcErr == nil {
+						rp.launcherManager.RecordActivity(svc.ID)
+						_ = rp.serviceDiscovery.InvalidateServiceCacheByID(svc.ID)
+					}
+				}
 				return rp.buildReverseProxy(&url.URL{
 					Scheme: "http",
 					Host:   net.JoinHostPort(ip, strconv.Itoa(port)),
-				}, serviceID), nil
+				}, serviceName), nil
 			}
-			return nil, fmt.Errorf("failed to wake up service %s: %w", serviceID, wakeupErr)
+			return nil, fmt.Errorf("failed to wake up service %s: %w", wakeupKey, wakeupErr)
 		}
 		if err != nil {
-			return nil, fmt.Errorf("service not found for id: %s", serviceID)
+			return nil, fmt.Errorf("service not found for target: %s", serviceID)
 		}
 	}
 

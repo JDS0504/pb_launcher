@@ -164,6 +164,7 @@ export const ServiceDetailPage = () => {
             <div className="md:px-4 rounded-box min-w-0">
               <DomainsSection
                 service_id={service_id}
+                service_name={service?.name || name || ""}
                 url_route_suffix="/_/"
               />
             </div>

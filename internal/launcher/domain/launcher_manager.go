@@ -96,6 +96,7 @@ func NewLauncherManager(
 	return lm
 }
 
+
 // SetOnServiceDeactivated registra un callback que se llama cuando una
 // instancia se suspende (auto-sleep) o se detiene manualmente.
 // Se usa para que el proxy invalide su cache de ServiceDiscovery.
@@ -590,15 +591,22 @@ func (lm *LauncherManager) Dispose() error {
 }
 
 func (lm *LauncherManager) WakeupService(ctx context.Context, serviceID string) (string, int, error) {
+	// Cargar el servicio primero para obtener su ID y Name reales!
+	service, err := lm.repository.FindService(ctx, serviceID)
+	if err != nil {
+		return "", 0, err
+	}
+	realID := service.ID
+
 	// Esperar a que finalice cualquier VACUUM en curso para esta instancia
 	// (evita SQLITE_BUSY al arrancar PocketBase mientras se compacta el .db).
 	const vacuumWaitTimeout = 30 * time.Second
 	const vacuumPollInterval = 200 * time.Millisecond
 	deadline := time.Now().Add(vacuumWaitTimeout)
-	for lm.IsVacuuming(serviceID) {
+	for lm.IsVacuuming(realID) {
 		if time.Now().After(deadline) {
 			slog.Warn("wakeup: timeout esperando que termine el vacuum, continuando de todas formas",
-				"serviceID", serviceID)
+				"serviceID", realID)
 			break
 		}
 		time.Sleep(vacuumPollInterval)
@@ -607,12 +615,8 @@ func (lm *LauncherManager) WakeupService(ctx context.Context, serviceID string) 
 	lm.rwMtx.Lock()
 
 	// Si ya está corriendo
-	if proc, exists := lm.processList[serviceID]; exists && proc.IsRunning() {
+	if proc, exists := lm.processList[realID]; exists && proc.IsRunning() {
 		lm.rwMtx.Unlock()
-		service, err := lm.repository.FindService(ctx, serviceID)
-		if err != nil {
-			return "", 0, err
-		}
 		port, _ := strconv.Atoi(service.Port)
 		if err := lm.waitForHealthCheck(ctx, service.IP, service.Port); err != nil {
 			return "", 0, err
@@ -620,12 +624,6 @@ func (lm *LauncherManager) WakeupService(ctx context.Context, serviceID string) 
 		return service.IP, port, nil
 	}
 
-	// Cargar el servicio
-	service, err := lm.repository.FindService(ctx, serviceID)
-	if err != nil {
-		lm.rwMtx.Unlock()
-		return "", 0, err
-	}
 	if service.Status == models.Stopped {
 		lm.rwMtx.Unlock()
 		return "", 0, fmt.Errorf("service is stopped or paused")
@@ -640,7 +638,7 @@ func (lm *LauncherManager) WakeupService(ctx context.Context, serviceID string) 
 	}
 
 	// Leer IP y puerto actuales
-	service, err = lm.repository.FindService(ctx, serviceID)
+	service, err = lm.repository.FindService(ctx, realID)
 	if err != nil {
 		return "", 0, err
 	}
@@ -656,7 +654,7 @@ func (lm *LauncherManager) WakeupService(ctx context.Context, serviceID string) 
 
 	// Una vez levantada y sana la instancia, aplicamos el límite configurado de CPU quota
 	lm.rwMtx.RLock()
-	proc, exists := lm.processList[serviceID]
+	proc, exists := lm.processList[realID]
 	lm.rwMtx.RUnlock()
 	if exists && proc.IsRunning() {
 		cpuQuota := lm.cpuQuota
@@ -670,7 +668,7 @@ func (lm *LauncherManager) WakeupService(ctx context.Context, serviceID string) 
 	}
 
 	if wasSleeping {
-		lm.operationLogger.Success(ctx, serviceID, "wakeup", "service woken up by incoming request", nil)
+		lm.operationLogger.Success(ctx, realID, "wakeup", "service woken up by incoming request", nil)
 	}
 
 	return service.IP, port, nil

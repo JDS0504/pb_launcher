@@ -21,7 +21,7 @@ export const getServiceUrls = (
   const allDomains = [...customDomains];
 
   if (allDomains.length === 0 && proxyInfo.base_domain) {
-    const autoDomain = `${service.id}.${proxyInfo.base_domain}`;
+    const autoDomain = `${service.name}.${proxyInfo.base_domain}`;
     allDomains.push(autoDomain);
   }
 

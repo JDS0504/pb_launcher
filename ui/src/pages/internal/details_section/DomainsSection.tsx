@@ -18,11 +18,13 @@ import { useConfirmModal } from "../../../hooks/useConfirmModal";
 
 type Props = {
   service_id: string;
+  service_name: string;
   url_route_suffix: string;
 };
 
 export const DomainsSection: FC<Props> = ({
   service_id,
+  service_name,
   url_route_suffix,
 }) => {
   const queryClient = useQueryClient();
@@ -50,10 +52,10 @@ export const DomainsSection: FC<Props> = ({
     return {
       id: "__",
       service: "",
-      domain: proxy.base_domain ? `${service_id}.${proxy.base_domain}` : "--",
+      domain: proxy.base_domain ? `${service_name}.${proxy.base_domain}` : "--",
       use_https: proxy.use_https ? "yes" : "no",
     };
-  }, [proxy.base_domain, proxy.use_https, service_id]);
+  }, [proxy.base_domain, proxy.use_https, service_name]);
 
   const openCreateModal = () => {
     openModal(
