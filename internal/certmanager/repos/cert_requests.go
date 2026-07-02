@@ -85,7 +85,7 @@ func (r *CertRequestRepository) Pending(ctx context.Context) ([]models.CertReque
 	query := r.app.RecordQuery(collections.ServicesDomains).
 		WithContext(ctx).
 		AndWhere(dbx.NewExp("cert_status='pending'")).
-		OrderBy("updated desc")
+		OrderBy("created desc")
 	var records []*core.Record
 	if err := query.All(&records); err != nil {
 		return nil, err
