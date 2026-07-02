@@ -790,6 +790,11 @@ func (lm *LauncherManager) IsServiceRunning(serviceID string) bool {
 	return exists && proc.IsRunning()
 }
 
+// DataDir devuelve el directorio raíz donde residen los datos de cada instancia.
+func (lm *LauncherManager) DataDir() string {
+	return lm.dataDir
+}
+
 // GetActiveInstancesCount devuelve el recuento exacto de procesos de servicios activos en memoria.
 func (lm *LauncherManager) GetActiveInstancesCount() int {
 	lm.rwMtx.RLock()
