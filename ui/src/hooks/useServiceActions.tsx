@@ -4,7 +4,6 @@ import { useModal } from "../components/modal/hook";
 import { useConfirmModal } from "./useConfirmModal";
 import { getErrorMessage } from "../utils/errors";
 import { serviceService, type ServiceDto } from "../services/services";
-import { backupService } from "../services/backup";
 import { ChangeVersionForm } from "../pages/internal/forms/ChangeVersionForm";
 import { CloneServiceForm } from "../pages/internal/forms/CloneServiceForm";
 
@@ -36,11 +35,6 @@ export const useServiceActions = (onMutationSuccess?: () => void) => {
     onError: error => toast.error(getErrorMessage(error)),
   });
 
-  // ── Backup ────────────────────────────────────────────────────────────────
-  const backupMutation = useMutation({
-    mutationFn: backupService.downloadBackup,
-    onError: error => toast.error(getErrorMessage(error)),
-  });
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleStart = (service_id: string) => {
@@ -71,9 +65,6 @@ export const useServiceActions = (onMutationSuccess?: () => void) => {
     if (ok) deleteMutation.mutate(service_id);
   };
 
-  const handleBackup = (service_id: string) => {
-    backupMutation.mutate(service_id);
-  };
 
   const handleChangeVersion = (service: ServiceDto) => {
     openModal(
@@ -94,11 +85,9 @@ export const useServiceActions = (onMutationSuccess?: () => void) => {
     handleStop,
     handleRestart,
     handleDelete,
-    handleBackup,
     handleChangeVersion,
     handleClone,
     isCommandPending: commandMutation.isPending,
     isDeletePending: deleteMutation.isPending,
-    isBackupPending: backupMutation.isPending,
   };
 };

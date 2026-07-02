@@ -94,50 +94,6 @@ func NewManager(
 	}
 }
 
-func (m *Manager) Create(ctx context.Context, serviceID string) (*BackupFile, error) {
-	service, err := m.serviceRepo.FindService(ctx, serviceID)
-	if err != nil {
-		return nil, err
-	}
-	if service.Status != models.Stopped {
-		return nil, fmt.Errorf("service must be stopped before backup")
-	}
-
-	serviceDir := filepath.Join(m.dataDir, service.Name)
-	if info, err := os.Stat(serviceDir); err != nil || !info.IsDir() {
-		return nil, fmt.Errorf("service data directory not found")
-	}
-
-	manifest := Manifest{
-		Format:    manifestFormat,
-		CreatedAt: time.Now().UTC(),
-		Service: ManifestService{
-			Name:             service.Name,
-			ReleaseID:        service.ReleaseID,
-			
-			Version:          service.Version,
-			RestartPolicy:    string(service.RestartPolicy),
-			BootUserEmail:    service.BootUserEmail,
-			BootUserPassword: service.BootUserPassword,
-		},
-	}
-	manifestBytes, err := json.MarshalIndent(manifest, "", "  ")
-	if err != nil {
-		return nil, err
-	}
-
-	backupPath := filepath.Join(os.TempDir(), fmt.Sprintf("pblauncher-%s-%d.zip", service.ID, time.Now().Unix()))
-	if err := m.zipper.CreateFromDir(serviceDir, backupPath, "data", map[string][]byte{"manifest.json": manifestBytes}); err != nil {
-		m.logger.Error(ctx, service.ID, "backup", err.Error(), nil)
-		return nil, err
-	}
-	m.logger.Success(ctx, service.ID, "backup", "backup created successfully", nil)
-
-	return &BackupFile{
-		Path:     backupPath,
-		Filename: fmt.Sprintf("%s-%s-backup.zip", sanitizeFilename(service.Name), service.ID),
-	}, nil
-}
 
 func (m *Manager) snapshotsDir(serviceID string) string {
 	return filepath.Join(m.dataDir, "_snapshots", serviceID)
@@ -366,7 +322,7 @@ func (m *Manager) Restore(ctx context.Context, backupPath string, name string) (
 		return "", err
 	}
 
-	serviceDir := filepath.Join(m.dataDir, record.GetString(name))
+	serviceDir := filepath.Join(m.dataDir, record.GetString("name"))
 	if err := copyDir(filepath.Join(tempDir, "data"), serviceDir); err != nil {
 		_ = m.app.Delete(record)
 		_ = os.RemoveAll(serviceDir)
@@ -432,7 +388,7 @@ func (m *Manager) Clone(ctx context.Context, sourceServiceID string, name string
 		return "", err
 	}
 
-	targetDir := filepath.Join(m.dataDir, record.GetString(name))
+	targetDir := filepath.Join(m.dataDir, record.GetString("name"))
 	if err := copyDir(sourceDir, targetDir); err != nil {
 		_ = m.app.Delete(record)
 		_ = os.RemoveAll(targetDir)

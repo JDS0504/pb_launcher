@@ -13,19 +13,6 @@ import (
 
 func RegisterRoutes(app *pocketbase.PocketBase, manager *Manager) {
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
-		se.Router.GET("/x-api/services/{service_id}/backup", func(e *core.RequestEvent) error {
-			serviceID := e.Request.PathValue("service_id")
-			backup, err := manager.Create(e.Request.Context(), serviceID)
-			if err != nil {
-				return e.BadRequestError("failed to create backup", err)
-			}
-			defer os.Remove(backup.Path)
-
-			e.Response.Header().Set("Content-Type", "application/zip")
-			e.Response.Header().Set("Content-Disposition", `attachment; filename="`+backup.Filename+`"`)
-			http.ServeFile(e.Response, e.Request, backup.Path)
-			return nil
-		}).Bind(apis.RequireAuth())
 
 		se.Router.POST("/x-api/services/restore", func(e *core.RequestEvent) error {
 			name := strings.TrimSpace(e.Request.FormValue("name"))

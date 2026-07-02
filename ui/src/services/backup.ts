@@ -8,30 +8,6 @@ const parseFilename = (contentDisposition: string | null) => {
 };
 
 export const backupService = {
-  downloadBackup: async (serviceID: string) => {
-    const url = joinUrls(pb.baseURL, `/x-api/services/${serviceID}/backup`);
-    const response = await fetch(url, {
-      headers: { Authorization: pb.authStore.token },
-    });
-    if (!response.ok) {
-      const json = await response.json().catch(() => null);
-      throw new HttpError(
-        response.status,
-        json?.message || "Failed to create backup",
-        json,
-      );
-    }
-    const blob = await response.blob();
-    const downloadUrl = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = downloadUrl;
-    link.download = parseFilename(response.headers.get("content-disposition"));
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(downloadUrl);
-  },
-
   restoreBackup: async (data: { file: File; name: string }) => {
     const form = new FormData();
     form.append("backup", data.file);

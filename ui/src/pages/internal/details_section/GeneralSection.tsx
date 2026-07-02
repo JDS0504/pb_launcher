@@ -11,7 +11,6 @@ import {
   Square,
   RotateCcw,
   Copy,
-  HardDrive,
   KeyRound,
   Trash2,
 } from "lucide-react";
@@ -35,10 +34,8 @@ export const GeneralSection: FC<Props> = ({ service_id, service }) => {
     handleStart,
     handleStop,
     handleRestart,
-    handleBackup,
     handleClone,
     isCommandPending,
-    isBackupPending,
   } = useServiceActions(invalidate);
 
   const { handleDelete } = useServiceActions(() => navigate("/"));
@@ -149,19 +146,6 @@ export const GeneralSection: FC<Props> = ({ service_id, service }) => {
           >
             <Copy className="w-3.5 h-3.5" />
             Clonar
-          </button>
-          <button
-            id="btn-service-backup"
-            className="btn btn-xs btn-ghost gap-1"
-            disabled={!isStopped || isBackupPending}
-            onClick={() => handleBackup(service_id)}
-            title={isStopped ? "Descargar backup" : "Detén el servicio para hacer backup"}
-          >
-            {isBackupPending
-              ? <span className="loading loading-spinner loading-xs" />
-              : <HardDrive className="w-3.5 h-3.5" />
-            }
-            Backup
           </button>
           <button
             id="btn-change-password"
