@@ -10,7 +10,6 @@ import (
 	"regexp"
 
 	"github.com/hashicorp/go-version"
-	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
 )
@@ -72,9 +71,7 @@ func (r *ReleaseRepository) FindRepository(ctx context.Context, repositoryID str
 }
 
 func (r *ReleaseRepository) ListReleases(ctx context.Context, repositoryId string) ([]dtos.Release, error) {
-	records, err := r.app.FindAllRecords(collections.Releases,
-		dbx.NewExp("repository={:id}", dbx.Params{"id": repositoryId}),
-	)
+	records, err := r.app.FindAllRecords(collections.Releases)
 	if err != nil {
 		slog.Error("failed to fetch releases from database", "error", err)
 		return nil, err
@@ -91,7 +88,7 @@ func (r *ReleaseRepository) ListReleases(ctx context.Context, repositoryId strin
 		}
 
 		releases = append(releases, dtos.Release{
-			RepositoryID: record.GetString("repository"),
+			RepositoryID: "pb91u2l315h29a5",
 			Version:      v,
 			ReleaseName:  record.GetString("release_name"),
 			PublishedAt:  record.GetDateTime("published_at").Time(),
@@ -118,7 +115,7 @@ func (r *ReleaseRepository) FindRelease(ctx context.Context, releaseID string) (
 	}
 
 	return &dtos.Release{
-		RepositoryID: record.GetString("repository"),
+		RepositoryID: "pb91u2l315h29a5",
 		Version:      v,
 		ReleaseName:  record.GetString("release_name"),
 		PublishedAt:  record.GetDateTime("published_at").Time(),
@@ -145,7 +142,6 @@ func (r *ReleaseRepository) SaveReleases(ctx context.Context, releases []dtos.Re
 
 	for _, release := range releases {
 		record := core.NewRecord(collection)
-		record.Set("repository", release.RepositoryID)
 		record.Set("version", release.Version.String())
 		record.Set("release_name", release.ReleaseName)
 		record.Set("published_at", release.PublishedAt)

@@ -84,8 +84,7 @@ func (r *CertRequestRepository) MarkAsFailed(ctx context.Context, id, message st
 func (r *CertRequestRepository) Pending(ctx context.Context) ([]models.CertRequest, error) {
 	query := r.app.RecordQuery(collections.ServicesDomains).
 		WithContext(ctx).
-		AndWhere(dbx.NewExp("cert_status='pending'")).
-		OrderBy("created desc")
+		AndWhere(dbx.NewExp("cert_status='pending'"))
 	var records []*core.Record
 	if err := query.All(&records); err != nil {
 		return nil, err
