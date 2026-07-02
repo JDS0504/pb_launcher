@@ -128,7 +128,8 @@ func runVacuumSweep(app *pocketbase.PocketBase, lm *domain.LauncherManager) {
 		// arrancar PocketBase y evitar SQLITE_BUSY.
 		lm.LockVacuum(id)
 
-		serviceDataDir := filepath.Join(lm.DataDir(), id, "pb_data")
+		name := rec.GetString("name")
+		serviceDataDir := filepath.Join(lm.DataDir(), name, "pb_data")
 		allOk := true
 		for _, dbFile := range []string{"data.db", "auxiliary.db"} {
 			fullPath := filepath.Join(serviceDataDir, dbFile)
