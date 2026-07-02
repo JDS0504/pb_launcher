@@ -93,10 +93,27 @@ func runVacuumSweep(app *pocketbase.PocketBase, lm *domain.LauncherManager) {
 		return
 	}
 
+	// Mezclar el orden antes de iterar: si la ventana se cierra antes de completar
+	// el barrido, cada noche un subconjunto DISTINTO de instancias queda cubierto.
+	// Sin esto, siempre se vacunarían las mismas N primeras (orden de BD) y las
+	// últimas nunca recibirían vacuum. No requiere estado persistente.
+	rand.Shuffle(len(services), func(i, j int) {
+		services[i], services[j] = services[j], services[i]
+	})
+
 	slog.Info("sqlite-vacuum: iniciando barrido", "instancias", len(services))
 	vacuumed, skipped, failed := 0, 0, 0
 
 	for _, rec := range services {
+		// Hard-stop: si salimos de la ventana 02:00–05:00 mientras iteramos
+		// (puede pasar con muchas instancias o BDs grandes), dejar de vacunar.
+		// Las instancias restantes se procesarán en el siguiente barrido nocturno.
+		if !enVentanaActiva() {
+			slog.Info("sqlite-vacuum: ventana cerrada, deteniendo barrido",
+				"vacuumed", vacuumed, "pending", len(services)-vacuumed-skipped-failed)
+			break
+		}
+
 		id := rec.Id
 
 		// Primera comprobación: proceso activo → archivo bloqueado, saltar.
@@ -105,9 +122,11 @@ func runVacuumSweep(app *pocketbase.PocketBase, lm *domain.LauncherManager) {
 			continue
 		}
 
-		// Jitter por servicio (≤5 min): evita que todas las instancias se
-		// compacten en el mismo segundo (thundering herd de I/O).
-		jitter := time.Duration(rand.Int63n(int64(5 * time.Minute)))
+		// Jitter por servicio (≤10 s): pausa mínima entre vacuums consecutivos
+		// para dar respiro al I/O del disco. Con 500 instancias y ~8s promedio
+		// por instancia el barrido completo tarda ~67 min → cabe en la ventana.
+		// La concurrencia es siempre 1 por diseño (loop secuencial).
+		jitter := time.Duration(rand.Int63n(int64(10 * time.Second)))
 		time.Sleep(jitter)
 
 		// Segunda comprobación tras el jitter: la instancia puede haber
