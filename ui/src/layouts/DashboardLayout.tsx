@@ -1,6 +1,6 @@
 import { useMemo, type PropsWithChildren } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { History, Server, User, LogOut, Settings, Activity, FolderOpen, Clock } from "lucide-react";
+import { History, Server, User, LogOut, Activity, FolderOpen, Clock } from "lucide-react";
 import { useConfirmModal } from "../hooks/useConfirmModal";
 import { authService } from "../services/auth";
 import { useViewportHeight } from "../hooks/useViewportHeight";
@@ -18,7 +18,6 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
     if (pathname === "/files" || pathname.startsWith("/files/")) return "files";
     if (pathname === "/operations") return "operations";
     if (pathname === "/uptime") return "uptime";
-    if (pathname === "/settings") return "settings";
     if (pathname === "/status") return "status";
     return "<none>";
   }, [pathname]);
@@ -66,18 +65,6 @@ export const DashboardLayout = ({ children }: PropsWithChildren) => {
               <span className="hidden sm:inline">Files</span>
             </NavLink>
 
-            <NavLink
-              to="/settings"
-              className={classNames(
-                "btn btn-sm btn-ghost shrink-0 gap-2 text-base-content transition-colors",
-                {
-                  "bg-base-200 text-primary": selected === "settings",
-                },
-              )}
-            >
-              <Settings className="w-4 h-4" />
-              <span className="hidden sm:inline">Settings</span>
-            </NavLink>
 
             <NavLink
               to="/operations"
