@@ -36,7 +36,7 @@ func (r *ReleaseRepository) ListRepositories(ctx context.Context) ([]dtos.Reposi
 
 	return []dtos.Repository{
 		{
-			ID:                 "pb91u2l315h29a5",
+			ID:                 collections.DefaultRepositoryID,
 			Repo:               "pocketbase/pocketbase",
 			Token:              "",
 			ReleaseFilePattern: releasePatternRegex,
@@ -47,7 +47,7 @@ func (r *ReleaseRepository) ListRepositories(ctx context.Context) ([]dtos.Reposi
 }
 
 func (r *ReleaseRepository) FindRepository(ctx context.Context, repositoryID string) (*dtos.Repository, error) {
-	if repositoryID != "pb91u2l315h29a5" {
+	if repositoryID != collections.DefaultRepositoryID {
 		return nil, fmt.Errorf("repository %s not found", repositoryID)
 	}
 
@@ -61,7 +61,7 @@ func (r *ReleaseRepository) FindRepository(ctx context.Context, repositoryID str
 	}
 
 	return &dtos.Repository{
-		ID:                 "pb91u2l315h29a5",
+		ID:                 collections.DefaultRepositoryID,
 		Repo:               "pocketbase/pocketbase",
 		Token:              "",
 		ReleaseFilePattern: releasePatternRegex,
@@ -88,7 +88,7 @@ func (r *ReleaseRepository) ListReleases(ctx context.Context, repositoryId strin
 		}
 
 		releases = append(releases, dtos.Release{
-			RepositoryID: "pb91u2l315h29a5",
+			RepositoryID: collections.DefaultRepositoryID,
 			Version:      v,
 			ReleaseName:  record.GetString("release_name"),
 			PublishedAt:  record.GetDateTime("published_at").Time(),
@@ -115,7 +115,7 @@ func (r *ReleaseRepository) FindRelease(ctx context.Context, releaseID string) (
 	}
 
 	return &dtos.Release{
-		RepositoryID: "pb91u2l315h29a5",
+		RepositoryID: collections.DefaultRepositoryID,
 		Version:      v,
 		ReleaseName:  record.GetString("release_name"),
 		PublishedAt:  record.GetDateTime("published_at").Time(),

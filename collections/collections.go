@@ -7,4 +7,5 @@ const ServicesDomains = "services_domains"
 const ServicesComands = "comands"
 const OperationLogs = "operation_logs"
 const ProxyEntries = "proxy_entries"
+const DefaultRepositoryID = "pocketbase"
 

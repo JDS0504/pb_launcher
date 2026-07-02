@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"pb_launcher/collections"
 	"pb_launcher/configs"
 	"pb_launcher/helpers/logstore"
 	"pb_launcher/helpers/process"
@@ -161,7 +162,7 @@ func (lm *LauncherManager) buildArgs(serviceName string) ([]string, error) {
 }
 
 func (lm *LauncherManager) findOrDownloadBinary(ctx context.Context, service models.Service) (string, error) {
-	executablePath, err := lm.finder.FindBinary(ctx, "pb91u2l315h29a5", service.Version, service.ExecFilePattern)
+	executablePath, err := lm.finder.FindBinary(ctx, collections.DefaultRepositoryID, service.Version, service.ExecFilePattern)
 	if err == nil {
 		return executablePath, nil
 	}
@@ -179,7 +180,7 @@ func (lm *LauncherManager) findOrDownloadBinary(ctx context.Context, service mod
 		return "", fmt.Errorf("failed to download release %s: %w", service.ReleaseID, err)
 	}
 
-	executablePath, err = lm.finder.FindBinary(ctx, "pb91u2l315h29a5", service.Version, service.ExecFilePattern)
+	executablePath, err = lm.finder.FindBinary(ctx, collections.DefaultRepositoryID, service.Version, service.ExecFilePattern)
 	if err != nil {
 		lm.lstore.InsertLog(service.ID, logstore.StreamStderr, fmt.Sprintf("Binary v%s downloaded, but executable was not found: %s", service.Version, err.Error()))
 		return "", err
