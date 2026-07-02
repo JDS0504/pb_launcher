@@ -22,8 +22,8 @@ func NewServiceRepository(app *pocketbase.PocketBase) *ServiceRepository {
 	return &ServiceRepository{app: app}
 }
 
-func (r *ServiceRepository) findRunningServiceByFilter(filter string, params dbx.Params) (*dtos.RunningServiceDto, error) {
-	record, err := r.app.FindFirstRecordByFilter(collections.Services, filter, params)
+func (r *ServiceRepository) FindServiceByIDOrName(ctx context.Context, idOrName string) (*dtos.ServiceDto, error) {
+	record, err := r.app.FindFirstRecordByFilter(collections.Services, "(id = {:idOrName} || name = {:idOrName}) && (deleted = null || deleted = '')", dbx.Params{"idOrName": idOrName})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) || err.Error() == "sql: no rows in result set" {
 			return nil, repositories.ErrNotFound
@@ -31,17 +31,11 @@ func (r *ServiceRepository) findRunningServiceByFilter(filter string, params dbx
 		return nil, err
 	}
 
-	return &dtos.RunningServiceDto{
-		ID:   record.Id,
-		IP:   record.GetString("ip"),
-		Port: record.GetInt("port"),
+	return &dtos.ServiceDto{
+		ID:     record.Id,
+		Name:   record.GetString("name"),
+		Status: record.GetString("status"),
+		IP:     record.GetString("ip"),
+		Port:   record.GetInt("port"),
 	}, nil
-}
-
-func (r *ServiceRepository) FindRunningServiceByID(ctx context.Context, id string) (*dtos.RunningServiceDto, error) {
-	return r.findRunningServiceByFilter("id = {:id} && (deleted = null || deleted = '') && status = 'running'", dbx.Params{"id": id})
-}
-
-func (r *ServiceRepository) FindRunningServiceByName(ctx context.Context, name string) (*dtos.RunningServiceDto, error) {
-	return r.findRunningServiceByFilter("name = {:name} && (deleted = null || deleted = '') && status = 'running'", dbx.Params{"name": name})
 }

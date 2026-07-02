@@ -20,7 +20,7 @@ type ServiceDiscovery struct {
 }
 
 func init() {
-	gob.Register(&dtos.RunningServiceDto{})
+	gob.Register(&dtos.ServiceDto{})
 }
 
 func NewServiceDiscovery(repo repositories.ServiceRepository) (*ServiceDiscovery, error) {
@@ -44,19 +44,19 @@ func NewServiceDiscovery(repo repositories.ServiceRepository) (*ServiceDiscovery
 	}, nil
 }
 
-func (s *ServiceDiscovery) findCachedRunningService(ctx context.Context, key string, fetchFunc func() (*dtos.RunningServiceDto, error)) (*dtos.RunningServiceDto, error) {
-	if data, err := s.cache.Get(key); err == nil {
+func (s *ServiceDiscovery) FindServiceByIDOrName(ctx context.Context, idOrName string) (*dtos.ServiceDto, error) {
+	if data, err := s.cache.Get(idOrName); err == nil {
 		buf := bytes.NewBuffer(data)
 		dec := gob.NewDecoder(buf)
-		var dto dtos.RunningServiceDto
+		var dto dtos.ServiceDto
 		if err := dec.Decode(&dto); err == nil {
 			return &dto, nil
 		}
 	} else if !errors.Is(err, bigcache.ErrEntryNotFound) {
-		slog.Warn("failed to access cache", "key", key, "error", err)
+		slog.Warn("failed to access cache", "idOrName", idOrName, "error", err)
 	}
 
-	dto, err := fetchFunc()
+	dto, err := s.repo.FindServiceByIDOrName(ctx, idOrName)
 	if err != nil {
 		return nil, err
 	}
@@ -64,32 +64,17 @@ func (s *ServiceDiscovery) findCachedRunningService(ctx context.Context, key str
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	if err := enc.Encode(dto); err == nil {
-		if err := s.cache.Set(key, buf.Bytes()); err != nil {
-			slog.Warn("failed to cache service", "key", key, "error", err)
+		if err := s.cache.Set(idOrName, buf.Bytes()); err != nil {
+			slog.Warn("failed to cache service", "idOrName", idOrName, "error", err)
 		}
 	}
 
 	return dto, nil
 }
 
-func (s *ServiceDiscovery) FindRunningServiceByID(ctx context.Context, id string) (*dtos.RunningServiceDto, error) {
-	return s.findCachedRunningService(ctx, id, func() (*dtos.RunningServiceDto, error) {
-		return s.repo.FindRunningServiceByID(ctx, id)
-	})
-}
-
-func (s *ServiceDiscovery) FindRunningServiceByName(ctx context.Context, name string) (*dtos.RunningServiceDto, error) {
-	return s.findCachedRunningService(ctx, name, func() (*dtos.RunningServiceDto, error) {
-		return s.repo.FindRunningServiceByName(ctx, name)
-	})
-}
-
-func (s *ServiceDiscovery) InvalidateServiceCacheByID(id string) error {
-	err := s.cache.Delete(id)
-	if err != nil && !errors.Is(err, bigcache.ErrEntryNotFound) {
-		slog.Error("failed to invalidate cache", "id", id, "error", err)
-		return err
-	}
-	slog.Info("invalidated service cache", "service_id", id)
+func (s *ServiceDiscovery) InvalidateServiceCache(id, name string) error {
+	_ = s.cache.Delete(id)
+	_ = s.cache.Delete(name)
+	slog.Info("invalidated service cache", "service_id", id, "service_name", name)
 	return nil
 }

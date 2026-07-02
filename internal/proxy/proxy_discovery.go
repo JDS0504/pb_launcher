@@ -19,7 +19,6 @@ import (
 	"pb_launcher/configs"
 	launcherdomain "pb_launcher/internal/launcher/domain"
 	proxydomain "pb_launcher/internal/proxy/domain"
-	"pb_launcher/internal/proxy/domain/dtos"
 	"pb_launcher/internal/proxy/domain/repositories"
 	"pb_launcher/utils/networktools"
 	"strconv"
@@ -71,7 +70,12 @@ func NewDynamicReverseProxyDiscovery(
 	pbConf *apis.ServeConfig) *DynamicReverseProxyDiscovery {
 
 	launcherManager.SetOnServiceDeactivated(func(serviceID string) {
-		_ = serviceDiscovery.InvalidateServiceCacheByID(serviceID)
+		svc, err := serviceDiscovery.FindServiceByIDOrName(context.Background(), serviceID)
+		if err == nil {
+			_ = serviceDiscovery.InvalidateServiceCache(svc.ID, svc.Name)
+		} else {
+			_ = serviceDiscovery.InvalidateServiceCache(serviceID, "")
+		}
 	})
 
 	return &DynamicReverseProxyDiscovery{
@@ -356,59 +360,40 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 
 	// Si es una ruta de API o administración, ruteamos a PocketBase (y despertamos si es necesario)
 	if strings.HasPrefix(urlPath, "/api/") || strings.HasPrefix(urlPath, "/_/") {
-		var service *dtos.RunningServiceDto
-		var err error
-
-		if isCustomDomain {
-			service, err = rp.serviceDiscovery.FindRunningServiceByID(ctx, serviceID)
-		} else {
-			service, err = rp.serviceDiscovery.FindRunningServiceByName(ctx, serviceName)
+		// 1. Obtener la metadata del servicio (usando cache en memoria de 15 segundos)
+		service, err := rp.serviceDiscovery.FindServiceByIDOrName(ctx, serviceID)
+		if err != nil {
+			if errors.Is(err, repositories.ErrNotFound) {
+				return nil, fmt.Errorf("service not found for target: %s", serviceID)
+			}
+			return nil, fmt.Errorf("failed to fetch service metadata: %w", err)
 		}
 
-		// Si no hay error en BD y el servicio realmente corre en memoria
-		if err == nil {
-			if rp.launcherManager.IsServiceRunning(service.ID) {
-				rp.launcherManager.RecordActivity(service.ID)
-				return rp.buildReverseProxy(&url.URL{
-					Scheme: "http",
-					Host:   net.JoinHostPort(service.IP, strconv.Itoa(service.Port)),
-				}, serviceName), nil
-			}
+		// 2. Si es un subdominio, validar estrictamente que el nombre coincida (bloquea el ID técnico en subdominios)
+		if !isCustomDomain && service.Name != serviceName {
+			return nil, fmt.Errorf("service not found for subdomain: %s", serviceName)
 		}
 
-		// Si no corre en memoria, o no esta marcado en ejecucion en BD, lo despertamos
-		if errors.Is(err, repositories.ErrNotFound) || err == nil {
-			wakeupKey := serviceName
-			if isCustomDomain {
-				wakeupKey = serviceID
-			}
-
-			ip, port, wakeupErr := rp.launcherManager.WakeupService(ctx, wakeupKey)
-			if wakeupErr == nil {
-				if err == nil {
-					rp.launcherManager.RecordActivity(service.ID)
-					_ = rp.serviceDiscovery.InvalidateServiceCacheByID(service.ID)
-				} else {
-					var svc *dtos.RunningServiceDto
-					var getSvcErr error
-					if isCustomDomain {
-						svc, getSvcErr = rp.serviceDiscovery.FindRunningServiceByID(ctx, serviceID)
-					} else {
-						svc, getSvcErr = rp.serviceDiscovery.FindRunningServiceByName(ctx, serviceName)
-					}
-					if getSvcErr == nil {
-						rp.launcherManager.RecordActivity(svc.ID)
-						_ = rp.serviceDiscovery.InvalidateServiceCacheByID(svc.ID)
-					}
-				}
-				return rp.buildReverseProxy(&url.URL{
-					Scheme: "http",
-					Host:   net.JoinHostPort(ip, strconv.Itoa(port)),
-				}, serviceName), nil
-			}
-			return nil, fmt.Errorf("failed to wake up service %s: %w", wakeupKey, wakeupErr)
+		// 3. Si está marcado como activo en BD y corre en memoria, ruteamos directamente
+		if service.Status == "running" && rp.launcherManager.IsServiceRunning(service.ID) {
+			rp.launcherManager.RecordActivity(service.ID)
+			return rp.buildReverseProxy(&url.URL{
+				Scheme: "http",
+				Host:   net.JoinHostPort(service.IP, strconv.Itoa(service.Port)),
+			}, serviceName), nil
 		}
-		return nil, fmt.Errorf("service not found for target %s: %w", serviceID, err)
+
+		// 4. Si no corre en memoria (durmiendo/offline), despertamos usando su ID real de base de datos
+		ip, port, wakeupErr := rp.launcherManager.WakeupService(ctx, service.ID)
+		if wakeupErr == nil {
+			rp.launcherManager.RecordActivity(service.ID)
+			_ = rp.serviceDiscovery.InvalidateServiceCache(service.ID, service.Name)
+			return rp.buildReverseProxy(&url.URL{
+				Scheme: "http",
+				Host:   net.JoinHostPort(ip, strconv.Itoa(port)),
+			}, serviceName), nil
+		}
+		return nil, fmt.Errorf("failed to wake up service %s: %w", service.ID, wakeupErr)
 	}
 
 	// Para cualquier otra ruta (estáticos), servimos desde disco directamente usando el nombre

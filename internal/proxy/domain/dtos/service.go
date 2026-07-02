@@ -1,7 +1,9 @@
 package dtos
 
-type RunningServiceDto struct {
-	ID   string
-	IP   string
-	Port int
+type ServiceDto struct {
+	ID     string
+	Name   string
+	Status string
+	IP     string
+	Port   int
 }
