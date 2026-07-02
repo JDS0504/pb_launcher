@@ -75,10 +75,6 @@ func init() {
 				OnCreate: true,
 				System:   true,
 			},
-			&core.DateField{
-				Name:   "deleted",
-				System: true,
-			},
 		)
 		services.Indexes = append(services.Indexes,
 			`CREATE INDEX idx_services__pb_install ON services(_pb_install)`,
