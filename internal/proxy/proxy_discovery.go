@@ -103,7 +103,7 @@ func (rp *DynamicReverseProxyDiscovery) extractID(host string) (string, error) {
 }
 
 func (rp *DynamicReverseProxyDiscovery) proxyErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
-	slog.Error("proxy error", "error", err, "host", r.Host, "path", r.URL.Path)
+	slog.Error("Reverse proxy error", "error", err, "url", r.URL.String(), "host", r.Host)
 
 	statusCode := http.StatusBadGateway
 	message := "upstream error: the service is temporarily unavailable"

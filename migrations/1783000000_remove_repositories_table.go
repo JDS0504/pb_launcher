@@ -15,12 +15,28 @@ func init() {
 			return err
 		}
 
-		releases.Fields.RemoveByName("repository")
+		// Disable System property first so it can be deleted
+		if field := releases.Fields.GetByName("repository"); field != nil {
+			if relField, ok := field.(*core.RelationField); ok {
+				relField.System = false
+			}
+			if err := app.SaveNoValidate(releases); err != nil {
+				return err
+			}
+			releases.Fields.RemoveByName("repository")
+		}
+
+		// Disable System property on version so we can update the index
+		if field := releases.Fields.GetByName("version"); field != nil {
+			if txtField, ok := field.(*core.TextField); ok {
+				txtField.System = false
+			}
+		}
 
 		// Update unique index for releases to just (version) instead of (repository,version)
 		releases.Indexes = []string{"CREATE UNIQUE INDEX idx_releases ON releases (version)"}
 
-		if err := app.Save(releases); err != nil {
+		if err := app.SaveNoValidate(releases); err != nil {
 			return err
 		}
 
