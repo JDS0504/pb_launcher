@@ -40,9 +40,9 @@ func SanitizeToSlug(name string) string {
 }
 
 func RootDomain(domainBase string) string {
-	parts := strings.SplitN(domainBase, ".", 2)
-	if len(parts) > 1 {
-		return parts[1]
+	parts := strings.Split(domainBase, ".")
+	if len(parts) > 2 {
+		return strings.Join(parts[1:], ".")
 	}
 	return domainBase
 }

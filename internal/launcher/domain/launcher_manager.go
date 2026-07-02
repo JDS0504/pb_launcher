@@ -161,7 +161,7 @@ func (lm *LauncherManager) buildArgs(serviceName string) ([]string, error) {
 }
 
 func (lm *LauncherManager) findOrDownloadBinary(ctx context.Context, service models.Service) (string, error) {
-	executablePath, err := lm.finder.FindBinary(ctx, service.RepositoryID, service.Version, service.ExecFilePattern)
+	executablePath, err := lm.finder.FindBinary(ctx, "pocketbase", service.Version, service.ExecFilePattern)
 	if err == nil {
 		return executablePath, nil
 	}
@@ -179,7 +179,7 @@ func (lm *LauncherManager) findOrDownloadBinary(ctx context.Context, service mod
 		return "", fmt.Errorf("failed to download release %s: %w", service.ReleaseID, err)
 	}
 
-	executablePath, err = lm.finder.FindBinary(ctx, service.RepositoryID, service.Version, service.ExecFilePattern)
+	executablePath, err = lm.finder.FindBinary(ctx, "pocketbase", service.Version, service.ExecFilePattern)
 	if err != nil {
 		lm.lstore.InsertLog(service.ID, logstore.StreamStderr, fmt.Sprintf("Binary v%s downloaded, but executable was not found: %s", service.Version, err.Error()))
 		return "", err
@@ -449,9 +449,7 @@ func (lm *LauncherManager) upgradeService(ctx context.Context, service models.Se
 	if err != nil {
 		return fmt.Errorf("failed to find target release %s: %w", targetReleaseID, err)
 	}
-	if targetRelease.RepositoryID != service.RepositoryID {
-		return fmt.Errorf("target release belongs to a different repository")
-	}
+
 
 	currentVersion, err := version.NewVersion(service.Version)
 	if err != nil {

@@ -114,7 +114,7 @@ func (m *Manager) Create(ctx context.Context, serviceID string) (*BackupFile, er
 		Service: ManifestService{
 			Name:             service.Name,
 			ReleaseID:        service.ReleaseID,
-			RepositoryID:     service.RepositoryID,
+			
 			Version:          service.Version,
 			RestartPolicy:    string(service.RestartPolicy),
 			BootUserEmail:    service.BootUserEmail,
@@ -213,7 +213,7 @@ func (m *Manager) CreateSnapshot(ctx context.Context, serviceID string, name str
 		Service: ManifestService{
 			Name:             service.Name,
 			ReleaseID:        service.ReleaseID,
-			RepositoryID:     service.RepositoryID,
+			
 			Version:          service.Version,
 			RestartPolicy:    string(service.RestartPolicy),
 			BootUserEmail:    service.BootUserEmail,
@@ -343,7 +343,7 @@ func (m *Manager) Restore(ctx context.Context, backupPath string, name string) (
 	if err != nil {
 		return "", fmt.Errorf("backup release not found: %w", err)
 	}
-	if release.RepositoryID != manifest.Service.RepositoryID || release.Version != manifest.Service.Version {
+	if release.Version != manifest.Service.Version {
 		return "", fmt.Errorf("backup release metadata does not match local release record")
 	}
 	if err := m.downloader.EnsureReleaseDownloaded(ctx, manifest.Service.ReleaseID); err != nil {

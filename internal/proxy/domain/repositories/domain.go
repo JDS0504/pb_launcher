@@ -3,7 +3,8 @@ package repositories
 import "context"
 
 type DomainTarget struct {
-	Service string // nombre/id del servicio asociado al dominio
+	Service     string // id del servicio asociado al dominio
+	ServiceName string // nombre del servicio asociado al dominio
 }
 
 type DomainTargetRepository interface {

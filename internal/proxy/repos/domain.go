@@ -2,6 +2,7 @@ package repos
 
 import (
 	"context"
+	"fmt"
 	"pb_launcher/collections"
 	"pb_launcher/internal/proxy/domain/repositories"
 
@@ -29,10 +30,21 @@ func (r *DomainTargetRepository) FindByDomain(ctx context.Context, domain string
 		return nil, repositories.ErrNotFound
 	}
 	rec := records[0]
+	errs := r.app.ExpandRecord(rec, []string{"service"}, nil)
+	if len(errs) > 0 {
+		return nil, fmt.Errorf("failed to expand service: %v", errs)
+	}
+	
 	service := rec.GetString("service")
+	serviceName := ""
+	if expanded := rec.ExpandedOne("service"); expanded != nil {
+		serviceName = expanded.GetString("name")
+	}
+
 	if service != "" {
 		return &repositories.DomainTarget{
-			Service: service,
+			Service:     service,
+			ServiceName: serviceName,
 		}, nil
 	}
 	return nil, repositories.ErrNotFound

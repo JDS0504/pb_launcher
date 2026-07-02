@@ -22,17 +22,15 @@ func NewServiceRepository(app *pocketbase.PocketBase) *ServiceRepository {
 	return &ServiceRepository{app: app}
 }
 
-func (r *ServiceRepository) FindRunningServiceByID(ctx context.Context, id string) (*dtos.RunningServiceDto, error) {
-	record, err := r.app.FindRecordById(collections.Services, id, func(q *dbx.SelectQuery) error {
-		q.AndWhere(dbx.NewExp("(deleted IS NULL OR deleted = '') AND status = 'running'"))
-		return nil
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, repositories.ErrNotFound
-	}
+func (r *ServiceRepository) FindRunningServiceByID(ctx context.Context, idOrName string) (*dtos.RunningServiceDto, error) {
+	record, err := r.app.FindFirstRecordByFilter(collections.Services, "(id = {:idOrName} OR name = {:idOrName}) AND (deleted IS NULL OR deleted = '') AND status = 'running'", dbx.Params{"idOrName": idOrName})
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || err.Error() == "sql: no rows in result set" {
+			return nil, repositories.ErrNotFound
+		}
 		return nil, err
 	}
+
 	return &dtos.RunningServiceDto{
 		ID:   record.Id,
 		IP:   record.GetString("ip"),

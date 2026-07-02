@@ -36,8 +36,6 @@ func (s *ServiceRepository) services(ids ...string) ([]models.Service, error) {
 			s.status, 
 			s.restart_policy, 
 			r.version, 
-			r.repository, 
-			rpo.exec_file_pattern,
 			s._pb_install,
 			s.boot_user_email,
 			s.boot_user_password,
@@ -46,8 +44,7 @@ func (s *ServiceRepository) services(ids ...string) ([]models.Service, error) {
 			s.cpu_quota,
 			s.memory_limit
 		from services s
-		inner join releases r on s."release" = r.id
-		inner join repositories rpo on rpo.id = r.repository`
+		inner join releases r on s."release" = r.id`
 
 	var quoted []string
 	for _, id := range ids {
@@ -76,8 +73,6 @@ func (s *ServiceRepository) services(ids ...string) ([]models.Service, error) {
 		status, _ := row["status"]
 		restartPolicy, _ := row["restart_policy"]
 		version, _ := row["version"]
-		repository, _ := row["repository"]
-		execPattern, _ := row["exec_file_pattern"]
 		_pb_install, _ := row["_pb_install"]
 		bootUserEmail, _ := row["boot_user_email"]
 		bootUserPassword, _ := row["boot_user_password"]
@@ -86,9 +81,9 @@ func (s *ServiceRepository) services(ids ...string) ([]models.Service, error) {
 		cpuQuota, _ := row["cpu_quota"]
 		memoryLimit, _ := row["memory_limit"]
 
-		ExecFilePattern, err := regexp.Compile(execPattern.String)
+		ExecFilePattern, err := regexp.Compile(`pocketbase.*`)
 		if err != nil {
-			slog.Warn("invalid exec file pattern", "error", err, "pattern", execPattern)
+			slog.Warn("invalid exec file pattern", "error", err)
 			continue
 		}
 
@@ -99,7 +94,6 @@ func (s *ServiceRepository) services(ids ...string) ([]models.Service, error) {
 			Status:            models.ServiceStatus(status.String),
 			RestartPolicy:     models.RestartPolicy(restartPolicy.String),
 			Version:           version.String,
-			RepositoryID:      repository.String,
 			ExecFilePattern:   ExecFilePattern,
 			BootPBInstallPath: _pb_install.String,
 			BootUserEmail:     bootUserEmail.String,
@@ -153,7 +147,6 @@ func (s *ServiceRepository) FindRelease(ctx context.Context, id string) (*models
 	}
 	return &models.Release{
 		ID:           record.Id,
-		RepositoryID: record.GetString("repository"),
 		Version:      record.GetString("version"),
 	}, nil
 }

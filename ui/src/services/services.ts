@@ -40,12 +40,6 @@ interface _Service {
     release: {
       id: string;
       version: string;
-      expand: {
-        repository: {
-          id: string;
-          name: string;
-        };
-      };
     };
   };
 }
@@ -132,8 +126,6 @@ export const serviceService = {
     "memory_limit",
         "expand.release.id",
         "expand.release.version",
-        "expand.release.expand.repository.id",
-        "expand.release.expand.repository.name",
   ].join(","),
 
   fetchServiceByName: async (name: string): Promise<ServiceDto> => {
@@ -142,7 +134,7 @@ export const serviceService = {
         .getFirstListItem<
           Omit<_Service, "repository" | "release_id" | "release_version">
         >(`name="${name}"`, {
-          expand: "release.repository",
+          expand: "release",
           fields: serviceService.serviceFields,
         });
 
@@ -168,8 +160,8 @@ export const serviceService = {
       ip: service.ip ?? "",
       port: service.port ?? 0,
       created: service.created,
-      repository: service.expand.release.expand.repository.name,
-      repository_id: service.expand.release.expand.repository.id,
+      repository: "PocketBase",
+      repository_id: "pocketbase",
       release_id: service.expand.release.id,
       release_version: service.expand.release.version,
       domains: domains,
@@ -185,7 +177,7 @@ export const serviceService = {
         .getFullList<
           Omit<_Service, "repository" | "release_id" | "release_version">
         >({
-          expand: "release.repository",
+          expand: "release",
           fields: serviceService.serviceFields,
         }),
       pb.collection(COMANDS_COLLECTION).getFullList<{ service: string }>({
@@ -209,8 +201,8 @@ export const serviceService = {
         ip: s.ip ?? "",
         port: s.port ?? 0,
         created: s.created,
-        repository: s.expand.release.expand.repository.name,
-        repository_id: s.expand.release.expand.repository.id,
+        repository: "PocketBase",
+        repository_id: "pocketbase",
         release_id: s.expand.release.id,
         release_version: s.expand.release.version,
         domains: domains.filter(

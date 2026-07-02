@@ -333,6 +333,7 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 		return nil, err
 	}
 
+	var serviceName string
 	// Si no es un subdominio, buscamos por dominio personalizado
 	if serviceID == "" {
 		target, err := rp.domainDiscovery.FindTargetByDomain(ctx, host)
@@ -343,6 +344,10 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 			return nil, fmt.Errorf("no service associated with domain: %s", host)
 		}
 		serviceID = target.Service
+		serviceName = target.ServiceName
+	} else {
+		// serviceID es el subdominio, que ahora corresponde al name
+		serviceName = serviceID
 	}
 
 	// Si es una ruta de API o administración, ruteamos a PocketBase (y despertamos si es necesario)
@@ -376,21 +381,21 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 		}
 	}
 
-	// Para cualquier otra ruta (estáticos), servimos desde disco directamente
-	return rp.resolveStaticHandler(serviceID)
+	// Para cualquier otra ruta (estáticos), servimos desde disco directamente usando el nombre
+	return rp.resolveStaticHandler(serviceName)
 }
 
 // resolveStaticHandler construye un *httputil.ReverseProxy que sirve los
 // archivos estáticos de pb_public directamente desde disco, sin despertar
 // la instancia de PocketBase.
-func (rp *DynamicReverseProxyDiscovery) resolveStaticHandler(serviceID string) (*httputil.ReverseProxy, error) {
-	staticDir := filepath.Join(rp.dataDir, serviceID)
+func (rp *DynamicReverseProxyDiscovery) resolveStaticHandler(serviceName string) (*httputil.ReverseProxy, error) {
+	staticDir := filepath.Join(rp.dataDir, serviceName)
 	staticDir = filepath.Join(staticDir, "pb_public")
 	if _, err := os.Stat(staticDir); os.IsNotExist(err) {
-		slog.Warn("serve_static: pb_public directory does not exist", "serviceID", serviceID, "path", staticDir)
-		return nil, fmt.Errorf("static directory not found for service %s", serviceID)
+		slog.Warn("serve_static: pb_public directory does not exist", "serviceName", serviceName, "path", staticDir)
+		return nil, fmt.Errorf("static directory not found for service %s", serviceName)
 	}
-	return buildStaticProxy(newSpaFileServer(staticDir), rp.dataDir, serviceID), nil
+	return buildStaticProxy(newSpaFileServer(staticDir), rp.dataDir, serviceName), nil
 }
 
 // buildStaticProxy crea un httputil.ReverseProxy que sirve archivos estáticos

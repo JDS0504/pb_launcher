@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
+	"runtime"
 	"pb_launcher/helpers/unzip"
 	"pb_launcher/internal/download/domain/dtos"
 	"pb_launcher/internal/download/domain/repositories"
@@ -60,23 +62,22 @@ func (uc *DownloadUsecase) syncRepository(ctx context.Context, repo dtos.Reposit
 	return nil
 }
 
-func (uc *DownloadUsecase) SyncRepository(ctx context.Context, repositoryID string) error {
+func (uc *DownloadUsecase) SyncRepository(ctx context.Context) error {
 	uc.mu.Lock()
 	defer uc.mu.Unlock()
 
-	repo, err := uc.repository.FindRepository(ctx, repositoryID)
-	if err != nil {
-		return err
-	}
-	if err := uc.repository.MarkRepositorySyncing(ctx, repo.ID); err != nil {
-		return err
+	repo := dtos.Repository{
+		ID:                 "pocketbase",
+		Repo:               "pocketbase/pocketbase",
+		ReleaseFilePattern: regexp.MustCompile(fmt.Sprintf(`pocketbase_.+_%s_%s\.zip`, runtime.GOOS, runtime.GOARCH)),
+		ExecFilePattern:    regexp.MustCompile(`pocketbase.*`),
 	}
 
-	if err := uc.syncRepository(ctx, *repo); err != nil {
-		_ = uc.repository.MarkRepositorySyncError(ctx, repo.ID, err.Error())
+	if err := uc.syncRepository(ctx, repo); err != nil {
+		slog.Error("Failed to sync repository", "error", err)
 		return err
 	}
-	return uc.repository.MarkRepositorySyncSuccess(ctx, repo.ID)
+	return nil
 }
 
 // diffReleases returns the releases present in 'a' but not in 'b'.

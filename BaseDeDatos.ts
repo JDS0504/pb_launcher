@@ -11,7 +11,6 @@ export enum Collections {
 	Mfas = "_mfas",
 	Otps = "_otps",
 	Superusers = "_superusers",
-	CertRequests = "cert_requests",
 	Comands = "comands",
 	OperationLogs = "operation_logs",
 	Releases = "releases",
@@ -96,22 +95,6 @@ export type SuperusersRecord = {
 	tokenKey: string
 	updated?: IsoDateString
 	verified?: boolean
-}
-
-export enum CertRequestsStatusOptions {
-	"pending" = "pending",
-	"approved" = "approved",
-	"failed" = "failed",
-}
-export type CertRequestsRecord = {
-	attempt: number
-	created?: IsoDateString
-	domain: string
-	id: string
-	message?: string
-	not_before?: IsoDateString
-	requested?: IsoDateString
-	status: CertRequestsStatusOptions
 }
 
 export enum ComandsActionOptions {
@@ -232,7 +215,19 @@ export enum ServicesDomainsUseHttpsOptions {
 	"no" = "no",
 	"yes" = "yes",
 }
+
+export enum ServicesDomainsCertStatusOptions {
+	"pending" = "pending",
+	"approved" = "approved",
+	"failed" = "failed",
+}
 export type ServicesDomainsRecord = {
+	cert_attempt?: number
+	cert_error?: string
+	cert_not_after?: IsoDateString
+	cert_not_before?: IsoDateString
+	cert_requested?: IsoDateString
+	cert_status?: ServicesDomainsCertStatusOptions
 	domain: string
 	id: string
 	service: RecordIdString[]
@@ -258,7 +253,6 @@ export type ExternalauthsResponse<Texpand = unknown> = Required<ExternalauthsRec
 export type MfasResponse<Texpand = unknown> = Required<MfasRecord> & BaseSystemFields<Texpand>
 export type OtpsResponse<Texpand = unknown> = Required<OtpsRecord> & BaseSystemFields<Texpand>
 export type SuperusersResponse<Texpand = unknown> = Required<SuperusersRecord> & AuthSystemFields<Texpand>
-export type CertRequestsResponse<Texpand = unknown> = Required<CertRequestsRecord> & BaseSystemFields<Texpand>
 export type ComandsResponse<Texpand = unknown> = Required<ComandsRecord> & BaseSystemFields<Texpand>
 export type OperationLogsResponse<Tmetadata = unknown, Texpand = unknown> = Required<OperationLogsRecord<Tmetadata>> & BaseSystemFields<Texpand>
 export type ReleasesResponse<Texpand = unknown> = Required<ReleasesRecord> & BaseSystemFields<Texpand>
@@ -276,7 +270,6 @@ export type CollectionRecords = {
 	_mfas: MfasRecord
 	_otps: OtpsRecord
 	_superusers: SuperusersRecord
-	cert_requests: CertRequestsRecord
 	comands: ComandsRecord
 	operation_logs: OperationLogsRecord
 	releases: ReleasesRecord
@@ -293,7 +286,6 @@ export type CollectionResponses = {
 	_mfas: MfasResponse
 	_otps: OtpsResponse
 	_superusers: SuperusersResponse
-	cert_requests: CertRequestsResponse
 	comands: ComandsResponse
 	operation_logs: OperationLogsResponse
 	releases: ReleasesResponse
@@ -313,7 +305,6 @@ export type TypedPocketBase = PocketBase & {
 	collection(idOrName: '_mfas'): RecordService<MfasResponse>
 	collection(idOrName: '_otps'): RecordService<OtpsResponse>
 	collection(idOrName: '_superusers'): RecordService<SuperusersResponse>
-	collection(idOrName: 'cert_requests'): RecordService<CertRequestsResponse>
 	collection(idOrName: 'comands'): RecordService<ComandsResponse>
 	collection(idOrName: 'operation_logs'): RecordService<OperationLogsResponse>
 	collection(idOrName: 'releases'): RecordService<ReleasesResponse>

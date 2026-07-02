@@ -26,7 +26,6 @@ type Service struct {
 	RestartPolicy RestartPolicy
 	//
 	ReleaseID       string
-	RepositoryID    string
 	Version         string
 	ExecFilePattern *regexp.Regexp
 	//
@@ -41,6 +40,5 @@ type Service struct {
 
 type Release struct {
 	ID           string
-	RepositoryID string
 	Version      string
 }

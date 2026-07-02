@@ -15,7 +15,6 @@ import { UptimeSection } from "./details_section/UptimeSection";
 
 export const ServiceDetailPage = () => {
   const { name } = useParams<{ name: string }>();
-  const service_id = name || "";
 
   const [searchParams, setSearchParams] = useSearchParams();
   const activeSection = searchParams.get("section") || "general";
@@ -29,6 +28,7 @@ export const ServiceDetailPage = () => {
   });
 
   const service = serviceQuery.data;
+  const service_id = service?.id || "";
   const proxyInfo = useProxyConfigs();
   const serviceUrls = useServiceUrls(service, proxyInfo);
 

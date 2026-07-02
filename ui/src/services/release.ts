@@ -13,26 +13,19 @@ export interface ReleaseOption {
 interface ReleaseDto {
   id: string;
   version: string;
-  expand: {
-    repository: {
-      id: string;
-      name: string;
-    };
-  };
 }
 
 export const releaseService = {
   fetchAll: async (): Promise<ReleaseOption[]> => {
     const releases = pb.collection(RELEASES_COLLECTION);
     const records = await releases.getFullList<ReleaseDto>({
-      expand: "repository",
-      fields: "id,version,expand.repository.id,expand.repository.name",
-      sort: "repository,-version",
+      fields: "id,version",
+      sort: "-version",
     });
     return records.map(r => ({
       id: r.id,
-      repositoryId: r.expand.repository.id,
-      repositoryName: r.expand.repository.name,
+      repositoryId: "pocketbase",
+      repositoryName: "PocketBase",
       version: r.version,
     }));
   },

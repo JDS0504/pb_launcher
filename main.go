@@ -23,7 +23,6 @@ import (
 	"pb_launcher/internal/launcher"
 	"pb_launcher/internal/operationlog"
 	"pb_launcher/internal/proxy"
-	"pb_launcher/internal/repositorymanager"
 	"pb_launcher/internal/systemstatus"
 	_ "pb_launcher/migrations"
 
@@ -95,7 +94,6 @@ func createRootCommand(app core.App) *cobra.Command {
 				backup.Module,
 				hookmanager.Module,
 				filemanager.Module,
-				repositorymanager.Module,
 				systemstatus.Module,
 				internal.Module, // hooks
 				fx.Invoke(

@@ -130,7 +130,7 @@ export const DomainsSection: FC<Props> = ({
           onClick={openCreateModal}
         >
           <Plus className="w-4 h-4" />
-          New instance
+          Añadir Dominio
         </button>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 min-w-0">
@@ -163,13 +163,6 @@ export const DomainsSection: FC<Props> = ({
           <p className="text-sm text-base-content/60">
             Solo está activo el dominio del sistema. Puedes añadir dominios personalizados con SSL.
           </p>
-          <button
-            className="btn btn-sm btn-primary gap-2"
-            onClick={openCreateModal}
-          >
-            <Plus className="w-4 h-4" />
-            Añadir dominio personalizado
-          </button>
         </div>
       )}
     </div>
