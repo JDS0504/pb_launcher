@@ -54,7 +54,10 @@ const getLimitsFromProfile = (profile: string): { cpu_quota: string; memory_limi
 };
 
 const schema = object({
-  name: stringRequired(), // Name of the new PocketBase instance
+  name: stringRequired().matches(
+    /^[a-z0-9-]+$/,
+    "El nombre solo puede contener letras minúsculas, números y guiones medios (sin espacios)",
+  ), // Name of the new PocketBase instance
   instanceSource: stringRequired(), // Source for the instance (template, version, etc.)
   restartPolicy: stringRequired(), // Restart policy: "no" or "on-failure"
   superuserPassword: string().optional(),
@@ -227,7 +230,15 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, canChangeVersion,
       <form onSubmit={handleFormSubmit} className="space-y-5">
         <InputField
           label="Instance Name"
-          registration={form.register("name")}
+          registration={form.register("name", {
+            onChange: (e) => {
+              const sanitized = e.target.value
+                .toLowerCase()
+                .replace(/[^a-z0-9-]/g, "-") // Reemplaza no-slug con guion
+                .replace(/-+/g, "-");        // Evita guiones consecutivos
+              form.setValue("name", sanitized, { shouldValidate: true });
+            }
+          })}
           autoComplete="off"
           error={form.formState.errors.name}
         />

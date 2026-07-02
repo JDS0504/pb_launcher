@@ -14,7 +14,7 @@ type Props = {
 
 export const CloneServiceForm = ({ service, onClone }: Props) => {
   const { closeModal } = useModal();
-  const [name, setName] = useState(`${service.name} clone`);
+  const [name, setName] = useState(`${service.name}-clone`);
 
   const cloneMutation = useMutation({
     mutationFn: backupService.cloneService,
@@ -48,7 +48,13 @@ export const CloneServiceForm = ({ service, onClone }: Props) => {
         <input
           className="input input-md input-bordered w-full focus:outline-none focus:ring-1 focus:ring-primary"
           value={name}
-          onChange={event => setName(event.target.value)}
+          onChange={event => {
+            const sanitized = event.target.value
+              .toLowerCase()
+              .replace(/[^a-z0-9-]/g, "-")
+              .replace(/-+/g, "-");
+            setName(sanitized);
+          }}
           autoComplete="off"
         />
       </div>
