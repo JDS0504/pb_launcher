@@ -8,67 +8,43 @@ import (
 )
 
 // Migración que:
-//  1. Añade CascadeDelete en los FK de service en services_domains, comands y
-//     operation_logs: al borrar un servicio PocketBase elimina automáticamente
-//     todos los registros relacionados (SSOT, sin código Go adicional).
-//  2. Limpia del disco los servicios que quedaron en soft-delete (deleted != "")
-//     bajo el mecanismo anterior.
-//  3. Elimina el campo `deleted` de services: ya no hay soft-delete; la
+//  1. Limpia del disco los servicios que quedaron en soft-delete (deleted != "")
+//     usando SQL directo (bypassa hooks y FK checks de PocketBase).
+//  2. Elimina el campo `deleted` de services: ya no hay soft-delete; la
 //     eliminación es siempre física (hard-delete via API DELETE).
+//
+// NOTA: CascadeDelete en los campos FK (service) NO se aplica aquí porque
+// esos campos tienen System: true y PocketBase no permite modificarlos.
+// El cascade se maneja explícitamente en el hook OnRecordDeleteRequest
+// de services.go usando DELETE SQL directo antes de borrar el registro padre.
 func init() {
 	m.Register(func(app core.App) error {
-		// ── 1. CascadeDelete en services_domains.service ──────────────────────
-		sd, err := app.FindCollectionByNameOrId(collections.ServicesDomains)
-		if err != nil {
-			return err
-		}
-		if f, ok := sd.Fields.GetByName("service").(*core.RelationField); ok {
-			f.CascadeDelete = true
-		}
-		if err := app.Save(sd); err != nil {
-			return err
-		}
+		db := app.DB()
 
-		// ── 2. CascadeDelete en comands.service ───────────────────────────────
-		comands, err := app.FindCollectionByNameOrId(collections.ServicesComands)
-		if err != nil {
-			return err
-		}
-		if f, ok := comands.Fields.GetByName("service").(*core.RelationField); ok {
-			f.CascadeDelete = true
-		}
-		if err := app.Save(comands); err != nil {
-			return err
-		}
+		// ── 1. Limpiar registros relacionados de servicios soft-deleted ────────
+		// Primero los hijos (FK apuntan a services), luego el padre.
+		_, _ = db.NewQuery(`
+			DELETE FROM services_domains WHERE service IN (
+				SELECT id FROM services WHERE deleted IS NOT NULL AND deleted != ''
+			)
+		`).Execute()
+		_, _ = db.NewQuery(`
+			DELETE FROM comands WHERE service IN (
+				SELECT id FROM services WHERE deleted IS NOT NULL AND deleted != ''
+			)
+		`).Execute()
+		_, _ = db.NewQuery(`
+			DELETE FROM operation_logs WHERE service IN (
+				SELECT id FROM services WHERE deleted IS NOT NULL AND deleted != ''
+			)
+		`).Execute()
 
-		// ── 3. CascadeDelete en operation_logs.service ────────────────────────
-		logs, err := app.FindCollectionByNameOrId(collections.OperationLogs)
-		if err != nil {
-			return err
-		}
-		if f, ok := logs.Fields.GetByName("service").(*core.RelationField); ok {
-			f.CascadeDelete = true
-		}
-		if err := app.Save(logs); err != nil {
-			return err
-		}
+		// ── 2. Borrar los servicios soft-deleted ──────────────────────────────
+		_, _ = db.NewQuery(`
+			DELETE FROM services WHERE deleted IS NOT NULL AND deleted != ''
+		`).Execute()
 
-		// ── 4. Hard-delete de servicios en soft-delete ────────────────────────
-		// Los relacionados (services_domains, comands, operation_logs) se eliminan
-		// automáticamente gracias al CascadeDelete ya activado arriba.
-		softDeleted, err := app.FindAllRecords(
-			collections.Services,
-			// Filtramos los que tienen deleted distinto de vacío
-		)
-		if err == nil {
-			for _, rec := range softDeleted {
-				if d := rec.GetDateTime("deleted"); !d.IsZero() {
-					_ = app.Delete(rec)
-				}
-			}
-		}
-
-		// ── 5. Eliminar campo `deleted` de services ───────────────────────────
+		// ── 3. Eliminar campo `deleted` del schema de services ────────────────
 		services, err := app.FindCollectionByNameOrId(collections.Services)
 		if err != nil {
 			return err
@@ -76,40 +52,7 @@ func init() {
 		services.Fields.RemoveByName("deleted")
 		return app.Save(services)
 	}, func(app core.App) error {
-		// ── Downgrade: restaurar CascadeDelete = false y re-añadir deleted ────
-		sd, err := app.FindCollectionByNameOrId(collections.ServicesDomains)
-		if err != nil {
-			return err
-		}
-		if f, ok := sd.Fields.GetByName("service").(*core.RelationField); ok {
-			f.CascadeDelete = false
-		}
-		if err := app.Save(sd); err != nil {
-			return err
-		}
-
-		comands, err := app.FindCollectionByNameOrId(collections.ServicesComands)
-		if err != nil {
-			return err
-		}
-		if f, ok := comands.Fields.GetByName("service").(*core.RelationField); ok {
-			f.CascadeDelete = false
-		}
-		if err := app.Save(comands); err != nil {
-			return err
-		}
-
-		logs, err := app.FindCollectionByNameOrId(collections.OperationLogs)
-		if err != nil {
-			return err
-		}
-		if f, ok := logs.Fields.GetByName("service").(*core.RelationField); ok {
-			f.CascadeDelete = false
-		}
-		if err := app.Save(logs); err != nil {
-			return err
-		}
-
+		// Downgrade: restaurar el campo `deleted`
 		services, err := app.FindCollectionByNameOrId(collections.Services)
 		if err != nil {
 			return err

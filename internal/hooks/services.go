@@ -211,9 +211,21 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 
 	// Detener el proceso ANTES de que PocketBase elimine el registro de BD.
 	// Evita que el LauncherManager intente usar un servicio ya eliminado.
+	// También elimina los registros relacionados manualmente: las FK tienen
+	// System: true y no permiten CascadeDelete vía migración; el cascade
+	// se gestiona aquí con SQL directo antes de que PocketBase valide referencias.
 	app.OnRecordDeleteRequest(collections.Services).
 		BindFunc(func(e *core.RecordRequestEvent) error {
 			lm.StopServiceIfRunning(e.Record.Id)
+
+			db := e.App.DB()
+			_, _ = db.NewQuery(`DELETE FROM services_domains WHERE service = {:id}`).
+				Bind(dbx.Params{"id": e.Record.Id}).Execute()
+			_, _ = db.NewQuery(`DELETE FROM comands WHERE service = {:id}`).
+				Bind(dbx.Params{"id": e.Record.Id}).Execute()
+			_, _ = db.NewQuery(`DELETE FROM operation_logs WHERE service = {:id}`).
+				Bind(dbx.Params{"id": e.Record.Id}).Execute()
+
 			return e.Next()
 		})
 
