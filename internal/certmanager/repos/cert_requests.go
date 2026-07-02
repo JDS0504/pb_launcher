@@ -41,49 +41,51 @@ func (r *CertRequestRepository) DomainsWithHttpsEnabled(ctx context.Context) ([]
 	return domains, nil
 }
 
+func (r *CertRequestRepository) getDomainRecord(domain string) (*core.Record, error) {
+	return r.app.FindFirstRecordByFilter(collections.ServicesDomains, "domain={:domain}", dbx.Params{"domain": domain})
+}
+
 func (r *CertRequestRepository) CreatePending(ctx context.Context, domain string, attempt int) error {
-	collection, err := r.app.FindCollectionByNameOrId(collections.CertRequests)
+	record, err := r.getDomainRecord(domain)
 	if err != nil {
-		return err
+		return err // domain not found
 	}
 	if attempt < 1 {
 		attempt = 1
 	}
-	record := core.NewRecord(collection)
-	record.Set("domain", domain)
-	record.Set("status", string(models.CertStatePending))
-	record.Set("not_before", time.Now().Add(time.Duration(attempt*attempt)*time.Minute))
-	record.Set("attempt", attempt)
+	record.Set("cert_status", string(models.CertStatePending))
+	record.Set("cert_not_before", time.Now().Add(time.Duration(attempt*attempt)*time.Minute))
+	record.Set("cert_attempt", attempt)
 	return r.app.Save(record)
 }
 
 func (r *CertRequestRepository) MarkAsApproved(ctx context.Context, id string) error {
-	record, err := r.app.FindRecordById(collections.CertRequests, id)
+	record, err := r.app.FindRecordById(collections.ServicesDomains, id)
 	if err != nil {
 		return err
 	}
-	record.Set("status", string(models.CertStateApproved))
-	record.Set("message", nil)
-	record.Set("requested", time.Now())
+	record.Set("cert_status", string(models.CertStateApproved))
+	record.Set("cert_error", nil)
+	record.Set("cert_requested", time.Now())
 	return r.app.Save(record)
 }
 
 func (r *CertRequestRepository) MarkAsFailed(ctx context.Context, id, message string) error {
-	record, err := r.app.FindRecordById(collections.CertRequests, id)
+	record, err := r.app.FindRecordById(collections.ServicesDomains, id)
 	if err != nil {
 		return err
 	}
-	record.Set("status", string(models.CertStateFailed))
-	record.Set("message", message)
-	record.Set("requested", time.Now())
+	record.Set("cert_status", string(models.CertStateFailed))
+	record.Set("cert_error", message)
+	record.Set("cert_requested", time.Now())
 	return r.app.Save(record)
 }
 
 func (r *CertRequestRepository) Pending(ctx context.Context) ([]models.CertRequest, error) {
-	query := r.app.RecordQuery(collections.CertRequests).
+	query := r.app.RecordQuery(collections.ServicesDomains).
 		WithContext(ctx).
-		AndWhere(dbx.NewExp("status='pending'")).
-		OrderBy("created desc")
+		AndWhere(dbx.NewExp("cert_status='pending'")).
+		OrderBy("updated desc")
 	var records []*core.Record
 	if err := query.All(&records); err != nil {
 		return nil, err
@@ -98,14 +100,14 @@ func (r *CertRequestRepository) Pending(ctx context.Context) ([]models.CertReque
 
 func (r *CertRequestRepository) PendingByDomain(ctx context.Context, domain string) ([]models.CertRequest, error) {
 	exp := dbx.NewExp(
-		"domain={:domain} AND status='pending'",
+		"domain={:domain} AND cert_status='pending'",
 		dbx.Params{"domain": domain},
 	)
 
-	query := r.app.RecordQuery(collections.CertRequests).
+	query := r.app.RecordQuery(collections.ServicesDomains).
 		WithContext(ctx).
 		AndWhere(exp).
-		OrderBy("created desc")
+		OrderBy("updated desc")
 
 	var records []*core.Record
 	if err := query.All(&records); err != nil {
@@ -120,7 +122,7 @@ func (r *CertRequestRepository) PendingByDomain(ctx context.Context, domain stri
 }
 
 func (r *CertRequestRepository) DeletePendingByDomain(ctx context.Context, domain string) error {
-	const qry = "DELETE FROM cert_requests WHERE domain = {:domain} AND status = 'pending'"
+	const qry = "UPDATE services_domains SET cert_status='' WHERE domain = {:domain} AND cert_status = 'pending'"
 	_, err := r.app.DB().NewQuery(qry).
 		Bind(dbx.Params{"domain": domain}).
 		WithContext(ctx).
@@ -129,10 +131,10 @@ func (r *CertRequestRepository) DeletePendingByDomain(ctx context.Context, domai
 }
 
 func (r *CertRequestRepository) LastByDomain(ctx context.Context, domain string) (*models.CertRequest, error) {
-	query := r.app.RecordQuery(collections.CertRequests).
+	query := r.app.RecordQuery(collections.ServicesDomains).
 		WithContext(ctx).
-		AndWhere(dbx.NewExp("domain={:domain}", dbx.Params{"domain": domain})).
-		OrderBy("created desc").
+		AndWhere(dbx.NewExp("domain={:domain} AND cert_status != ''", dbx.Params{"domain": domain})).
+		OrderBy("updated desc").
 		Limit(1)
 
 	var records []*core.Record
@@ -150,13 +152,13 @@ func (r *CertRequestRepository) LastByDomain(ctx context.Context, domain string)
 
 func mapCertRequest(rec *core.Record) models.CertRequest {
 	return models.CertRequest{
-		ID:        rec.Id,
+		ID:        rec.Id, // Note: this is now the services_domains ID
 		Domain:    rec.GetString("domain"),
-		Status:    models.CertRequestState(rec.GetString("status")),
-		NotBefore: utils.Ptr(rec.GetDateTime("not_before").Time()),
-		Attempt:   rec.GetInt("attempt"),
-		Message:   utils.Ptr(rec.GetString("message")),
-		Created:   rec.GetDateTime("created").Time(),
-		Requested: utils.Ptr(rec.GetDateTime("requested").Time()),
+		Status:    models.CertRequestState(rec.GetString("cert_status")),
+		NotBefore: utils.Ptr(rec.GetDateTime("cert_not_before").Time()),
+		Attempt:   rec.GetInt("cert_attempt"),
+		Message:   utils.Ptr(rec.GetString("cert_error")),
+		Created:   rec.GetDateTime("created").Time(), // Using domain creation time
+		Requested: utils.Ptr(rec.GetDateTime("cert_requested").Time()),
 	}
 }

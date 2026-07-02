@@ -55,16 +55,17 @@ func NewManager(
 	}
 }
 
-func (m *Manager) hooksDir(serviceID string) string {
-	return filepath.Join(m.dataDir, serviceID, "pb_hooks")
+func (m *Manager) hooksDir(service *models.Service) string {
+	return filepath.Join(m.dataDir, service.Name, "pb_hooks")
 }
 
 func (m *Manager) List(ctx context.Context, serviceID string) ([]HookFile, error) {
-	if _, err := m.serviceRepo.FindService(ctx, serviceID); err != nil {
+	service, err := m.serviceRepo.FindService(ctx, serviceID)
+	if err != nil {
 		return nil, err
 	}
 
-	hooksDir := m.hooksDir(serviceID)
+	hooksDir := m.hooksDir(service)
 	if _, err := os.Stat(hooksDir); err != nil {
 		if os.IsNotExist(err) {
 			return []HookFile{}, nil
@@ -106,7 +107,7 @@ func (m *Manager) Export(ctx context.Context, serviceID string) (*ExportFile, er
 		return nil, err
 	}
 
-	sourceDir := m.hooksDir(serviceID)
+	sourceDir := m.hooksDir(service)
 	if _, err := os.Stat(sourceDir); err != nil {
 		if !os.IsNotExist(err) {
 			return nil, err
@@ -133,14 +134,15 @@ func (m *Manager) Export(ctx context.Context, serviceID string) (*ExportFile, er
 }
 
 func (m *Manager) ReadFile(ctx context.Context, serviceID string, hookPath string) (*HookFileContent, error) {
-	if _, err := m.serviceRepo.FindService(ctx, serviceID); err != nil {
+	service, err := m.serviceRepo.FindService(ctx, serviceID)
+	if err != nil {
 		return nil, err
 	}
 	relPath, err := validateHookPath(hookPath)
 	if err != nil {
 		return nil, err
 	}
-	fullPath, err := safeJoin(m.hooksDir(serviceID), relPath)
+	fullPath, err := safeJoin(m.hooksDir(service), relPath)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +165,7 @@ func (m *Manager) SaveFile(ctx context.Context, serviceID string, hookPath strin
 	if err != nil {
 		return err
 	}
-	fullPath, err := safeJoin(m.hooksDir(serviceID), relPath)
+	fullPath, err := safeJoin(m.hooksDir(service), relPath)
 	if err != nil {
 		return err
 	}
@@ -190,7 +192,7 @@ func (m *Manager) DeleteFile(ctx context.Context, serviceID string, hookPath str
 	if err != nil {
 		return err
 	}
-	fullPath, err := safeJoin(m.hooksDir(serviceID), relPath)
+	fullPath, err := safeJoin(m.hooksDir(service), relPath)
 	if err != nil {
 		return err
 	}
@@ -198,7 +200,7 @@ func (m *Manager) DeleteFile(ctx context.Context, serviceID string, hookPath str
 		m.logger.Error(ctx, service.ID, "hook_delete", err.Error(), map[string]any{"path": filepath.ToSlash(relPath)})
 		return err
 	}
-	cleanEmptyParents(m.hooksDir(serviceID), filepath.Dir(fullPath))
+	cleanEmptyParents(m.hooksDir(service), filepath.Dir(fullPath))
 	m.logger.Success(ctx, service.ID, "hook_delete", "PB hook deleted successfully", map[string]any{"path": filepath.ToSlash(relPath)})
 	return nil
 }
@@ -251,7 +253,7 @@ func (m *Manager) Import(ctx context.Context, serviceID string, zipPath string) 
 		imported = append(imported, filepath.ToSlash(relPath))
 	}
 
-	targetDir := m.hooksDir(service.ID)
+	targetDir := m.hooksDir(service)
 	if err := os.RemoveAll(targetDir); err != nil {
 		return nil, err
 	}

@@ -150,8 +150,8 @@ func (lm *LauncherManager) handleServiceErrors() {
 	}
 }
 
-func (lm *LauncherManager) buildArgs(serviceID string) ([]string, error) {
-	pb_data := path.Join(lm.dataDir, serviceID)
+func (lm *LauncherManager) buildArgs(serviceName string) ([]string, error) {
+	pb_data := path.Join(lm.dataDir, serviceName)
 	return []string{
 		"--dir", path.Join(pb_data, "pb_data"),
 		"--hooksDir", path.Join(pb_data, "pb_hooks"),
@@ -201,7 +201,7 @@ func (lm *LauncherManager) UpsertSuperuser(ctx context.Context, serviceID, email
 		slog.Error("failed to find binary", "serviceID", service.ID, "error", err)
 		return err
 	}
-	baseArgs, err := lm.buildArgs(service.ID)
+	baseArgs, err := lm.buildArgs(service.Name)
 	if err != nil {
 		slog.Error("failed to build args", "serviceID", service.ID, "error", err)
 		return err
@@ -262,7 +262,7 @@ func (lm *LauncherManager) startServiceLocked(ctx context.Context, service model
 		return err
 	}
 
-	serviceDir := path.Join(lm.dataDir, service.ID)
+	serviceDir := path.Join(lm.dataDir, service.Name)
 	ensureDir := func(name string) {
 		p := path.Join(serviceDir, name)
 		if _, err := os.Stat(p); os.IsNotExist(err) {

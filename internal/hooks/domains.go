@@ -104,13 +104,6 @@ func AddServiceDomainsHooks(
 			return repository.DeletePendingByDomain(e.Context, domain)
 		})
 
-	// region cert_requests
-	app.OnRecordCreateRequest(collections.CertRequests).BindFunc(func(e *core.RecordRequestEvent) error {
-		return planner.PostSSLDomainRequest(e.Request.Context(),
-			e.Record.GetString("domain"),
-			false,
-		)
-	})
 }
 
 func validateService(e *core.RecordRequestEvent) error {

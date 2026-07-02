@@ -1,7 +1,6 @@
 package migrations
 
 import (
-	"pb_launcher/collections"
 	"pb_launcher/utils"
 
 	"github.com/pocketbase/pocketbase/core"
@@ -10,7 +9,7 @@ import (
 
 func init() {
 	m.Register(func(app core.App) error {
-		certRequests := core.NewBaseCollection(collections.CertRequests)
+		certRequests := core.NewBaseCollection("cert_requests")
 		certRequests.Fields.Add(
 			&core.TextField{
 				Name:     "domain",
@@ -54,7 +53,7 @@ func init() {
 
 		return app.Save(certRequests)
 	}, func(app core.App) error {
-		certRequests, err := app.FindCollectionByNameOrId(collections.CertRequests)
+		certRequests, err := app.FindCollectionByNameOrId("cert_requests")
 		if err != nil {
 			return err
 		}

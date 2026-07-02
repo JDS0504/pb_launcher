@@ -58,7 +58,8 @@ func (s *ServiceRepository) services(ids ...string) ([]models.Service, error) {
 		quoted = append(quoted, fmt.Sprintf("'%s'", id))
 	}
 	if len(quoted) > 0 {
-		qry += fmt.Sprintf(" and s.id in (%s)", strings.Join(quoted, ","))
+		quotedStr := strings.Join(quoted, ",")
+		qry += fmt.Sprintf(" and (s.id in (%s) OR s.name in (%s))", quotedStr, quotedStr)
 	}
 	db := s.app.DB()
 

@@ -101,16 +101,17 @@ func NewManager(
 	}
 }
 
-func (m *Manager) serviceDir(serviceID string) string {
-	return filepath.Join(m.dataDir, serviceID)
+func (m *Manager) serviceDir(service *models.Service) string {
+	return filepath.Join(m.dataDir, service.Name)
 }
 
 func (m *Manager) List(ctx context.Context, serviceID string) ([]FileEntry, error) {
-	if _, err := m.serviceRepo.FindService(ctx, serviceID); err != nil {
+	service, err := m.serviceRepo.FindService(ctx, serviceID)
+	if err != nil {
 		return nil, err
 	}
 
-	baseDir := m.serviceDir(serviceID)
+	baseDir := m.serviceDir(service)
 	if _, err := os.Stat(baseDir); err != nil {
 		if os.IsNotExist(err) {
 			return []FileEntry{}, nil
@@ -156,14 +157,15 @@ func (m *Manager) List(ctx context.Context, serviceID string) ([]FileEntry, erro
 }
 
 func (m *Manager) ReadFile(ctx context.Context, serviceID string, targetPath string) (*FileContent, error) {
-	if _, err := m.serviceRepo.FindService(ctx, serviceID); err != nil {
+	service, err := m.serviceRepo.FindService(ctx, serviceID)
+	if err != nil {
 		return nil, err
 	}
 	relPath, err := validateFilePath(targetPath)
 	if err != nil {
 		return nil, err
 	}
-	fullPath, err := safeJoin(m.serviceDir(serviceID), relPath)
+	fullPath, err := safeJoin(m.serviceDir(service), relPath)
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +198,7 @@ func (m *Manager) SaveFileBytes(ctx context.Context, serviceID string, targetPat
 	if err != nil {
 		return err
 	}
-	fullPath, err := safeJoin(m.serviceDir(serviceID), relPath)
+	fullPath, err := safeJoin(m.serviceDir(service), relPath)
 	if err != nil {
 		return err
 	}
@@ -238,7 +240,7 @@ func (m *Manager) SaveFileStream(ctx context.Context, serviceID string, targetPa
 	if err != nil {
 		return err
 	}
-	fullPath, err := safeJoin(m.serviceDir(serviceID), relPath)
+	fullPath, err := safeJoin(m.serviceDir(service), relPath)
 	if err != nil {
 		return err
 	}
@@ -281,7 +283,7 @@ func (m *Manager) DeleteFile(ctx context.Context, serviceID string, targetPath s
 	if err != nil {
 		return err
 	}
-	fullPath, err := safeJoin(m.serviceDir(serviceID), relPath)
+	fullPath, err := safeJoin(m.serviceDir(service), relPath)
 	if err != nil {
 		return err
 	}
@@ -296,7 +298,7 @@ func (m *Manager) DeleteFile(ctx context.Context, serviceID string, targetPath s
 	}
 	// Eliminar el .gz generado automáticamente si existe.
 	_ = os.Remove(fullPath + ".gz")
-	cleanEmptyParents(m.serviceDir(serviceID), filepath.Dir(fullPath))
+	cleanEmptyParents(m.serviceDir(service), filepath.Dir(fullPath))
 	m.logger.Success(ctx, service.ID, "file_delete", "Archivo eliminado exitosamente", map[string]any{"path": filepath.ToSlash(relPath)})
 	return nil
 }
@@ -390,14 +392,15 @@ func cleanEmptyParents(base string, dir string) {
 }
 
 func (m *Manager) GetSafeFilePath(ctx context.Context, serviceID string, targetPath string) (string, error) {
-	if _, err := m.serviceRepo.FindService(ctx, serviceID); err != nil {
+	service, err := m.serviceRepo.FindService(ctx, serviceID)
+	if err != nil {
 		return "", err
 	}
 	relPath, err := validateFilePath(targetPath)
 	if err != nil {
 		return "", err
 	}
-	return safeJoin(m.serviceDir(serviceID), relPath)
+	return safeJoin(m.serviceDir(service), relPath)
 }
 
 func (m *Manager) CreateDirectory(ctx context.Context, serviceID string, targetPath string) error {
@@ -412,7 +415,7 @@ func (m *Manager) CreateDirectory(ctx context.Context, serviceID string, targetP
 	if err != nil {
 		return err
 	}
-	fullPath, err := safeJoin(m.serviceDir(serviceID), relPath)
+	fullPath, err := safeJoin(m.serviceDir(service), relPath)
 	if err != nil {
 		return err
 	}
@@ -435,11 +438,11 @@ func (m *Manager) RenameFile(ctx context.Context, serviceID string, oldPath stri
 	if err != nil {
 		return err
 	}
-	fullOld, err := safeJoin(m.serviceDir(serviceID), relOld)
+	fullOld, err := safeJoin(m.serviceDir(service), relOld)
 	if err != nil {
 		return err
 	}
-	fullNew, err := safeJoin(m.serviceDir(serviceID), relNew)
+	fullNew, err := safeJoin(m.serviceDir(service), relNew)
 	if err != nil {
 		return err
 	}
@@ -451,7 +454,7 @@ func (m *Manager) RenameFile(ctx context.Context, serviceID string, oldPath stri
 		return err
 	}
 
-	cleanEmptyParents(m.serviceDir(serviceID), filepath.Dir(fullOld))
+	cleanEmptyParents(m.serviceDir(service), filepath.Dir(fullOld))
 	return nil
 }
 
@@ -471,7 +474,7 @@ func (m *Manager) ExtractZip(ctx context.Context, serviceID string, zipPath stri
 		return fmt.Errorf("el archivo seleccionado no es un ZIP válido")
 	}
 
-	fullZipPath, err := safeJoin(m.serviceDir(serviceID), relPath)
+	fullZipPath, err := safeJoin(m.serviceDir(service), relPath)
 	if err != nil {
 		return err
 	}

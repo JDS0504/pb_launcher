@@ -103,7 +103,7 @@ func (m *Manager) Create(ctx context.Context, serviceID string) (*BackupFile, er
 		return nil, fmt.Errorf("service must be stopped before backup")
 	}
 
-	serviceDir := filepath.Join(m.dataDir, service.ID)
+	serviceDir := filepath.Join(m.dataDir, service.Name)
 	if info, err := os.Stat(serviceDir); err != nil || !info.IsDir() {
 		return nil, fmt.Errorf("service data directory not found")
 	}
@@ -196,7 +196,7 @@ func (m *Manager) CreateSnapshot(ctx context.Context, serviceID string, name str
 		return nil, fmt.Errorf("service must be stopped before snapshot")
 	}
 
-	serviceDir := filepath.Join(m.dataDir, service.ID)
+	serviceDir := filepath.Join(m.dataDir, service.Name)
 	if info, err := os.Stat(serviceDir); err != nil || !info.IsDir() {
 		return nil, fmt.Errorf("service data directory not found")
 	}
@@ -366,7 +366,7 @@ func (m *Manager) Restore(ctx context.Context, backupPath string, name string) (
 		return "", err
 	}
 
-	serviceDir := filepath.Join(m.dataDir, record.Id)
+	serviceDir := filepath.Join(m.dataDir, record.GetString(name))
 	if err := copyDir(filepath.Join(tempDir, "data"), serviceDir); err != nil {
 		_ = m.app.Delete(record)
 		_ = os.RemoveAll(serviceDir)
@@ -411,7 +411,7 @@ func (m *Manager) Clone(ctx context.Context, sourceServiceID string, name string
 		return "", fmt.Errorf("failed to download service release: %w", err)
 	}
 
-	sourceDir := filepath.Join(m.dataDir, source.ID)
+	sourceDir := filepath.Join(m.dataDir, source.Name)
 	if info, err := os.Stat(sourceDir); err != nil || !info.IsDir() {
 		return "", fmt.Errorf("service data directory not found")
 	}
@@ -432,7 +432,7 @@ func (m *Manager) Clone(ctx context.Context, sourceServiceID string, name string
 		return "", err
 	}
 
-	targetDir := filepath.Join(m.dataDir, record.Id)
+	targetDir := filepath.Join(m.dataDir, record.GetString(name))
 	if err := copyDir(sourceDir, targetDir); err != nil {
 		_ = m.app.Delete(record)
 		_ = os.RemoveAll(targetDir)

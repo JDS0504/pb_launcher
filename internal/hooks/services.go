@@ -20,6 +20,36 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 )
 
+func validateUniqueFriendlyDomain(app core.App, newName string, cnf configs.Config, currentServiceId string) (string, error) {
+	newFriendlyDomain, err := domainutil.GenerateFriendlyDomain(newName, cnf.GetDomain())
+	if err != nil {
+		return "", apis.NewBadRequestError("el nombre del servicio no es válido", nil)
+	}
+
+	existing, err := app.FindFirstRecordByFilter(
+		collections.ServicesDomains,
+		"domain = {:domain}",
+		dbx.Params{"domain": newFriendlyDomain},
+	)
+	
+	if err == nil && existing != nil {
+		existingServiceId := existing.GetString("service")
+		if existingServiceId != currentServiceId {
+			isOrphan := existingServiceId == ""
+			if !isOrphan {
+				_, err := app.FindRecordById(collections.Services, existingServiceId)
+				isOrphan = err != nil
+			}
+			if isOrphan {
+				_ = app.Delete(existing)
+			} else {
+				return "", apis.NewBadRequestError(fmt.Sprintf("el nombre '%s' no está disponible porque el dominio '%s' ya está en uso", newName, newFriendlyDomain), nil)
+			}
+		}
+	}
+	return newFriendlyDomain, nil
+}
+
 func AddServiceHooks(app *pocketbase.PocketBase,
 	serviceDiscovery *domain.ServiceDiscovery,
 	cnf configs.Config,
@@ -32,29 +62,9 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 			}
 
 			name := e.Record.GetString("name")
-			friendlyDomain, err := domainutil.GenerateFriendlyDomain(name, cnf.GetDomain())
+			_, err := validateUniqueFriendlyDomain(e.App, name, cnf, "")
 			if err != nil {
-				return apis.NewBadRequestError("el nombre del servicio no es válido", nil)
-			}
-
-			existing, err := e.App.FindFirstRecordByFilter(
-				collections.ServicesDomains,
-				"domain = {:domain}",
-				dbx.Params{"domain": friendlyDomain},
-			)
-			if err == nil && existing != nil {
-				serviceId := existing.GetString("service")
-				isOrphan := serviceId == ""
-				if !isOrphan {
-					_, err := e.App.FindRecordById(collections.Services, serviceId)
-					isOrphan = err != nil
-				}
-
-				if isOrphan {
-					_ = e.App.Delete(existing)
-				} else {
-					return apis.NewBadRequestError(fmt.Sprintf("el nombre '%s' no está disponible porque el dominio '%s' ya está en uso", name, friendlyDomain), nil)
-				}
+				return err
 			}
 
 			restart_policy := e.Record.GetString("restart_policy")
@@ -64,7 +74,6 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 
 			e.Record.Set("boot_completed", "no")
 			e.Record.Set("restart_policy", restart_policy)
-
 			e.Record.Set("status", "idle")
 
 			return e.Next()
@@ -83,36 +92,28 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 
 		oldName := currentRecord.GetString("name")
 		if oldName != updatedName {
+			// Detener el proceso con el nombre antiguo
+			lm.StopServiceIfRunning(oldName)
+
+			// Renombrar la carpeta físicamente
+			oldDir := filepath.Join(lm.DataDir(), oldName)
+			newDir := filepath.Join(lm.DataDir(), updatedName)
+			if _, err := os.Stat(oldDir); err == nil {
+				if err := os.Rename(oldDir, newDir); err != nil {
+					return fmt.Errorf("error renaming service directory: %w", err)
+				}
+			}
+
 			oldSlug := domainutil.SanitizeToSlug(oldName)
 			newSlug := domainutil.SanitizeToSlug(updatedName)
+			
 			if oldSlug != newSlug {
-				newFriendlyDomain, err := domainutil.GenerateFriendlyDomain(updatedName, cnf.GetDomain())
+				newFriendlyDomain, err := validateUniqueFriendlyDomain(e.App, updatedName, cnf, e.Record.Id)
 				if err != nil {
-					return apis.NewBadRequestError("el nombre del servicio no es válido", nil)
+					return err
 				}
+
 				rootDomain := domainutil.RootDomain(cnf.GetDomain())
-
-				existing, err := e.App.FindFirstRecordByFilter(
-					collections.ServicesDomains,
-					"domain = {:domain}",
-					dbx.Params{"domain": newFriendlyDomain},
-				)
-				if err == nil && existing != nil {
-					if existing.GetString("service") != e.Record.Id {
-						serviceId := existing.GetString("service")
-						isOrphan := serviceId == ""
-						if !isOrphan {
-							_, err := e.App.FindRecordById(collections.Services, serviceId)
-							isOrphan = err != nil
-						}
-						if isOrphan {
-							_ = e.App.Delete(existing)
-						} else {
-							return apis.NewBadRequestError(fmt.Sprintf("el nombre '%s' no está disponible porque el dominio '%s' ya está en uso", updatedName, newFriendlyDomain), nil)
-						}
-					}
-				}
-
 				domainRecords, err := e.App.FindAllRecords(
 					collections.ServicesDomains,
 					dbx.NewExp("service = {:service}", dbx.Params{"service": e.Record.Id}),
@@ -210,29 +211,27 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 		})
 
 	// Detener el proceso ANTES de que PocketBase elimine el registro.
-	// Los registros relacionados (services_domains, comands, operation_logs)
-	// se eliminan automáticamente: CascadeDelete=true en sus campos FK.
 	app.OnRecordDeleteRequest(collections.Services).
 		BindFunc(func(e *core.RecordRequestEvent) error {
-			lm.StopServiceIfRunning(e.Record.Id)
+			name := e.Record.GetString("name")
+			lm.StopServiceIfRunning(name)
 			return e.Next()
 		})
 
 	// Borrar el directorio de datos DESPUES de la eliminación exitosa en BD.
-	// Los registros relacionados (services_domains, comands, operation_logs)
-	// ya fueron eliminados en cascade por PocketBase.
 	app.OnRecordAfterDeleteSuccess(collections.Services).
 		BindFunc(func(e *core.RecordEvent) error {
 			if err := e.Next(); err != nil {
 				return err
 			}
-			serviceDir := filepath.Join(lm.DataDir(), e.Record.Id)
+			name := e.Record.GetString("name")
+			serviceDir := filepath.Join(lm.DataDir(), name)
 			if err := os.RemoveAll(serviceDir); err != nil {
 				slog.Error("failed to remove service data directory",
-					"serviceID", e.Record.Id, "path", serviceDir, "error", err)
+					"serviceName", name, "path", serviceDir, "error", err)
 			} else {
 				slog.Info("service data directory removed",
-					"serviceID", e.Record.Id, "path", serviceDir)
+					"serviceName", name, "path", serviceDir)
 			}
 			return nil
 		})

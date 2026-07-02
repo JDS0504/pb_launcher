@@ -164,8 +164,11 @@ func isCompressibleMime(contentType string) bool {
 // gzDiskPath calcula la ruta en disco del .gz para un dataDir, serviceID y URL path dados.
 // Retorna ("", false) si el path no es elegible para compresion (API, admin, extension no comprimible).
 // Es una funcion de paquete (sin receptor) para poder reutilizarse desde buildReverseProxy y staticTransport.
-func gzDiskPath(dataDir, serviceID, urlPath string) (diskPath string, gzUrlPath string, ok bool) {
-	if serviceID == "" {
+func gzDiskPath(dataDir, serviceName, urlPath string) (diskPath string, gzUrlPath string, ok bool) {
+	if serviceName == "" {
+		return "", "", false
+	}
+	if len(urlPath) > 200 {
 		return "", "", false
 	}
 	if strings.HasPrefix(urlPath, "/api/") || strings.HasPrefix(urlPath, "/_/") {
@@ -173,13 +176,13 @@ func gzDiskPath(dataDir, serviceID, urlPath string) (diskPath string, gzUrlPath 
 	}
 
 	cleanPath := filepath.FromSlash(path.Clean("/" + urlPath))
-	originalFile := filepath.Join(dataDir, serviceID, "pb_public", cleanPath)
+	originalFile := filepath.Join(dataDir, serviceName, "pb_public", cleanPath)
 
 	fi, err := os.Stat(originalFile)
 	resolvedUrlPath := urlPath
 	// Si el archivo no existe o es un directorio, asumimos fallback a index.html (SPA)
 	if os.IsNotExist(err) || (err == nil && fi.IsDir()) {
-		originalFile = filepath.Join(dataDir, serviceID, "pb_public", "index.html")
+		originalFile = filepath.Join(dataDir, serviceName, "pb_public", "index.html")
 		if _, err := os.Stat(originalFile); err != nil {
 			return "", "", false
 		}
@@ -381,7 +384,8 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 // archivos estáticos de pb_public directamente desde disco, sin despertar
 // la instancia de PocketBase.
 func (rp *DynamicReverseProxyDiscovery) resolveStaticHandler(serviceID string) (*httputil.ReverseProxy, error) {
-	staticDir := filepath.Join(rp.dataDir, serviceID, "pb_public")
+	staticDir := filepath.Join(rp.dataDir, serviceID)
+	staticDir = filepath.Join(staticDir, "pb_public")
 	if _, err := os.Stat(staticDir); os.IsNotExist(err) {
 		slog.Warn("serve_static: pb_public directory does not exist", "serviceID", serviceID, "path", staticDir)
 		return nil, fmt.Errorf("static directory not found for service %s", serviceID)
@@ -392,10 +396,9 @@ func (rp *DynamicReverseProxyDiscovery) resolveStaticHandler(serviceID string) (
 // buildStaticProxy crea un httputil.ReverseProxy que sirve archivos estáticos
 // directamente desde un http.Handler (FileServer) usando un Transport falso
 // que intercepta las peticiones y las inyecta en el handler de forma in-process.
-func buildStaticProxy(handler http.Handler, dataDir, serviceID string) *httputil.ReverseProxy {
-	dummyTarget, _ := url.Parse("http://localhost")
-	p := httputil.NewSingleHostReverseProxy(dummyTarget)
-	p.Transport = &staticTransport{handler: handler, dataDir: dataDir, serviceID: serviceID}
+func buildStaticProxy(handler http.Handler, dataDir, serviceName string) *httputil.ReverseProxy {
+	p := httputil.NewSingleHostReverseProxy(&url.URL{Scheme: "http", Host: "localhost"})
+	p.Transport = &staticTransport{handler: handler, dataDir: dataDir, serviceName: serviceName}
 	p.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		http.Error(w, "static file error: "+err.Error(), http.StatusInternalServerError)
 	}
@@ -408,16 +411,16 @@ func buildStaticProxy(handler http.Handler, dataDir, serviceID string) *httputil
 //   - Primer visitante: comprime on-the-fly (nivel 9) y guarda .gz a disco.
 //   - Visitantes siguientes: sirve el .gz precomprimido (0 CPU).
 type staticTransport struct {
-	handler   http.Handler
-	dataDir   string
-	serviceID string
+	handler     http.Handler
+	dataDir     string
+	serviceName string
 }
 
 func (t *staticTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Solo aplicar compresión si el cliente acepta gzip y la ruta es elegible.
 	acceptsGzip := strings.Contains(req.Header.Get("Accept-Encoding"), "gzip")
 	if acceptsGzip {
-		diskPath, gzUrl, ok := gzDiskPath(t.dataDir, t.serviceID, req.URL.Path)
+		diskPath, gzUrl, ok := gzDiskPath(t.dataDir, t.serviceName, req.URL.Path)
 		if ok {
 			origFilePath := strings.TrimSuffix(gzUrl, ".gz")
 			ext := path.Ext(origFilePath)

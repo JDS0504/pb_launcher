@@ -19,7 +19,7 @@ func init() {
 			collections.Services,
 			collections.ServicesDomains,
 			collections.ServicesComands,
-			collections.CertRequests,
+			"cert_requests",
 			collections.OperationLogs,
 			collections.ProxyEntries,
 		}
@@ -57,7 +57,7 @@ func init() {
 			collections.Services,
 			collections.ServicesDomains,
 			collections.ServicesComands,
-			collections.CertRequests,
+			"cert_requests",
 			collections.OperationLogs,
 			collections.ProxyEntries,
 		}
