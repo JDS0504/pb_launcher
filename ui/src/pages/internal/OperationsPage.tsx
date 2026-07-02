@@ -60,7 +60,7 @@ export const OperationsPage = () => {
       {/* Cabecera (Sólo título sin iconos en móvil, oculto en PC) */}
       <h2 className="text-xl font-bold md:hidden block">History</h2>
 
-      <div className="flex flex-col sm:flex-row gap-2 w-full items-stretch sm:items-center justify-end">
+      <div className="flex flex-col sm:flex-row gap-2 w-full items-stretch sm:items-center justify-start">
         <div className="relative flex-grow sm:flex-none">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40" />
             <input
