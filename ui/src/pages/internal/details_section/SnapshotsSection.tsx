@@ -89,8 +89,14 @@ export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
   });
 
   const createSnapshot = () => {
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}-${pad(d.getMinutes())}`;
+    const defaultSnapshotName = service ? `${service.name}-${dateStr}` : "";
+
     openModal(
       <SnapshotNameForm
+        defaultName={defaultSnapshotName}
         description="Create a local point-in-time ZIP snapshot of this stopped instance."
         label="Snapshot Name"
         submitLabel="Create snapshot"
