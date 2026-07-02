@@ -152,7 +152,7 @@ export const ServicesPage = () => {
   };
 
   const openDetailsService = (service: ServiceDto) =>
-    navigate(`/services/${service.id}`);
+    navigate(`/services/${service.name}`);
 
   return (
     <div className="space-y-6">

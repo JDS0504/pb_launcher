@@ -14,16 +14,17 @@ import { SnapshotsSection } from "./details_section/SnapshotsSection";
 import { UptimeSection } from "./details_section/UptimeSection";
 
 export const ServiceDetailPage = () => {
-  const { service_id } = useParams<{ service_id: string }>();
+  const { name } = useParams<{ name: string }>();
+  const service_id = name || "";
 
   const [searchParams, setSearchParams] = useSearchParams();
   const activeSection = searchParams.get("section") || "general";
   const [menuOpen, setMenuOpen] = useState(false);
 
   const serviceQuery = useQuery({
-    queryKey: ["services", service_id],
-    queryFn: () => serviceService.fetchServiceByID(service_id || ""),
-    enabled: service_id != null && service_id !== "",
+    queryKey: ["services", name],
+    queryFn: () => serviceService.fetchServiceByName(name || ""),
+    enabled: name != null && name !== "",
     refetchInterval: 3000,
   });
 
@@ -39,7 +40,7 @@ export const ServiceDetailPage = () => {
   const menuItemClass = (section: string) =>
     `btn btn-ghost shrink-0 justify-start whitespace-nowrap text-left w-full ${activeSection === section ? "bg-primary text-primary-content" : ""}`;
 
-  if (service_id == null || service_id === "") return <Navigate to={"/"} />;
+  if (name == null || name === "") return <Navigate to={"/"} />;
 
   // Primera URL usada para el botón "Abrir Admin"
   const adminUrl = serviceUrls.length > 0 ? serviceUrls[0] : null;

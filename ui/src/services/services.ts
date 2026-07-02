@@ -136,23 +136,24 @@ export const serviceService = {
         "expand.release.expand.repository.name",
   ].join(","),
 
-  fetchServiceByID: async (serviceID: string): Promise<ServiceDto> => {
-    const [service, commands, domains] = await Promise.all([
-      pb
+  fetchServiceByName: async (name: string): Promise<ServiceDto> => {
+    const service = await pb
         .collection(SERVICES_COLLECTION)
-        .getOne<
+        .getFirstListItem<
           Omit<_Service, "repository" | "release_id" | "release_version">
-        >(serviceID, {
+        >(`name="${name}"`, {
           expand: "release.repository",
           fields: serviceService.serviceFields,
-        }),
+        });
+
+    const [commands, domains] = await Promise.all([
 
       pb.collection(COMANDS_COLLECTION).getFullList<{ service: string }>({
         fields: "service",
-        filter: `status="pending"&&service="${serviceID}"`,
+        filter: `status="pending"&&service="${service.id}"`,
       }),
 
-      domainsService.fetchAllByServiceID(serviceID),
+      domainsService.fetchAllByServiceID(service.id),
     ]);
     return {
       id: service.id,

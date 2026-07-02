@@ -100,7 +100,7 @@ export const AppRoutes = () => {
           <Route path="/uptime" element={<UptimePage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/status" element={<StatusPage />} />
-          <Route path="/services/:service_id" element={<ServiceDetailPage />} />
+          <Route path="/services/:name" element={<ServiceDetailPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
