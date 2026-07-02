@@ -408,9 +408,7 @@ func (rp *DynamicReverseProxyDiscovery) ResolveTarget(ctx context.Context, host 
 			}
 			return nil, fmt.Errorf("failed to wake up service %s: %w", wakeupKey, wakeupErr)
 		}
-		if err != nil {
-			return nil, fmt.Errorf("service not found for target: %s", serviceID)
-		}
+		return nil, fmt.Errorf("service not found for target %s: %w", serviceID, err)
 	}
 
 	// Para cualquier otra ruta (estáticos), servimos desde disco directamente usando el nombre
