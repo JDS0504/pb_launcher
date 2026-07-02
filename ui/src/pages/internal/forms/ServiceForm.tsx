@@ -77,14 +77,13 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
   const form = useCustomForm(schema, {
     defaultValues: {
       name: record?.name ?? "",
-      repository: record?.repository_id ?? savedDefaults.repository ?? "pocketbase",
+      repository: "pocketbase",
       instanceSource: record?.release_id ?? savedDefaults.instanceSource ?? "",
       restartPolicy: record?.restart_policy ?? savedDefaults.restartPolicy ?? "on-failure",
       superuserPassword: savedDefaults.superuserPassword ?? "",
       resourceProfile: getProfileFromLimits(record?.cpu_quota, record?.memory_limit) ?? savedDefaults.resourceProfile ?? "low",
     },
   });
-  const selectedRepository = form.watch("repository");
 
   const releasesQuery = useQuery({
     queryKey: ["releases"],
@@ -94,13 +93,12 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
   const releaseOptions = useMemo<SelectFieldOption[]>(() => {
     return (
       releasesQuery.data
-        ?.filter(r => r.repositoryId === selectedRepository)
-        .map(r => ({
+        ?.map(r => ({
         label: `v${r.version}`,
         value: r.id,
         })) ?? []
     );
-  }, [releasesQuery.data, selectedRepository]);
+  }, [releasesQuery.data]);
 
   useEffect(() => {
     if (record != null) return;
