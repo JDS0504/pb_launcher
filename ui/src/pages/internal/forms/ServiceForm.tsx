@@ -105,19 +105,32 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, canChangeVersion,
 
   const releaseOptions = useMemo<SelectFieldOption[]>(() => {
     const releases = releasesQuery.data ?? [];
-    return releases.map(r => {
+    const options: SelectFieldOption[] = [];
+
+    // Si hay un registro, aseguramos que la versión actual esté en las opciones
+    // para que se muestre correctamente incluso si los releases están cargando o vacíos.
+    if (record) {
+      const hasCurrent = releases.some(r => r.id === record.release_id);
+      if (!hasCurrent) {
+        options.push({ label: `v${record.release_version}  (actual)`, value: record.release_id });
+      }
+    }
+
+    releases.forEach(r => {
       if (!record) {
-        // Modo creación: solo muestra la versión
-        return { label: `v${r.version}`, value: r.id };
+        options.push({ label: `v${r.version}`, value: r.id });
+      } else {
+        if (r.id === record.release_id) {
+          options.push({ label: `v${r.version}  (actual)`, value: r.id });
+        } else {
+          const diff = compareVersions(r.version, record.release_version);
+          const tag = diff > 0 ? "↑ upgrade" : "↓ downgrade";
+          options.push({ label: `v${r.version}  (${tag})`, value: r.id });
+        }
       }
-      // Modo edición: indica si es el actual, upgrade o downgrade
-      if (r.id === record.release_id) {
-        return { label: `v${r.version}  (actual)`, value: r.id };
-      }
-      const diff = compareVersions(r.version, record.release_version);
-      const tag = diff > 0 ? "↑ upgrade" : "↓ downgrade";
-      return { label: `v${r.version}  (${tag})`, value: r.id };
     });
+
+    return options;
   }, [releasesQuery.data, record]);
 
   useEffect(() => {
@@ -225,6 +238,8 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, canChangeVersion,
       }
     },
   );
+  const isFormDisabled = record != null && !canChangeVersion;
+
   return (
     <div style={{ width, maxWidth: "100%" }}>
       <form onSubmit={handleFormSubmit} className="space-y-5">
@@ -241,6 +256,7 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, canChangeVersion,
           })}
           autoComplete="off"
           error={form.formState.errors.name}
+          disabled={isFormDisabled}
         />
 
         {record == null && (
@@ -260,7 +276,7 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, canChangeVersion,
           registration={form.register("instanceSource")}
           autoComplete="off"
           error={form.formState.errors.instanceSource}
-          disabled={record != null && !canChangeVersion}
+          disabled={isFormDisabled}
           placeholderOptionLabel="Select a version"
         />
 
@@ -273,6 +289,7 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, canChangeVersion,
           registration={form.register("restartPolicy")}
           autoComplete="off"
           error={form.formState.errors.restartPolicy}
+          disabled={isFormDisabled}
         />
 
         <SelectField
@@ -286,6 +303,7 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, canChangeVersion,
           registration={form.register("resourceProfile")}
           autoComplete="off"
           error={form.formState.errors.resourceProfile}
+          disabled={isFormDisabled}
         />
         <div
           className={classNames("mt-8", {
@@ -301,6 +319,7 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, canChangeVersion,
               type="submit"
               label="Guardar"
               loading={createInstanceMutation.isPending || updateInstanceMutation.isPending}
+              disabled={isFormDisabled}
             />
           </div>
         </div>
