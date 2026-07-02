@@ -14,7 +14,6 @@ var Module = fx.Module("hooks",
 	fx.Invoke(hooks.AddServiceHooks),
 	fx.Invoke(hooks.AddServiceDomainsHooks),
 	fx.Invoke(hooks.AddComandHooks),
-	fx.Invoke(hooks.AddRepositoryHooks),
 	fx.Invoke(hooks.RegisterOperationLogsCleanup),
 	fx.Invoke(hooks.RegisterSQLiteVacuum),
 )
