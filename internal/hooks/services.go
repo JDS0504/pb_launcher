@@ -91,27 +91,54 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 		}
 
 		oldName := currentRecord.GetString("name")
+		var newFriendlyDomain string
+
 		if oldName != updatedName {
-			// Detener el proceso con el nombre antiguo
+			// ── FASE 1: VALIDACIONES (antes de tocar nada) ─────────────────
+
+			// 1. Validar que no existe otro servicio con ese nombre en la BD
+			existing, err := e.App.FindFirstRecordByFilter(
+				collections.Services,
+				"name = {:name} && id != {:id}",
+				dbx.Params{"name": updatedName, "id": e.Record.GetString("id")},
+			)
+			if err == nil && existing != nil {
+				return apis.NewBadRequestError(
+					fmt.Sprintf("ya existe una instancia con el nombre '%s'", updatedName), nil)
+			}
+
+			// 2. Validar que no existe carpeta física data/<newName>
+			newDir := filepath.Join(lm.DataDir(), updatedName)
+			if _, statErr := os.Stat(newDir); statErr == nil {
+				return apis.NewBadRequestError(
+					fmt.Sprintf("ya existe un directorio de datos para '%s', elige un nombre diferente", updatedName), nil)
+			}
+
+			// 3. Validar dominio único (solo si el slug cambia)
+			oldSlug := domainutil.SanitizeToSlug(oldName)
+			newSlug := domainutil.SanitizeToSlug(updatedName)
+			if oldSlug != newSlug {
+				newFriendlyDomain, err = validateUniqueFriendlyDomain(e.App, updatedName, cnf, e.Record.Id)
+				if err != nil {
+					return err
+				}
+			}
+
+			// ── FASE 2: EJECUCIÓN (todas las validaciones pasaron) ──────────
+
+			// 4. Detener el proceso
 			lm.StopServiceIfRunning(currentRecord.Id)
 
-			// Renombrar la carpeta físicamente
+			// 5. Renombrar la carpeta físicamente
 			oldDir := filepath.Join(lm.DataDir(), oldName)
-			newDir := filepath.Join(lm.DataDir(), updatedName)
-			if _, err := os.Stat(oldDir); err == nil {
+			if _, statErr := os.Stat(oldDir); statErr == nil {
 				if err := os.Rename(oldDir, newDir); err != nil {
 					return fmt.Errorf("error renaming service directory: %w", err)
 				}
 			}
-			oldSlug := domainutil.SanitizeToSlug(oldName)
-			newSlug := domainutil.SanitizeToSlug(updatedName)
-			
-			if oldSlug != newSlug {
-				newFriendlyDomain, err := validateUniqueFriendlyDomain(e.App, updatedName, cnf, e.Record.Id)
-				if err != nil {
-					return err
-				}
 
+			// 6. Actualizar/crear registro en services_domains
+			if newFriendlyDomain != "" {
 				rootDomain := domainutil.RootDomain(cnf.GetDomain())
 				domainRecords, err := e.App.FindAllRecords(
 					collections.ServicesDomains,
@@ -129,6 +156,7 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 					if len(autogenRecords) > 0 {
 						first := autogenRecords[0]
 						first.Set("domain", newFriendlyDomain)
+						first.Set("cert_status", "pending")
 						if err := e.App.Save(first); err != nil {
 							return fmt.Errorf("failed to update domain name: %w", err)
 						}

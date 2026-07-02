@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { type FC } from "react";
+import { useNavigate } from "react-router-dom";
 import classNames from "classnames";
 import { ServiceForm } from "../forms/ServiceForm";
 import type { ServiceDto } from "../../../services/services";
@@ -12,6 +13,7 @@ import {
   Copy,
   HardDrive,
   KeyRound,
+  Trash2,
 } from "lucide-react";
 import { useServiceActions } from "../../../hooks/useServiceActions";
 
@@ -22,10 +24,10 @@ type Props = {
 
 export const GeneralSection: FC<Props> = ({ service_id, service }) => {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { openModal } = useModal();
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ["services", service?.name] });
     queryClient.invalidateQueries({ queryKey: ["services"] });
   };
 
@@ -38,6 +40,8 @@ export const GeneralSection: FC<Props> = ({ service_id, service }) => {
     isCommandPending,
     isBackupPending,
   } = useServiceActions(invalidate);
+
+  const { handleDelete } = useServiceActions(() => navigate("/"));
 
   if (service == null) {
     return <div className="p-4">Loading...</div>;
@@ -53,6 +57,14 @@ export const GeneralSection: FC<Props> = ({ service_id, service }) => {
       <ChangePasswordModal service_id={service_id} />,
       { title: "Cambiar contraseña del superuser" },
     );
+  };
+
+  // Navega a la nueva URL si el nombre cambió, o solo invalida si no cambió
+  const handleSaveRecord = (newName?: string) => {
+    queryClient.invalidateQueries({ queryKey: ["services"] });
+    if (newName && newName !== service.name) {
+      navigate(`/services/${newName}?section=general`);
+    }
   };
 
   return (
@@ -87,9 +99,9 @@ export const GeneralSection: FC<Props> = ({ service_id, service }) => {
           )}
         </div>
 
-        {/* Derecha: Start / Stop / Restart + acciones secundarias */}
+        {/* Derecha: controles de proceso + acciones secundarias */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Controles de proceso */}
+          {/* Start / Stop / Restart — solo los relevantes */}
           {isStopped && (
             <button
               id="btn-service-start"
@@ -124,12 +136,10 @@ export const GeneralSection: FC<Props> = ({ service_id, service }) => {
             </>
           )}
 
-          {/* Separador visual */}
-          {(isRunning || isStopped) && (
-            <div className="w-px h-5 bg-base-300 hidden sm:block" />
-          )}
+          {/* Separador */}
+          <div className="w-px h-5 bg-base-300 hidden sm:block" />
 
-          {/* Acciones secundarias: siempre visibles pero deshabilitadas si running */}
+          {/* Acciones secundarias: siempre visibles, deshabilitadas si running */}
           <button
             id="btn-service-clone"
             className="btn btn-xs btn-ghost gap-1"
@@ -183,8 +193,25 @@ export const GeneralSection: FC<Props> = ({ service_id, service }) => {
       <ServiceForm
         record={service}
         canChangeVersion={isStopped}
-        onSaveRecord={invalidate}
+        onSaveRecord={handleSaveRecord}
       />
+
+      {/* ── Zona peligrosa ───────────────────────────────────────────────── */}
+      <div className="rounded-box border border-error/30 bg-base-100 p-4 space-y-3 mt-4">
+        <h4 className="font-semibold text-sm text-error">Zona peligrosa</h4>
+        <p className="text-xs text-base-content/60">
+          Eliminar el servicio borrará permanentemente la instancia y todos sus datos del servidor.
+          Esta acción no se puede deshacer.
+        </p>
+        <button
+          id="btn-service-delete"
+          className="btn btn-sm btn-error btn-outline gap-2"
+          onClick={() => handleDelete(service_id)}
+        >
+          <Trash2 className="w-4 h-4" />
+          Eliminar servicio
+        </button>
+      </div>
     </div>
   );
 };

@@ -63,7 +63,7 @@ const schema = object({
 
 type Props = {
   record?: ServiceDto;
-  onSaveRecord?: () => void;
+  onSaveRecord?: (newName?: string) => void;
   canChangeVersion?: boolean;
   width?: number;
 };
@@ -89,15 +89,33 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, canChangeVersion,
     queryFn: releaseService.fetchAll,
   });
 
+  const compareVersions = (a: string, b: string) => {
+    const left = a.split(".").map(Number);
+    const right = b.split(".").map(Number);
+    const maxLen = Math.max(left.length, right.length);
+    for (let i = 0; i < maxLen; i++) {
+      const diff = (left[i] ?? 0) - (right[i] ?? 0);
+      if (diff !== 0) return diff;
+    }
+    return 0;
+  };
+
   const releaseOptions = useMemo<SelectFieldOption[]>(() => {
-    return (
-      releasesQuery.data
-        ?.map(r => ({
-        label: `v${r.version}`,
-        value: r.id,
-        })) ?? []
-    );
-  }, [releasesQuery.data]);
+    const releases = releasesQuery.data ?? [];
+    return releases.map(r => {
+      if (!record) {
+        // Modo creación: solo muestra la versión
+        return { label: `v${r.version}`, value: r.id };
+      }
+      // Modo edición: indica si es el actual, upgrade o downgrade
+      if (r.id === record.release_id) {
+        return { label: `v${r.version}  (actual)`, value: r.id };
+      }
+      const diff = compareVersions(r.version, record.release_version);
+      const tag = diff > 0 ? "↑ upgrade" : "↓ downgrade";
+      return { label: `v${r.version}  (${tag})`, value: r.id };
+    });
+  }, [releasesQuery.data, record]);
 
   useEffect(() => {
     if (record != null) return;
@@ -151,10 +169,9 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, canChangeVersion,
 
   const updateInstanceMutation = useMutation({
     mutationFn: serviceService.updateServiceInstance,
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       toast.success("Service updated successfully");
-      closeModal();
-      onSaveRecord?.();
+      onSaveRecord?.(variables.name);
     },
     onError: error => toast.error(getErrorMessage(error)),
   });
