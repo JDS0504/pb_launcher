@@ -64,7 +64,7 @@ func RegisterServiceCliRoute(app *pocketbase.PocketBase, launcherManager *launch
 			}
 
 			// Construir argumentos base (--dir, --hooksDir, --publicDir, --migrationsDir)
-			baseArgs, err := launcherManager.BuildServiceArgs(serviceID)
+			baseArgs, err := launcherManager.BuildServiceArgs(svcModel.Name)
 			if err != nil {
 				return re.InternalServerError("failed to build default args", err)
 			}

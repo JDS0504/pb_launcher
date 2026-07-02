@@ -77,7 +77,7 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
   const form = useCustomForm(schema, {
     defaultValues: {
       name: record?.name ?? "",
-      repository: record?.repository_id ?? savedDefaults.repository ?? "",
+      repository: record?.repository_id ?? savedDefaults.repository ?? "pocketbase",
       instanceSource: record?.release_id ?? savedDefaults.instanceSource ?? "",
       restartPolicy: record?.restart_policy ?? savedDefaults.restartPolicy ?? "on-failure",
       superuserPassword: savedDefaults.superuserPassword ?? "",
@@ -91,17 +91,6 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
     queryFn: releaseService.fetchAll,
   });
 
-  const repositoryOptions = useMemo<SelectFieldOption[]>(() => {
-    const repositories = new Map<string, string>();
-    for (const release of releasesQuery.data ?? []) {
-      repositories.set(release.repositoryId, release.repositoryName);
-    }
-    return [...repositories.entries()].map(([value, label]) => ({
-      label,
-      value,
-    }));
-  }, [releasesQuery.data]);
-
   const releaseOptions = useMemo<SelectFieldOption[]>(() => {
     return (
       releasesQuery.data
@@ -114,20 +103,15 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
   }, [releasesQuery.data, selectedRepository]);
 
   useEffect(() => {
-    if (record != null || selectedRepository || repositoryOptions.length === 0) {
-      return;
-    }
-    form.setValue("repository", repositoryOptions[0].value, {
-      shouldValidate: true,
-    });
-  }, [form, record, repositoryOptions, selectedRepository]);
-
-  useEffect(() => {
     if (record != null) return;
     const currentRelease = form.getValues("instanceSource");
-    if (releaseOptions.some(option => option.value === currentRelease)) return;
-    if (currentRelease === "") return;
-    form.setValue("instanceSource", "", { shouldValidate: true });
+    if (releaseOptions.length > 0) {
+      if (!currentRelease || !releaseOptions.some(option => option.value === currentRelease)) {
+        form.setValue("instanceSource", releaseOptions[0].value, { shouldValidate: true });
+      }
+    } else if (currentRelease !== "") {
+      form.setValue("instanceSource", "", { shouldValidate: true });
+    }
   }, [form, record, releaseOptions]);
 
   const createInstanceMutation = useMutation({
@@ -246,17 +230,6 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
         )}
 
         <SelectField
-          label="Repository"
-          options={repositoryOptions}
-          isLoading={releasesQuery.isLoading}
-          onReload={releasesQuery.refetch}
-          registration={form.register("repository")}
-          autoComplete="off"
-          error={form.formState.errors.repository}
-          disabled={record != null}
-        />
-
-        <SelectField
           label="Version"
           options={releaseOptions}
           isLoading={releasesQuery.isLoading}
@@ -264,9 +237,7 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
           autoComplete="off"
           error={form.formState.errors.instanceSource}
           disabled={record != null}
-          placeholderOptionLabel={
-            selectedRepository ? "Select a version" : "Select a repository first"
-          }
+          placeholderOptionLabel="Select a version"
         />
 
         <SelectField

@@ -300,7 +300,7 @@ func (lm *LauncherManager) startServiceLocked(ctx context.Context, service model
 		slog.Info("assigned new dynamic port for service", "serviceID", service.ID, "port", port)
 	}
 
-	baseArgs, err := lm.buildArgs(service.ID)
+	baseArgs, err := lm.buildArgs(service.Name)
 	if err != nil {
 		slog.Error("failed to build args", "serviceID", service.ID, "error", err)
 		return err
@@ -861,8 +861,8 @@ func (lm *LauncherManager) FindBinaryPath(ctx context.Context, service models.Se
 }
 
 // BuildServiceArgs expone buildArgs públicamente bajo un nombre descriptivo y DRY.
-func (lm *LauncherManager) BuildServiceArgs(serviceID string) ([]string, error) {
-	return lm.buildArgs(serviceID)
+func (lm *LauncherManager) BuildServiceArgs(serviceName string) ([]string, error) {
+	return lm.buildArgs(serviceName)
 }
 
 // calculatePortabilityCpuQuota calcula la cuota cgroups de CPU dinámicamente en base a las vCPUs disponibles del host.

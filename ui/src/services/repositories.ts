@@ -3,7 +3,7 @@ import { HttpError } from "./client/errors";
 import { pb } from "./client/pb";
 
 export const REPOSITORIES_COLLECTION = "repositories";
-export const DEFAULT_REPOSITORY_ID = "pb91u2l315h29a5";
+export const DEFAULT_REPOSITORY_ID = "pocketbase";
 
 export type RepositoryDto = {
   id: string;
