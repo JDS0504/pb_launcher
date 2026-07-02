@@ -1,25 +1,19 @@
 package migrations
 
 import (
-	"pb_launcher/collections"
-
-	"github.com/pocketbase/pocketbase/core"
 	m "github.com/pocketbase/pocketbase/migrations"
+	"github.com/pocketbase/pocketbase/core"
 )
 
-// Migración que:
-//  1. Limpia servicios en soft-delete previos (limpia hijos primero via SQL directo).
-//  2. Elimina el campo `deleted` de services (ya no hay soft-delete).
-//
-// NOTA: CascadeDelete en campos FK con System:true no puede modificarse
-// via app.Save(). El cascade se gestiona explícitamente en el hook
-// OnRecordDeleteRequest de services.go (3 DELETE SQL antes del e.Next()).
+// Migración que limpia servicios en soft-delete previos usando SQL directo.
+// El campo `deleted` permanece en el schema (System:true, no se puede eliminar
+// via app.Save). El frontend ya no lo usa: ahora hace DELETE real.
+// El campo queda en BD pero nunca se escribe ni se lee desde el código.
 func init() {
 	m.Register(func(app core.App) error {
 		db := app.DB()
 
-		// ── 1. Limpiar hijos de servicios soft-deleted ─────────────────────────
-		// SQL directo: bypassa hooks y FK checks. Primero hijos, luego padre.
+		// Limpiar hijos antes que el padre (FK Required:true)
 		_, _ = db.NewQuery(`
 			DELETE FROM services_domains WHERE service IN (
 				SELECT id FROM services WHERE deleted IS NOT NULL AND deleted != ''
@@ -35,28 +29,12 @@ func init() {
 				SELECT id FROM services WHERE deleted IS NOT NULL AND deleted != ''
 			)
 		`).Execute()
-
-		// ── 2. Borrar los servicios soft-deleted ──────────────────────────────
 		_, _ = db.NewQuery(`
 			DELETE FROM services WHERE deleted IS NOT NULL AND deleted != ''
 		`).Execute()
 
-		// ── 3. Eliminar campo `deleted` del schema ────────────────────────────
-		services, err := app.FindCollectionByNameOrId(collections.Services)
-		if err != nil {
-			return err
-		}
-		services.Fields.RemoveByName("deleted")
-		return app.Save(services)
+		return nil
 	}, func(app core.App) error {
-		services, err := app.FindCollectionByNameOrId(collections.Services)
-		if err != nil {
-			return err
-		}
-		services.Fields.Add(&core.DateField{
-			Name:   "deleted",
-			System: true,
-		})
-		return app.Save(services)
+		return nil // sin rollback necesario (datos ya eliminados)
 	})
 }
