@@ -64,10 +64,11 @@ const schema = object({
 type Props = {
   record?: ServiceDto;
   onSaveRecord?: () => void;
+  canChangeVersion?: boolean;
   width?: number;
 };
 
-export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
+export const ServiceForm: FC<Props> = ({ onSaveRecord, record, canChangeVersion, width }) => {
   const { closeModal } = useModal();
   const savedDefaults = useMemo(() => {
     return record == null ? getLocalStorageDefaults() : {};
@@ -231,7 +232,7 @@ export const ServiceForm: FC<Props> = ({ onSaveRecord, record, width }) => {
           registration={form.register("instanceSource")}
           autoComplete="off"
           error={form.formState.errors.instanceSource}
-          disabled={record != null}
+          disabled={record != null && !canChangeVersion}
           placeholderOptionLabel="Select a version"
         />
 

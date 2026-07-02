@@ -1,6 +1,6 @@
-import { Navigate, useParams, useSearchParams } from "react-router-dom";
+import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useState } from "react";
-import { MenuIcon, XIcon, ExternalLink } from "lucide-react";
+import { MenuIcon, XIcon, ExternalLink, Trash2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { serviceService } from "../../services/services";
 import { useProxyConfigs } from "../../hooks/useProxyConfigs";
@@ -12,9 +12,11 @@ import { OperationHistorySection } from "./details_section/OperationHistorySecti
 import { FileManagerSection } from "./details_section/FileManagerSection";
 import { SnapshotsSection } from "./details_section/SnapshotsSection";
 import { UptimeSection } from "./details_section/UptimeSection";
+import { useServiceActions } from "../../hooks/useServiceActions";
 
 export const ServiceDetailPage = () => {
   const { name } = useParams<{ name: string }>();
+  const navigate = useNavigate();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const activeSection = searchParams.get("section") || "general";
@@ -31,6 +33,8 @@ export const ServiceDetailPage = () => {
   const service_id = service?.id || "";
   const proxyInfo = useProxyConfigs();
   const serviceUrls = useServiceUrls(service, proxyInfo);
+
+  const { handleDelete } = useServiceActions(() => navigate("/"));
 
   const handleSectionChange = (section: string) => {
     setSearchParams({ section });
@@ -142,6 +146,19 @@ export const ServiceDetailPage = () => {
           <li>
             <button className={menuItemClass("files")} onClick={() => handleSectionChange("files")}>
               Files
+            </button>
+          </li>
+
+          {/* Delete al final del sidebar */}
+          <li className="mt-auto pt-4 border-t border-base-300">
+            <button
+              id="btn-sidebar-delete-service"
+              className="btn btn-sm btn-error btn-outline w-full gap-2 justify-start"
+              onClick={() => handleDelete(service_id)}
+              title="Eliminar esta instancia permanentemente"
+            >
+              <Trash2 className="w-4 h-4" />
+              Eliminar servicio
             </button>
           </li>
         </ul>
