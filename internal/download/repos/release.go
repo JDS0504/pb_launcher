@@ -7,6 +7,8 @@ import (
 	"pb_launcher/collections"
 	"pb_launcher/internal/download/domain/dtos"
 	"pb_launcher/internal/download/domain/repositories"
+	"regexp"
+
 	"github.com/hashicorp/go-version"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
