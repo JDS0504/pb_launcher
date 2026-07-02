@@ -57,13 +57,6 @@ export const DomainsSection: FC<Props> = ({
     };
   }, [proxy.base_domain, proxy.use_https, service_name]);
 
-  const customDomains = useMemo(() => {
-    const list = domainsQuery.data ?? [];
-    return list.filter(
-      d => d.domain.toLowerCase() !== proxyDomain.domain.toLowerCase()
-    );
-  }, [domainsQuery.data, proxyDomain.domain]);
-
   const openCreateModal = () => {
     openModal(
       <DomainForm
@@ -154,7 +147,7 @@ export const DomainsSection: FC<Props> = ({
           domain={proxyDomain}
           suffix={url_route_suffix}
         />
-        {customDomains.map(domain => (
+        {(domainsQuery.data ?? []).map(domain => (
           <DomainCard
             key={domain.id}
             domain={domain}
@@ -167,7 +160,7 @@ export const DomainsSection: FC<Props> = ({
         ))}
       </div>
 
-      {customDomains.length === 0 && (
+      {(domainsQuery.data ?? []).length === 0 && (
         <div className="rounded-lg border border-dashed border-base-300 p-6 text-center space-y-2">
           <p className="text-sm text-base-content/60">
             Solo está activo el dominio del sistema. Puedes añadir dominios personalizados con SSL.

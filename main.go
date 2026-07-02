@@ -75,6 +75,13 @@ func createRootCommand(app core.App) *cobra.Command {
 	comand := &cobra.Command{
 		Use: path.Base(os.Args[0]),
 		Run: func(cmd *cobra.Command, args []string) {
+			migrationsRunner := core.NewMigrationsRunner(app, core.AppMigrations)
+			if _, err := migrationsRunner.Up(); err != nil {
+				slog.Error("Failed to run migrations on startup", "error", err)
+			} else {
+				slog.Info("Database migrations verified/applied successfully")
+			}
+
 			fx.New(
 				fx.Provide(func() (configs.Config, error) {
 					return configs.LoadConfigs(configFile)
