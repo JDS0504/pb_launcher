@@ -14,10 +14,19 @@ func init() {
 			return err
 		}
 
-		// Elimina el campo heredado 'deleted' de la colección services, ya que
-		// el borrado ahora es físico (hard delete) y no lógico (soft delete).
-		services.Fields.RemoveByName("deleted")
+		// Como 'deleted' es un campo de sistema (System: true), PocketBase no permite
+		// eliminarlo directamente. Primero debemos cambiar 'System' a false, guardar la
+		// colección, y luego eliminarlo en un segundo paso.
+		if f, ok := services.Fields.GetByName("deleted").(*core.DateField); ok {
+			if f.System {
+				f.System = false
+				if err := app.Save(services); err != nil {
+					return err
+				}
+			}
+		}
 
+		services.Fields.RemoveByName("deleted")
 		return app.Save(services)
 	}, func(app core.App) error {
 		services, err := app.FindCollectionByNameOrId(collections.Services)
