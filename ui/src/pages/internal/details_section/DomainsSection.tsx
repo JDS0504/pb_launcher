@@ -49,15 +49,22 @@ export const DomainsSection: FC<Props> = ({
   };
 
   const proxyDomain = useMemo((): DomainDto => {
+    const systemDomainName = proxy.base_domain ? `${service_name}.${proxy.base_domain}` : "--";
+    const dbRecord = (domainsQuery.data ?? []).find(
+      d => d.domain.toLowerCase() === systemDomainName.toLowerCase()
+    );
     return {
-      id: "__",
-      service: "",
-      domain: proxy.base_domain ? `${service_name}.${proxy.base_domain}` : "--",
+      id: dbRecord?.id ?? "__",
+      service: dbRecord?.service ?? "",
+      domain: systemDomainName,
       use_https: proxy.use_https ? "yes" : "no",
-      cert_status: "approved",
-      x_has_valid_ssl_cert: true,
+      cert_status: dbRecord?.cert_status,
+      x_cert_request_state: dbRecord?.x_cert_request_state,
+      x_has_valid_ssl_cert: dbRecord?.x_has_valid_ssl_cert,
+      x_reached_max_attempt: dbRecord?.x_reached_max_attempt,
+      x_failed_error_message: dbRecord?.x_failed_error_message,
     };
-  }, [proxy.base_domain, proxy.use_https, service_name]);
+  }, [domainsQuery.data, proxy.base_domain, proxy.use_https, service_name]);
 
   const customDomains = useMemo(() => {
     const list = domainsQuery.data ?? [];
