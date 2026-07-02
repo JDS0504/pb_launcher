@@ -20,7 +20,6 @@ export enum Collections {
 	Services = "services",
 	ServicesDomains = "services_domains",
 	Users = "users",
-	VistaTablaServiceUptime = "vista_tabla_service_uptime",
 }
 
 // Alias types for improved usability
@@ -220,6 +219,7 @@ export type ServicesRecord = {
 	id: string
 	ip?: string
 	last_started?: IsoDateString
+	last_vacuum_at?: IsoDateString
 	memory_limit?: string
 	name: string
 	port?: number
@@ -252,21 +252,6 @@ export type UsersRecord = {
 	verified?: boolean
 }
 
-export type VistaTablaServiceUptimeRecord<Tactive_hours_24h = unknown, Tactive_hours_30d = unknown, Tactive_hours_7d = unknown, Tinactive_hours_24h = unknown, Tinactive_hours_30d = unknown, Tinactive_hours_7d = unknown, Tservice_name = unknown, Tservice_status = unknown, Tuptime_24h = unknown, Tuptime_30d = unknown, Tuptime_7d = unknown> = {
-	active_hours_24h?: null | Tactive_hours_24h
-	active_hours_30d?: null | Tactive_hours_30d
-	active_hours_7d?: null | Tactive_hours_7d
-	id: string
-	inactive_hours_24h?: null | Tinactive_hours_24h
-	inactive_hours_30d?: null | Tinactive_hours_30d
-	inactive_hours_7d?: null | Tinactive_hours_7d
-	service_name?: null | Tservice_name
-	service_status?: null | Tservice_status
-	uptime_24h?: null | Tuptime_24h
-	uptime_30d?: null | Tuptime_30d
-	uptime_7d?: null | Tuptime_7d
-}
-
 // Response types include system fields and match responses from the PocketBase API
 export type AuthoriginsResponse<Texpand = unknown> = Required<AuthoriginsRecord> & BaseSystemFields<Texpand>
 export type ExternalauthsResponse<Texpand = unknown> = Required<ExternalauthsRecord> & BaseSystemFields<Texpand>
@@ -282,7 +267,6 @@ export type ServiceUptimeViewResponse<Tactive_hours_24h = unknown, Tactive_hours
 export type ServicesResponse<Texpand = unknown> = Required<ServicesRecord> & BaseSystemFields<Texpand>
 export type ServicesDomainsResponse<Texpand = unknown> = Required<ServicesDomainsRecord> & BaseSystemFields<Texpand>
 export type UsersResponse<Texpand = unknown> = Required<UsersRecord> & AuthSystemFields<Texpand>
-export type VistaTablaServiceUptimeResponse<Tactive_hours_24h = unknown, Tactive_hours_30d = unknown, Tactive_hours_7d = unknown, Tinactive_hours_24h = unknown, Tinactive_hours_30d = unknown, Tinactive_hours_7d = unknown, Tservice_name = unknown, Tservice_status = unknown, Tuptime_24h = unknown, Tuptime_30d = unknown, Tuptime_7d = unknown, Texpand = unknown> = Required<VistaTablaServiceUptimeRecord<Tactive_hours_24h, Tactive_hours_30d, Tactive_hours_7d, Tinactive_hours_24h, Tinactive_hours_30d, Tinactive_hours_7d, Tservice_name, Tservice_status, Tuptime_24h, Tuptime_30d, Tuptime_7d>> & BaseSystemFields<Texpand>
 
 // Types containing all Records and Responses, useful for creating typing helper functions
 
@@ -301,7 +285,6 @@ export type CollectionRecords = {
 	services: ServicesRecord
 	services_domains: ServicesDomainsRecord
 	users: UsersRecord
-	vista_tabla_service_uptime: VistaTablaServiceUptimeRecord
 }
 
 export type CollectionResponses = {
@@ -319,7 +302,6 @@ export type CollectionResponses = {
 	services: ServicesResponse
 	services_domains: ServicesDomainsResponse
 	users: UsersResponse
-	vista_tabla_service_uptime: VistaTablaServiceUptimeResponse
 }
 
 // Type for usage with type asserted PocketBase instance
@@ -340,5 +322,4 @@ export type TypedPocketBase = PocketBase & {
 	collection(idOrName: 'services'): RecordService<ServicesResponse>
 	collection(idOrName: 'services_domains'): RecordService<ServicesDomainsResponse>
 	collection(idOrName: 'users'): RecordService<UsersResponse>
-	collection(idOrName: 'vista_tabla_service_uptime'): RecordService<VistaTablaServiceUptimeResponse>
 }
