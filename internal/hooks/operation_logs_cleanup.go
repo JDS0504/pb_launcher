@@ -17,8 +17,14 @@ func RegisterOperationLogsCleanup(app *pocketbase.PocketBase) {
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		go func() {
 			purge := func() {
+				// Eliminar operation_logs con más de 7 días
 				_, _ = app.DB().NewQuery(
 					`DELETE FROM operation_logs WHERE created < datetime('now', '-7 days')`,
+				).Execute()
+				// Eliminar comands completados (success/error) con más de 7 días.
+				// Los pending se conservan indefinidamente hasta ser ejecutados.
+				_, _ = app.DB().NewQuery(
+					`DELETE FROM comands WHERE status != 'pending' AND created < datetime('now', '-7 days')`,
 				).Execute()
 			}
 

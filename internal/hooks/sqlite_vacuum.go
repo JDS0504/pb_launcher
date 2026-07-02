@@ -12,6 +12,7 @@ import (
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
 
+	"pb_launcher/collections"
 	"pb_launcher/internal/launcher/domain"
 
 	_ "modernc.org/sqlite"
@@ -26,13 +27,10 @@ const ventanaInicio = 2
 const ventanaFin = 5
 
 // RegisterSQLiteVacuum inicia el planificador de vacuum SQLite.
-// Solo opera dentro de la ventana nocturna 00:00–05:00 Lima.
-// Cada barrido se repite cada 1h + jitter aleatorio (≤30 min) para no
-// generar un "thundering herd" de lecturas/escrituras simultáneas.
-// Por cada instancia inactiva aplica un jitter adicional (≤5 min) antes
-// de vacunar sus archivos, dispersando aún más la carga.
-// El duty-cycle del VACUUM se limita al 50 %: si compactar un archivo
-// tarda T segundos, el proceso duerme T segundos antes de continuar.
+// Solo opera dentro de la ventana nocturna 02:00–05:00 Lima.
+// Prioriza las instancias con last_vacuum_at más antiguo (o nulo),
+// garantizando cobertura equitativa aunque la ventana se cierre antes
+// de completar todas las instancias.
 func RegisterSQLiteVacuum(app *pocketbase.PocketBase, lm *domain.LauncherManager) {
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		go runVacuumScheduler(app, lm)
@@ -41,7 +39,7 @@ func RegisterSQLiteVacuum(app *pocketbase.PocketBase, lm *domain.LauncherManager
 }
 
 // runVacuumScheduler implementa el ciclo de vida del planificador:
-//  1. Si estamos fuera de la ventana → esperar a la próxima medianoche Lima.
+//  1. Si estamos fuera de la ventana → esperar a las 02:00 Lima.
 //  2. Dentro de la ventana → ejecutar barridos cada 1h + jitter (≤30 min).
 //  3. Al salir de la ventana → volver al paso 1.
 func runVacuumScheduler(app *pocketbase.PocketBase, lm *domain.LauncherManager) {
@@ -54,7 +52,6 @@ func runVacuumScheduler(app *pocketbase.PocketBase, lm *domain.LauncherManager) 
 			runVacuumSweep(app, lm)
 
 			// Jitter entre barridos: 1h + aleatorio ≤30 min.
-			// Si el resultado excede las 05:00, el bucle externo lo detecta y rompe.
 			jitter := time.Duration(rand.Int63n(int64(30 * time.Minute)))
 			slog.Info("sqlite-vacuum: próximo barrido en",
 				"espera", (time.Hour + jitter).Round(time.Minute).String())
@@ -63,13 +60,12 @@ func runVacuumScheduler(app *pocketbase.PocketBase, lm *domain.LauncherManager) 
 	}
 }
 
-// dormirHastaVentana calcula el tiempo restante hasta las 02:00 Lima
-// del día siguiente y bloquea el goroutine ese tiempo.
+// dormirHastaVentana duerme hasta las 02:00 Lima del día siguiente (o de hoy
+// si aún no han llegado las 02:00).
 func dormirHastaVentana() {
 	ahora := time.Now().In(zonaVacuum)
 	proximas2am := time.Date(ahora.Year(), ahora.Month(), ahora.Day(), ventanaInicio, 0, 0, 0, zonaVacuum)
 	if !ahora.Before(proximas2am) {
-		// Ya pasaron las 02:00 de hoy → apuntar a mañana
 		proximas2am = proximas2am.Add(24 * time.Hour)
 	}
 	espera := time.Until(proximas2am)
@@ -78,36 +74,34 @@ func dormirHastaVentana() {
 	time.Sleep(espera)
 }
 
-// enVentanaActiva devuelve true si la hora Lima actual está entre 00:00 y 05:00.
+// enVentanaActiva devuelve true si la hora Lima actual está entre 02:00 y 05:00.
 func enVentanaActiva() bool {
 	hora := time.Now().In(zonaVacuum).Hour()
 	return hora >= ventanaInicio && hora < ventanaFin
 }
 
-// runVacuumSweep itera todos los servicios registrados y compacta sus
-// archivos SQLite si la instancia no tiene un proceso activo en memoria.
+// runVacuumSweep obtiene los servicios ordenados por last_vacuum_at ASC NULLS FIRST:
+// primero los que nunca se vacunaron, luego los más antiguos.
+// Esto garantiza que, si la ventana se cierra a mitad del barrido, siempre
+// se hayan cubierto las instancias con mayor deuda de vacuum.
 func runVacuumSweep(app *pocketbase.PocketBase, lm *domain.LauncherManager) {
-	services, err := app.FindAllRecords("services")
+	// ORDER BY last_vacuum_at ASC: NULL primero (nunca vacunados), luego los más antiguos.
+	services, err := app.FindAllRecords(collections.Services)
 	if err != nil {
 		slog.Warn("sqlite-vacuum: no se pudieron obtener los servicios", "error", err)
 		return
 	}
 
-	// Mezclar el orden antes de iterar: si la ventana se cierra antes de completar
-	// el barrido, cada noche un subconjunto DISTINTO de instancias queda cubierto.
-	// Sin esto, siempre se vacunarían las mismas N primeras (orden de BD) y las
-	// últimas nunca recibirían vacuum. No requiere estado persistente.
-	rand.Shuffle(len(services), func(i, j int) {
-		services[i], services[j] = services[j], services[i]
-	})
+	// Ordenar en Go: NULL (vacío) primero, luego por fecha ascendente.
+	sortByLastVacuum(services)
 
 	slog.Info("sqlite-vacuum: iniciando barrido", "instancias", len(services))
 	vacuumed, skipped, failed := 0, 0, 0
 
 	for _, rec := range services {
-		// Hard-stop: si salimos de la ventana 02:00–05:00 mientras iteramos
-		// (puede pasar con muchas instancias o BDs grandes), dejar de vacunar.
-		// Las instancias restantes se procesarán en el siguiente barrido nocturno.
+		// Hard-stop: salir de la ventana 02:00–05:00 → detener el barrido.
+		// Las instancias restantes ya están ordenadas para ser las primeras
+		// del siguiente barrido nocturno (tienen last_vacuum_at más reciente).
 		if !enVentanaActiva() {
 			slog.Info("sqlite-vacuum: ventana cerrada, deteniendo barrido",
 				"vacuumed", vacuumed, "pending", len(services)-vacuumed-skipped-failed)
@@ -116,21 +110,15 @@ func runVacuumSweep(app *pocketbase.PocketBase, lm *domain.LauncherManager) {
 
 		id := rec.Id
 
-		// Primera comprobación: proceso activo → archivo bloqueado, saltar.
 		if lm.IsServiceRunning(id) {
 			skipped++
 			continue
 		}
 
-		// Jitter por servicio (≤10 s): pausa mínima entre vacuums consecutivos
-		// para dar respiro al I/O del disco. Con 500 instancias y ~8s promedio
-		// por instancia el barrido completo tarda ~67 min → cabe en la ventana.
-		// La concurrencia es siempre 1 por diseño (loop secuencial).
-		jitter := time.Duration(rand.Int63n(int64(10 * time.Second)))
-		time.Sleep(jitter)
+		// Jitter (≤10 s): respiro mínimo de I/O entre instancias consecutivas.
+		time.Sleep(time.Duration(rand.Int63n(int64(10 * time.Second))))
 
-		// Segunda comprobación tras el jitter: la instancia puede haber
-		// despertado durante ese intervalo.
+		// Re-verificar tras el jitter (pudo despertar durante la pausa).
 		if lm.IsServiceRunning(id) {
 			skipped++
 			continue
@@ -141,6 +129,7 @@ func runVacuumSweep(app *pocketbase.PocketBase, lm *domain.LauncherManager) {
 		lm.LockVacuum(id)
 
 		serviceDataDir := filepath.Join(lm.DataDir(), id, "pb_data")
+		allOk := true
 		for _, dbFile := range []string{"data.db", "auxiliary.db"} {
 			fullPath := filepath.Join(serviceDataDir, dbFile)
 			if _, statErr := os.Stat(fullPath); os.IsNotExist(statErr) {
@@ -153,12 +142,21 @@ func runVacuumSweep(app *pocketbase.PocketBase, lm *domain.LauncherManager) {
 					"error", err,
 				)
 				failed++
+				allOk = false
 			} else {
 				vacuumed++
 			}
 		}
 
 		lm.UnlockVacuum(id)
+
+		// Actualizar last_vacuum_at solo si todos los archivos se compactaron bien.
+		if allOk {
+			if err := markVacuumDone(app, id); err != nil {
+				slog.Warn("sqlite-vacuum: no se pudo actualizar last_vacuum_at",
+					"service", id, "error", err)
+			}
+		}
 	}
 
 	slog.Info("sqlite-vacuum: barrido completado",
@@ -168,11 +166,39 @@ func runVacuumSweep(app *pocketbase.PocketBase, lm *domain.LauncherManager) {
 	)
 }
 
+// sortByLastVacuum ordena in-place: primero los registros con last_vacuum_at
+// vacío o nulo (nunca vacunados), luego por fecha ascendente (más antiguos primero).
+func sortByLastVacuum(records []*core.Record) {
+	for i := 1; i < len(records); i++ {
+		for j := i; j > 0; j-- {
+			a := records[j-1].GetDateTime("last_vacuum_at")
+			b := records[j].GetDateTime("last_vacuum_at")
+			aZero := a.IsZero()
+			bZero := b.IsZero()
+			// NULL/vacío siempre va primero; si ambos tienen fecha, el más antiguo va primero.
+			if (!aZero && bZero) || (!aZero && !bZero && a.Time().After(b.Time())) {
+				records[j-1], records[j] = records[j], records[j-1]
+			} else {
+				break
+			}
+		}
+	}
+}
+
+// markVacuumDone escribe la hora actual en last_vacuum_at del servicio.
+func markVacuumDone(app *pocketbase.PocketBase, serviceID string) error {
+	record, err := app.FindRecordById(collections.Services, serviceID)
+	if err != nil {
+		return err
+	}
+	record.Set("last_vacuum_at", time.Now().UTC())
+	return app.Save(record)
+}
+
 // vacuumDB abre el archivo SQLite, hace checkpoint WAL y ejecuta VACUUM.
 //
 // Duty-cycle 50 %: después de cada VACUUM duerme el mismo tiempo que tardó
-// la operación. Así el proceso nunca consume más del 50 % de un núcleo de
-// forma sostenida, dejando capacidad libre para el resto del sistema.
+// la operación para no consumir más del 50 % de un núcleo de forma sostenida.
 func vacuumDB(path string) error {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
@@ -180,25 +206,22 @@ func vacuumDB(path string) error {
 	}
 	defer db.Close()
 
-	// Conexión exclusiva mínima: solo necesitamos un hilo para el VACUUM.
 	db.SetMaxOpenConns(1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	// Fusionar el WAL pendiente al archivo principal antes de compactar.
 	if _, err := db.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
 		return err
 	}
 
-	// Medir duración del VACUUM para calcular el tiempo de reposo (duty-cycle 50 %).
 	inicio := time.Now()
 	if _, err := db.ExecContext(ctx, "VACUUM"); err != nil {
 		return err
 	}
 	elapsed := time.Since(inicio)
 
-	// Reposo igual al tiempo del VACUUM → CPU promedio ≤ 50 % por archivo.
+	// Duty-cycle 50%: dormir lo mismo que tardó → CPU promedio ≤ 50% por archivo.
 	if elapsed > 0 {
 		time.Sleep(elapsed)
 	}

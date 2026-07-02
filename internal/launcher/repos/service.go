@@ -41,7 +41,6 @@ func (s *ServiceRepository) services(ids ...string) ([]models.Service, error) {
 			s._pb_install,
 			s.boot_user_email,
 			s.boot_user_password,
-			s.deleted,
 			s.ip,
 			s.port,
 			s.cpu_quota,
@@ -81,7 +80,6 @@ func (s *ServiceRepository) services(ids ...string) ([]models.Service, error) {
 		_pb_install, _ := row["_pb_install"]
 		bootUserEmail, _ := row["boot_user_email"]
 		bootUserPassword, _ := row["boot_user_password"]
-		deleted, _ := row["deleted"]
 		ip, _ := row["ip"]
 		port, _ := row["port"]
 		cpuQuota, _ := row["cpu_quota"]
@@ -105,7 +103,6 @@ func (s *ServiceRepository) services(ids ...string) ([]models.Service, error) {
 			BootPBInstallPath: _pb_install.String,
 			BootUserEmail:     bootUserEmail.String,
 			BootUserPassword:  bootUserPassword.String,
-			Deleted:           deleted.String,
 			IP:                ip.String,
 			Port:              port.String,
 			CpuQuota:          cpuQuota.String,

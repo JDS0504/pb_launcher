@@ -3,8 +3,12 @@ package hooks
 import (
 	"errors"
 	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
 	"pb_launcher/collections"
 	"pb_launcher/configs"
+	launcherdomain "pb_launcher/internal/launcher/domain"
 	"pb_launcher/internal/proxy/domain"
 	"pb_launcher/utils/domainutil"
 	"slices"
@@ -19,6 +23,7 @@ import (
 func AddServiceHooks(app *pocketbase.PocketBase,
 	serviceDiscovery *domain.ServiceDiscovery,
 	cnf configs.Config,
+	lm *launcherdomain.LauncherManager,
 ) {
 	app.OnRecordCreateRequest(collections.Services).
 		BindFunc(func(e *core.RecordRequestEvent) error {
@@ -39,22 +44,13 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 			)
 			if err == nil && existing != nil {
 				serviceId := existing.GetString("service")
-				isOrphanOrDeleted := false
-				if serviceId != "" {
-					serviceRecord, err := e.App.FindRecordById(collections.Services, serviceId)
-					if err != nil || serviceRecord == nil {
-						isOrphanOrDeleted = true
-					} else {
-						serviceDeleted := serviceRecord.GetDateTime("deleted")
-						if !serviceDeleted.IsZero() {
-							isOrphanOrDeleted = true
-						}
-					}
-				} else {
-					isOrphanOrDeleted = true
+				isOrphan := serviceId == ""
+				if !isOrphan {
+					_, err := e.App.FindRecordById(collections.Services, serviceId)
+					isOrphan = err != nil
 				}
 
-				if isOrphanOrDeleted {
+				if isOrphan {
 					_ = e.App.Delete(existing)
 				} else {
 					return apis.NewBadRequestError(fmt.Sprintf("el nombre '%s' no está disponible porque el dominio '%s' ya está en uso", name, friendlyDomain), nil)
@@ -77,7 +73,6 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 	app.OnRecordUpdateRequest(collections.Services).BindFunc(func(e *core.RecordRequestEvent) error {
 		updatedName := e.Record.GetString("name")
 		updatedPolicy := e.Record.Get("restart_policy")
-		deleted := e.Record.GetDateTime("deleted")
 		updatedCpuQuota := e.Record.Get("cpu_quota")
 		updatedMemoryLimit := e.Record.Get("memory_limit")
 
@@ -87,7 +82,7 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 		}
 
 		oldName := currentRecord.GetString("name")
-		if oldName != updatedName && deleted.IsZero() {
+		if oldName != updatedName {
 			oldSlug := domainutil.SanitizeToSlug(oldName)
 			newSlug := domainutil.SanitizeToSlug(updatedName)
 			if oldSlug != newSlug {
@@ -105,22 +100,12 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 				if err == nil && existing != nil {
 					if existing.GetString("service") != e.Record.Id {
 						serviceId := existing.GetString("service")
-						isOrphanOrDeleted := false
-						if serviceId != "" {
-							serviceRecord, err := e.App.FindRecordById(collections.Services, serviceId)
-							if err != nil || serviceRecord == nil {
-								isOrphanOrDeleted = true
-							} else {
-								serviceDeleted := serviceRecord.GetDateTime("deleted")
-								if !serviceDeleted.IsZero() {
-									isOrphanOrDeleted = true
-								}
-							}
-						} else {
-							isOrphanOrDeleted = true
+						isOrphan := serviceId == ""
+						if !isOrphan {
+							_, err := e.App.FindRecordById(collections.Services, serviceId)
+							isOrphan = err != nil
 						}
-
-						if isOrphanOrDeleted {
+						if isOrphan {
 							_ = e.App.Delete(existing)
 						} else {
 							return apis.NewBadRequestError(fmt.Sprintf("el nombre '%s' no está disponible porque el dominio '%s' ya está en uso", updatedName, newFriendlyDomain), nil)
@@ -166,42 +151,11 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 
 		currentRecord.Set("name", updatedName)
 		currentRecord.Set("restart_policy", updatedPolicy)
-		currentRecord.Set("deleted", deleted)
 		currentRecord.Set("cpu_quota", updatedCpuQuota)
 		currentRecord.Set("memory_limit", updatedMemoryLimit)
 
 		e.Record = currentRecord
-		if err := e.Next(); err != nil {
-			return err
-		}
-		if !deleted.IsZero() {
-			domains, err := e.App.FindAllRecords(
-				collections.ServicesDomains,
-				dbx.HashExp{"service": e.Record.Id},
-			)
-			if err == nil {
-				for _, domainRecord := range domains {
-					_ = e.App.Delete(domainRecord)
-				}
-			}
-
-			comandCollection, err := e.App.FindCachedCollectionByNameOrId(collections.ServicesComands)
-			if err != nil {
-				return err
-			}
-			record := core.NewRecord(comandCollection)
-
-			record.Set("service", e.Record.Id)
-			record.Set("action", "stop")
-			record.Set("status", "pending")
-			record.Set("error_message", "")
-			record.Set("executed", nil)
-
-			if err := e.App.Save(record); err != nil {
-				return err
-			}
-		}
-		return nil
+		return e.Next()
 	})
 
 	app.OnRecordAfterCreateSuccess(collections.Services).BindFunc(func(e *core.RecordEvent) error {
@@ -255,5 +209,31 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 			return nil
 		})
 
+	// Detener el proceso ANTES de que PocketBase elimine el registro de BD.
+	// Evita que el LauncherManager intente usar un servicio ya eliminado.
+	app.OnRecordDeleteRequest(collections.Services).
+		BindFunc(func(e *core.RecordRequestEvent) error {
+			lm.StopServiceIfRunning(e.Record.Id)
+			return e.Next()
+		})
+
+	// Borrar el directorio de datos DESPUES de la eliminación exitosa en BD.
+	// Los registros relacionados (services_domains, comands, operation_logs)
+	// ya fueron eliminados en cascade por PocketBase.
+	app.OnRecordAfterDeleteSuccess(collections.Services).
+		BindFunc(func(e *core.RecordEvent) error {
+			if err := e.Next(); err != nil {
+				return err
+			}
+			serviceDir := filepath.Join(lm.DataDir(), e.Record.Id)
+			if err := os.RemoveAll(serviceDir); err != nil {
+				slog.Error("failed to remove service data directory",
+					"serviceID", e.Record.Id, "path", serviceDir, "error", err)
+			} else {
+				slog.Info("service data directory removed",
+					"serviceID", e.Record.Id, "path", serviceDir)
+			}
+			return nil
+		})
 }
 

@@ -143,7 +143,6 @@ export const serviceService = {
         .getOne<
           Omit<_Service, "repository" | "release_id" | "release_version">
         >(serviceID, {
-          filter: `deleted=""`,
           expand: "release.repository",
           fields: serviceService.serviceFields,
         }),
@@ -185,7 +184,6 @@ export const serviceService = {
         .getFullList<
           Omit<_Service, "repository" | "release_id" | "release_version">
         >({
-          filter: `deleted=""`,
           expand: "release.repository",
           fields: serviceService.serviceFields,
         }),
@@ -224,8 +222,7 @@ export const serviceService = {
   },
 
   deleteServiceInstance: async (id: string) => {
-    const services = pb.collection(SERVICES_COLLECTION);
-    await services.update(id, { deleted: new Date().toJSON() });
+    await pb.collection(SERVICES_COLLECTION).delete(id);
   },
 
   executeServiceCommand: async (data: {

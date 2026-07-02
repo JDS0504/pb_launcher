@@ -33,7 +33,6 @@ type Service struct {
 	BootPBInstallPath string
 	BootUserEmail     string
 	BootUserPassword  string
-	Deleted           string
 	IP                string
 	Port              string
 	CpuQuota          string

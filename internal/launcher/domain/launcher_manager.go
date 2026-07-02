@@ -500,9 +500,6 @@ func (lm *LauncherManager) RecoveryLastState(ctx context.Context) error {
 	}
 
 	for _, service := range services {
-		if service.Deleted != "" {
-			continue
-		}
 		if err := lm.startServiceLocked(ctx, service); err != nil {
 			slog.Error("failed to start service",
 				"serviceID", service.ID,
@@ -527,15 +524,6 @@ func (lm *LauncherManager) evaluateCommand(ctx context.Context, cmd models.Servi
 		return lm.startService(ctx, *service)
 	case models.ActionStop:
 		_ = lm.stopService(ctx, service.ID)
-
-		if service.Deleted != "" {
-			serviceDir := path.Join(lm.dataDir, service.ID)
-			if err := os.RemoveAll(serviceDir); err != nil {
-				slog.Error("failed to remove service data directory on deletion", "serviceID", service.ID, "path", serviceDir, "error", err)
-				return fmt.Errorf("failed to remove data directory: %w", err)
-			}
-			slog.Info("successfully removed service data directory on deletion", "serviceID", service.ID, "path", serviceDir)
-		}
 		return nil
 	case models.ActionRestart:
 		return lm.restartService(ctx, *service)
@@ -638,10 +626,6 @@ func (lm *LauncherManager) WakeupService(ctx context.Context, serviceID string) 
 	if err != nil {
 		lm.rwMtx.Unlock()
 		return "", 0, err
-	}
-	if service.Deleted != "" {
-		lm.rwMtx.Unlock()
-		return "", 0, fmt.Errorf("service is deleted")
 	}
 	if service.Status == models.Stopped {
 		lm.rwMtx.Unlock()
@@ -810,6 +794,19 @@ func (lm *LauncherManager) IsServiceRunning(serviceID string) bool {
 // DataDir devuelve el directorio raíz donde residen los datos de cada instancia.
 func (lm *LauncherManager) DataDir() string {
 	return lm.dataDir
+}
+
+// StopServiceIfRunning detiene el proceso de la instancia si está en ejecución,
+// sin actualizar su estado en BD. Se usa desde el hook OnRecordDeleteRequest
+// justo antes de que PocketBase elimine el registro, para evitar que el proceso
+// siga corriendo con un directorio de datos que será borrado a continuación.
+func (lm *LauncherManager) StopServiceIfRunning(serviceID string) {
+	lm.rwMtx.Lock()
+	defer lm.rwMtx.Unlock()
+	if err := lm.stopProcessOnlyLocked(serviceID); err != nil {
+		slog.Error("failed to stop service process on deletion", "serviceID", serviceID, "error", err)
+	}
+	lm.notifyDeactivated(serviceID)
 }
 
 // LockVacuum marca la instancia como "vacuum en curso". Llamar antes de abrir el .db.
