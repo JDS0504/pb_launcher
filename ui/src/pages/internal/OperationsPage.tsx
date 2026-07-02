@@ -84,7 +84,7 @@ export const OperationsPage = () => {
               </option>
             ))}
           </select>
-          <div className="flex gap-1 shrink-0 justify-center sm:justify-start">
+          <div className="flex gap-1 shrink-0 justify-center sm:justify-start sm:ml-auto">
             {(["all", "success", "error"] as const).map(s => (
               <button
                 key={s}
