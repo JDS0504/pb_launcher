@@ -51,11 +51,15 @@ func compressToGzip(fullPath string) error {
 	}
 	defer src.Close()
 
-	dst, err := os.Create(fullPath + ".gz")
+	tmpPath := fullPath + ".gz.tmp"
+	dst, err := os.Create(tmpPath)
 	if err != nil {
 		return err
 	}
-	defer dst.Close()
+	defer func() {
+		dst.Close()
+		_ = os.Remove(tmpPath)
+	}()
 
 	gz, err := gzip.NewWriterLevel(dst, gzip.BestCompression)
 	if err != nil {
@@ -67,8 +71,15 @@ func compressToGzip(fullPath string) error {
 		return err
 	}
 
-	// gz.Close() escribe el footer de gzip — es obligatorio llamarlo explícitamente.
-	return gz.Close()
+	if err := gz.Close(); err != nil {
+		return err
+	}
+
+	if err := dst.Close(); err != nil {
+		return err
+	}
+
+	return os.Rename(tmpPath, fullPath+".gz")
 }
 
 type FileEntry struct {

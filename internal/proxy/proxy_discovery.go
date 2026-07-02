@@ -169,21 +169,21 @@ func isCompressibleMime(contentType string) bool {
 }
 
 // gzDiskPath calcula la ruta en disco del .gz para un dataDir, serviceID y URL path dados.
-// Retorna ("", false) si el path no es elegible para compresion (API, admin, extension no comprimible).
+// Retorna ("", "", "", false) si el path no es elegible para compresion (API, admin, extension no comprimible).
 // Es una funcion de paquete (sin receptor) para poder reutilizarse desde buildReverseProxy y staticTransport.
-func gzDiskPath(dataDir, serviceName, urlPath string) (diskPath string, gzUrlPath string, ok bool) {
+func gzDiskPath(dataDir, serviceName, urlPath string) (diskPath string, gzUrlPath string, originalFile string, ok bool) {
 	if serviceName == "" {
-		return "", "", false
+		return "", "", "", false
 	}
 	if len(urlPath) > 200 {
-		return "", "", false
+		return "", "", "", false
 	}
 	if strings.HasPrefix(urlPath, "/api/") || strings.HasPrefix(urlPath, "/_/") {
-		return "", "", false
+		return "", "", "", false
 	}
 
 	cleanPath := filepath.FromSlash(path.Clean("/" + urlPath))
-	originalFile := filepath.Join(dataDir, serviceName, "pb_public", cleanPath)
+	originalFile = filepath.Join(dataDir, serviceName, "pb_public", cleanPath)
 
 	fi, err := os.Stat(originalFile)
 	resolvedUrlPath := urlPath
@@ -191,19 +191,19 @@ func gzDiskPath(dataDir, serviceName, urlPath string) (diskPath string, gzUrlPat
 	if os.IsNotExist(err) || (err == nil && fi.IsDir()) {
 		originalFile = filepath.Join(dataDir, serviceName, "pb_public", "index.html")
 		if _, err := os.Stat(originalFile); err != nil {
-			return "", "", false
+			return "", "", "", false
 		}
 		resolvedUrlPath = "/index.html"
 	}
 
 	ext := filepath.Ext(originalFile)
 	if !gzipCompressibleExts[strings.ToLower(ext)] {
-		return "", "", false
+		return "", "", "", false
 	}
 
 	diskPath = originalFile + ".gz"
 	gzUrlPath = resolvedUrlPath + ".gz"
-	return diskPath, gzUrlPath, true
+	return diskPath, gzUrlPath, originalFile, true
 }
 
 // buildReverseProxy crea un proxy hacia target.
@@ -222,7 +222,7 @@ func (rp *DynamicReverseProxyDiscovery) buildReverseProxy(target *url.URL, servi
 		if !strings.Contains(req.Header.Get("Accept-Encoding"), "gzip") {
 			return
 		}
-		diskPath, gzUrl, ok := gzDiskPath(rp.dataDir, serviceID, req.URL.Path)
+		diskPath, gzUrl, originalFile, ok := gzDiskPath(rp.dataDir, serviceID, req.URL.Path)
 		if !ok {
 			return
 		}
@@ -231,8 +231,17 @@ func (rp *DynamicReverseProxyDiscovery) buildReverseProxy(target *url.URL, servi
 		// Eliminar Accept-Encoding: nosotros manejamos la compresion, no PocketBase.
 		req.Header.Del("Accept-Encoding")
 
-		if _, statErr := os.Stat(diskPath); statErr == nil {
-			// .gz ya existe en disco -> servir directamente, 0 CPU de compresion.
+		isGzValid := false
+		if gzStat, errGz := os.Stat(diskPath); errGz == nil {
+			if origStat, errOrig := os.Stat(originalFile); errOrig == nil {
+				if !origStat.ModTime().After(gzStat.ModTime()) {
+					isGzValid = true
+				}
+			}
+		}
+
+		if isGzValid {
+			// .gz ya existe en disco y es válido -> servir directamente, 0 CPU de compresion.
 			req.Header.Set(gzHeaderOrigPath, origPath)
 			req.Header.Set(gzHeaderPrecomp, "1")
 			req.URL.Path = gzUrl
@@ -240,7 +249,7 @@ func (rp *DynamicReverseProxyDiscovery) buildReverseProxy(target *url.URL, servi
 				req.URL.RawPath = url.PathEscape(gzUrl)
 			}
 		} else {
-			// .gz no existe -> comprimir on-the-fly y guardar en disco para proximos requests.
+			// .gz no existe o está desactualizado -> comprimir on-the-fly y guardar en disco para proximos requests.
 			req.Header.Set(gzHeaderAccept, "1")
 			req.Header.Set(gzHeaderCachePath, diskPath)
 		}
@@ -283,23 +292,29 @@ func (rp *DynamicReverseProxyDiscovery) proxyModifyResponse(r *http.Response) er
 	if r.Request.Header.Get(gzHeaderAccept) == "1" && r.StatusCode == http.StatusOK {
 		if isCompressibleMime(r.Header.Get("Content-Type")) {
 			diskPath := r.Request.Header.Get(gzHeaderCachePath)
+			tmpDiskPath := diskPath + ".tmp"
 			if mkErr := os.MkdirAll(filepath.Dir(diskPath), 0755); mkErr == nil {
-				if gzFile, createErr := os.Create(diskPath); createErr == nil {
+				if gzFile, createErr := os.Create(tmpDiskPath); createErr == nil {
 					pr, pw := io.Pipe()
-					// BestCompression = nivel 9: maximo ratio posible.
-					// Justificado porque solo se comprime UNA VEZ (primer request) y se cachea a disco.
-					// El costo extra de CPU es ~5ms por archivo — insignificante frente al beneficio permanente.
 					// MultiWriter en la SALIDA del gzip: bytes comprimidos van a pw (browser) y gzFile (disco).
 					gz, _ := gzip.NewWriterLevel(io.MultiWriter(pw, gzFile), gzip.BestCompression)
 					origBody := r.Body
 					go func() {
+						defer func() {
+							_ = os.Remove(tmpDiskPath)
+						}()
 						if _, copyErr := io.Copy(gz, origBody); copyErr != nil {
 							slog.Warn("proxy: error comprimiendo respuesta on-the-fly", "error", copyErr)
 						}
-						gz.Close()    // escribe footer gzip — obligatorio
-						gzFile.Close()
-						pw.Close()
-						origBody.Close()
+						_ = gz.Close()    // escribe footer gzip — obligatorio
+						_ = gzFile.Close()
+						_ = pw.Close()
+						_ = origBody.Close()
+
+						// Renombrar atómicamente a la ruta final
+						if renameErr := os.Rename(tmpDiskPath, diskPath); renameErr != nil {
+							slog.Warn("proxy: error al renombrar archivo gzip temporal", "error", renameErr)
+						}
 					}()
 					r.Body = pr
 					r.Header.Set("Content-Encoding", "gzip")
@@ -442,13 +457,22 @@ func (t *staticTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Solo aplicar compresión si el cliente acepta gzip y la ruta es elegible.
 	acceptsGzip := strings.Contains(req.Header.Get("Accept-Encoding"), "gzip")
 	if acceptsGzip {
-		diskPath, gzUrl, ok := gzDiskPath(t.dataDir, t.serviceName, req.URL.Path)
+		diskPath, gzUrl, originalFile, ok := gzDiskPath(t.dataDir, t.serviceName, req.URL.Path)
 		if ok {
 			origFilePath := strings.TrimSuffix(gzUrl, ".gz")
 			ext := path.Ext(origFilePath)
 
-			if _, statErr := os.Stat(diskPath); statErr == nil {
-				// Caso 1: .gz precomprimido existe en disco → servir directamente (0 CPU).
+			isGzValid := false
+			if gzStat, errGz := os.Stat(diskPath); errGz == nil {
+				if origStat, errOrig := os.Stat(originalFile); errOrig == nil {
+					if !origStat.ModTime().After(gzStat.ModTime()) {
+						isGzValid = true
+					}
+				}
+			}
+
+			if isGzValid {
+				// Caso 1: .gz precomprimido existe en disco y es válido → servir directamente (0 CPU).
 				gzData, readErr := os.ReadFile(diskPath)
 				if readErr == nil {
 					mimeType := mime.TypeByExtension(ext)
@@ -472,7 +496,7 @@ func (t *staticTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 				}
 			}
 
-			// Caso 2: .gz no existe → servir el archivo original, comprimir on-the-fly
+			// Caso 2: .gz no existe o está desactualizado → servir el archivo original, comprimir on-the-fly
 			// y guardar .gz a disco para los próximos requests.
 			rw := newResponseRecorder()
 			t.handler.ServeHTTP(rw, req)
@@ -480,20 +504,28 @@ func (t *staticTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 			if resp.StatusCode == http.StatusOK && isCompressibleMime(resp.Header.Get("Content-Type")) {
 				if mkErr := os.MkdirAll(filepath.Dir(diskPath), 0755); mkErr == nil {
-					if gzFile, createErr := os.Create(diskPath); createErr == nil {
+					tmpDiskPath := diskPath + ".tmp"
+					if gzFile, createErr := os.Create(tmpDiskPath); createErr == nil {
 						pr, pw := io.Pipe()
 						// BestCompression = nivel 9: se paga solo una vez, luego siempre se sirve el .gz.
 						// MultiWriter: bytes comprimidos van a pw (browser) y gzFile (disco) simultáneamente.
 						gz, _ := gzip.NewWriterLevel(io.MultiWriter(pw, gzFile), gzip.BestCompression)
 						origBody := resp.Body
 						go func() {
+							defer func() {
+								_ = os.Remove(tmpDiskPath)
+							}()
 							if _, copyErr := io.Copy(gz, origBody); copyErr != nil {
 								slog.Warn("static: error comprimiendo on-the-fly", "error", copyErr, "path", req.URL.Path)
 							}
-							gz.Close()     // escribe footer gzip — obligatorio
-							gzFile.Close()
-							pw.Close()
-							origBody.Close()
+							_ = gz.Close()     // escribe footer gzip — obligatorio
+							_ = gzFile.Close()
+							_ = pw.Close()
+							_ = origBody.Close()
+
+							if renameErr := os.Rename(tmpDiskPath, diskPath); renameErr != nil {
+								slog.Warn("static: error al renombrar archivo gzip temporal", "error", renameErr)
+							}
 						}()
 						resp.Body = pr
 						resp.Header.Set("Content-Encoding", "gzip")
