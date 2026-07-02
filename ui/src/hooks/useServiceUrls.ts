@@ -18,6 +18,11 @@ export const getServiceUrls = (
     .map(d => d.domain)
     .filter(Boolean);
 
+  if (allDomains.length === 0 && proxyInfo.base_domain) {
+    const autoDomain = `${service.name}.${proxyInfo.base_domain}`;
+    allDomains.push(autoDomain);
+  }
+
   return allDomains
     .map(domain => {
       const customDom = service.domains?.find(d => d.domain === domain);

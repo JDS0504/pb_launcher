@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"pb_launcher/configs"
+	"pb_launcher/utils/domainutil"
 	"sync"
 
 	"github.com/pocketbase/dbx"
@@ -37,7 +38,7 @@ func RegisterAdminExistsRoute(app *pocketbase.PocketBase, c configs.Config) {
 				"use_https":   c.IsHttpsEnabled(),
 				"http_port":   c.GetHttpPort(),
 				"https_port":  c.GetHttpsPort(),
-				"base_domain": baseDomain,
+				"base_domain": domainutil.RootDomain(baseDomain),
 				"server_ip":   resolveServerIP(baseDomain),
 			}
 			return e.JSON(http.StatusOK, response)
