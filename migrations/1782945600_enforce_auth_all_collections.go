@@ -29,7 +29,8 @@ func init() {
 		for _, name := range cols {
 			collection, err := app.FindCollectionByNameOrId(name)
 			if err != nil {
-				return err // Falla si la colección no existe
+				app.Logger().Warn("Collection not found for auth rule update", "collection", name)
+				continue
 			}
 
 			collection.ListRule = rule
