@@ -109,6 +109,12 @@ func AddServiceDomainsHooks(
 func validateService(e *core.RecordRequestEvent) error {
 	service := e.Record.GetString("service")
 	if service == "" {
+		slice := e.Record.GetStringSlice("service")
+		if len(slice) > 0 {
+			service = slice[0]
+		}
+	}
+	if service == "" {
 		return apis.NewBadRequestError("'service' is required", nil)
 	}
 	return e.Next()

@@ -141,8 +141,9 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 						if err == nil {
 							domainRecord := core.NewRecord(domainCollection)
 							domainRecord.Set("domain", newFriendlyDomain)
-							domainRecord.Set("service", e.Record.Id)
+							domainRecord.Set("service", []string{e.Record.Id})
 							domainRecord.Set("use_https", "yes")
+							domainRecord.Set("cert_status", "pending")
 							_ = e.App.Save(domainRecord)
 						}
 					}
@@ -176,8 +177,9 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 		}
 		domainRecord := core.NewRecord(domainCollection)
 		domainRecord.Set("domain", friendlyDomain)
-		domainRecord.Set("service", e.Record.Id)
+		domainRecord.Set("service", []string{e.Record.Id})
 		domainRecord.Set("use_https", "yes")
+		domainRecord.Set("cert_status", "pending")
 
 		if err := e.App.Save(domainRecord); err != nil {
 			return err
