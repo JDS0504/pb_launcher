@@ -79,7 +79,7 @@ func NewDynamicReverseProxyDiscovery(
 		installTokenUsecase: installTokenUsecase,
 		launcherManager:     launcherManager,
 		apiDomain:           cfg.GetDomain(),
-		internalApiAddress:  pbConf.HttpAddr,
+		internalApiAddress:  strings.Replace(pbConf.HttpAddr, "0.0.0.0:", "127.0.0.1:", 1),
 		dataDir:             cfg.GetDataDir(),
 	}
 }
