@@ -1,6 +1,8 @@
 package hooks
 
 import (
+	"context"
+	"log/slog"
 	"pb_launcher/collections"
 	"pb_launcher/configs"
 	"pb_launcher/internal/certificates/tlscommon"
@@ -70,13 +72,16 @@ func AddServiceDomainsHooks(
 		BindFunc(validateService)
 
 	app.OnRecordAfterCreateSuccess(collections.ServicesDomains).BindFunc(func(e *core.RecordEvent) error {
-
 		if err := e.Next(); err != nil {
 			return err
 		}
 		domain := e.Record.GetString("domain")
 		if e.Record.GetString("use_https") == "yes" {
-			return planner.PostSSLDomainRequest(e.Context, domain, false)
+			go func() {
+				if err := planner.PostSSLDomainRequest(context.Background(), domain, false); err != nil {
+					slog.Error("failed to post SSL domain request on create", "domain", domain, "error", err)
+				}
+			}()
 		}
 		return nil
 	})
@@ -89,7 +94,11 @@ func AddServiceDomainsHooks(
 			domain := e.Record.GetString("domain")
 			domainDiscovery.InvalidateDomain(domain)
 			if e.Record.GetString("use_https") == "yes" {
-				return planner.PostSSLDomainRequest(e.Context, domain, false)
+				go func() {
+					if err := planner.PostSSLDomainRequest(context.Background(), domain, false); err != nil {
+						slog.Error("failed to post SSL domain request on update", "domain", domain, "error", err)
+					}
+				}()
 			}
 			return nil
 		})

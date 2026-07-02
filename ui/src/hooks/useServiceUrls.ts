@@ -14,16 +14,9 @@ export const getServiceUrls = (
 ): string[] => {
   if (!service) return [];
 
-  const customDomains = (service.domains ?? [])
+  const allDomains = (service.domains ?? [])
     .map(d => d.domain)
     .filter(Boolean);
-
-  const allDomains = [...customDomains];
-
-  if (allDomains.length === 0 && proxyInfo.base_domain) {
-    const autoDomain = `${service.name}.${proxyInfo.base_domain}`;
-    allDomains.push(autoDomain);
-  }
 
   return allDomains
     .map(domain => {
