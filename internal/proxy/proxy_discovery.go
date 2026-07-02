@@ -20,6 +20,7 @@ import (
 	launcherdomain "pb_launcher/internal/launcher/domain"
 	proxydomain "pb_launcher/internal/proxy/domain"
 	"pb_launcher/internal/proxy/domain/repositories"
+	"pb_launcher/utils/domainutil"
 	"pb_launcher/utils/networktools"
 	"strconv"
 	"strings"
@@ -93,7 +94,8 @@ func (rp *DynamicReverseProxyDiscovery) extractID(host string) (string, error) {
 	if host == rp.apiDomain {
 		return "", fmt.Errorf("invalid ID: host is the base domain")
 	}
-	suffix := "." + rp.apiDomain
+	rootDomain := domainutil.RootDomain(rp.apiDomain)
+	suffix := "." + rootDomain
 	if !strings.HasSuffix(host, suffix) {
 		return "", nil
 	}

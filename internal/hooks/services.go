@@ -12,7 +12,6 @@ import (
 	"pb_launcher/internal/proxy/domain"
 	"pb_launcher/utils/domainutil"
 	"slices"
-	"strings"
 
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
@@ -104,51 +103,7 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 				}
 			}
 
-			oldSlug := domainutil.SanitizeToSlug(oldName)
-			newSlug := domainutil.SanitizeToSlug(updatedName)
-			
-			if oldSlug != newSlug {
-				newFriendlyDomain, err := validateUniqueFriendlyDomain(e.App, updatedName, cnf, e.Record.Id)
-				if err != nil {
-					return err
-				}
 
-				rootDomain := domainutil.RootDomain(cnf.GetDomain())
-				domainRecords, err := e.App.FindAllRecords(
-					collections.ServicesDomains,
-					dbx.NewExp("service = {:service}", dbx.Params{"service": e.Record.Id}),
-				)
-				if err == nil {
-					var autogenRecords []*core.Record
-					for _, rec := range domainRecords {
-						dom := rec.GetString("domain")
-						if strings.HasSuffix(dom, "."+rootDomain) {
-							autogenRecords = append(autogenRecords, rec)
-						}
-					}
-
-					if len(autogenRecords) > 0 {
-						first := autogenRecords[0]
-						first.Set("domain", newFriendlyDomain)
-						if err := e.App.Save(first); err != nil {
-							return fmt.Errorf("failed to update domain name: %w", err)
-						}
-						for i := 1; i < len(autogenRecords); i++ {
-							_ = e.App.Delete(autogenRecords[i])
-						}
-					} else {
-						domainCollection, err := e.App.FindCachedCollectionByNameOrId(collections.ServicesDomains)
-						if err == nil {
-							domainRecord := core.NewRecord(domainCollection)
-							domainRecord.Set("domain", newFriendlyDomain)
-							domainRecord.Set("service", []string{e.Record.Id})
-							domainRecord.Set("use_https", "yes")
-							domainRecord.Set("cert_status", "pending")
-							_ = e.App.Save(domainRecord)
-						}
-					}
-				}
-			}
 		}
 
 		currentRecord.Set("name", updatedName)
@@ -165,25 +120,7 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 			return e.Next()
 		}
 
-		name := e.Record.GetString("name")
-		friendlyDomain, err := domainutil.GenerateFriendlyDomain(name, cnf.GetDomain())
-		if err != nil {
-			return fmt.Errorf("invalid service name: %w", err)
-		}
 
-		domainCollection, err := e.App.FindCachedCollectionByNameOrId(collections.ServicesDomains)
-		if err != nil {
-			return err
-		}
-		domainRecord := core.NewRecord(domainCollection)
-		domainRecord.Set("domain", friendlyDomain)
-		domainRecord.Set("service", []string{e.Record.Id})
-		domainRecord.Set("use_https", "yes")
-		domainRecord.Set("cert_status", "pending")
-
-		if err := e.App.Save(domainRecord); err != nil {
-			return err
-		}
 
 		comandCollection, err := e.App.FindCachedCollectionByNameOrId(collections.ServicesComands)
 		if err != nil {
