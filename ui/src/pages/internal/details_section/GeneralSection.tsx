@@ -150,8 +150,9 @@ export const GeneralSection: FC<Props> = ({ service_id, service }) => {
           <button
             id="btn-change-password"
             className="btn btn-xs btn-ghost gap-1"
+            disabled={!isStopped}
             onClick={openChangePassword}
-            title="Cambiar contraseña del superusuario"
+            title={isStopped ? "Cambiar contraseña del superusuario" : "Detén el servicio para cambiar la contraseña"}
           >
             <KeyRound className="w-3.5 h-3.5" />
             Password
@@ -169,7 +170,7 @@ export const GeneralSection: FC<Props> = ({ service_id, service }) => {
       {/* ── Aviso de edición ───────────────────────────────────────────── */}
       {isRunning && (
         <div className="text-xs text-base-content/50 italic">
-          Detén el servicio para editar el nombre o la versión.
+          Detén el servicio para editar parámetros, cambiar la contraseña o eliminar la instancia.
         </div>
       )}
 
@@ -190,7 +191,9 @@ export const GeneralSection: FC<Props> = ({ service_id, service }) => {
         <button
           id="btn-service-delete"
           className="btn btn-sm btn-error btn-outline gap-2"
+          disabled={!isStopped}
           onClick={() => handleDelete(service_id)}
+          title={isStopped ? "Eliminar servicio" : "Detén el servicio para eliminar"}
         >
           <Trash2 className="w-4 h-4" />
           Eliminar servicio
