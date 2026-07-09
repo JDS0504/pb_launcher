@@ -295,14 +295,26 @@ func (m *Manager) Restore(ctx context.Context, backupPath string, name string) (
 		return "", fmt.Errorf("unsupported backup format %q", manifest.Format)
 	}
 
-	release, err := m.serviceRepo.FindRelease(ctx, manifest.Service.ReleaseID)
+	releaseID := manifest.Service.ReleaseID
+	release, err := m.serviceRepo.FindRelease(ctx, releaseID)
 	if err != nil {
-		return "", fmt.Errorf("backup release not found: %w", err)
+		// El ID del release puede no existir si el snapshot proviene de otra instancia.
+		// Intentamos buscar por versión como fallback.
+		fallback, ferr := m.app.FindFirstRecordByFilter(
+			collections.Releases,
+			"version = {:version}",
+			map[string]any{"version": manifest.Service.Version},
+		)
+		if ferr != nil {
+			return "", fmt.Errorf("backup release not found (id=%s, version=%s): %w", releaseID, manifest.Service.Version, err)
+		}
+		releaseID = fallback.Id
+		release = &models.Release{ID: fallback.Id, Version: fallback.GetString("version")}
 	}
 	if release.Version != manifest.Service.Version {
-		return "", fmt.Errorf("backup release metadata does not match local release record")
+		return "", fmt.Errorf("backup release version mismatch: expected %q, got %q", manifest.Service.Version, release.Version)
 	}
-	if err := m.downloader.EnsureReleaseDownloaded(ctx, manifest.Service.ReleaseID); err != nil {
+	if err := m.downloader.EnsureReleaseDownloaded(ctx, releaseID); err != nil {
 		return "", fmt.Errorf("failed to download backup release: %w", err)
 	}
 
@@ -312,7 +324,7 @@ func (m *Manager) Restore(ctx context.Context, backupPath string, name string) (
 	}
 	record := core.NewRecord(collection)
 	record.Set("name", name)
-	record.Set("release", manifest.Service.ReleaseID)
+	record.Set("release", releaseID)
 	record.Set("restart_policy", manifest.Service.RestartPolicy)
 	record.Set("status", string(models.Restoring))
 	record.Set("boot_user_email", manifest.Service.BootUserEmail)

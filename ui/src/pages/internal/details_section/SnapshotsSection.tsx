@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Camera, Download, RotateCcw, Trash2, Play, Square, RefreshCw } from "lucide-react";
 import type { FC } from "react";
 import toast from "react-hot-toast";
-import { useNavigate } from "react-router-dom";
 import { ErrorFallback } from "../../../components/helpers/ErrorFallback";
 import { useModal } from "../../../components/modal/hook";
 import { useConfirmModal } from "../../../hooks/useConfirmModal";
@@ -23,7 +22,6 @@ const formatSize = (size: number) => {
 };
 
 export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
-  const navigate = useNavigate();
   const { openModal } = useModal();
   const confirm = useConfirmModal();
   const queryClient = useQueryClient();
@@ -57,7 +55,7 @@ export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
   const createMutation = useMutation({
     mutationFn: backupService.createSnapshot,
     onSuccess: () => {
-      toast.success("Snapshot created successfully");
+      toast.success("Snapshot creado exitosamente");
       setTimeout(() => snapshotsQuery.refetch());
     },
     onError: error => toast.error(getErrorMessage(error)),
@@ -65,9 +63,9 @@ export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
 
   const restoreMutation = useMutation({
     mutationFn: backupService.restoreSnapshot,
-    onSuccess: data => {
-      toast.success("Snapshot restored as a new instance");
-      navigate(`/services/${data.service_id}`);
+    onSuccess: () => {
+      toast.success("Snapshot restaurado como nueva instancia");
+      queryClient.invalidateQueries({ queryKey: ["services"] });
     },
     onError: error => toast.error(getErrorMessage(error)),
   });
@@ -82,7 +80,7 @@ export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
   const deleteMutation = useMutation({
     mutationFn: backupService.deleteSnapshot,
     onSuccess: () => {
-      toast.success("Snapshot deleted successfully");
+      toast.success("Snapshot eliminado exitosamente");
       setTimeout(() => snapshotsQuery.refetch());
     },
     onError: error => toast.error(getErrorMessage(error)),
@@ -97,49 +95,44 @@ export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
     openModal(
       <SnapshotNameForm
         defaultName={defaultSnapshotName}
-        description="Create a local point-in-time ZIP snapshot of this stopped instance."
-        label="Snapshot Name"
-        submitLabel="Create snapshot"
-        emptyMessage="Enter a snapshot name"
+        description="Crea una copia ZIP local de esta instancia detenida."
+        label="Nombre del snapshot"
+        submitLabel="Crear snapshot"
+        emptyMessage="Ingresa un nombre para el snapshot"
         onSubmit={async name => {
           await createMutation.mutateAsync({ serviceID: service_id, name });
         }}
       />,
-      { title: "Create Snapshot", width: 420 },
+      { title: "Crear Snapshot", width: 420 },
     );
   };
 
-  const restoreSnapshot = (snapshot: SnapshotInfo) => {
-    openModal(
-      <SnapshotNameForm
-        defaultName={`${snapshot.source_service} snapshot`}
-        description="Restore this snapshot as a new instance. The current instance is not modified."
-        label="Restored Instance Name"
-        submitLabel="Restore snapshot"
-        emptyMessage="Enter an instance name"
-        onSubmit={async name => {
-          await restoreMutation.mutateAsync({
-            serviceID: service_id,
-            snapshotID: snapshot.id,
-            name,
-          });
-        }}
-      />,
-      { title: "Restore Snapshot", width: 420 },
+  const restoreSnapshot = async (snapshot: SnapshotInfo) => {
+    const ok = await confirm(
+      "¿Restaurar este snapshot?",
+      `Se creará una nueva instancia a partir de "${snapshot.name}" (${snapshot.version}, ${new Date(snapshot.created_at).toLocaleString()}). La instancia actual no se modifica.`,
     );
+    if (!ok) return;
+
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const name = service ? `${service.name}-restored-${dateStr}` : `restored-${dateStr}`;
+
+    restoreMutation.mutate({ serviceID: service_id, snapshotID: snapshot.id, name });
   };
 
   const deleteSnapshot = async (snapshot: SnapshotInfo) => {
     const ok = await confirm(
-      "Delete snapshot",
-      `Are you sure you want to delete ${snapshot.name}?`,
+      "Eliminar snapshot",
+      `¿Seguro que quieres eliminar "${snapshot.name}"?`,
     );
     if (!ok) return;
     deleteMutation.mutate({ serviceID: service_id, snapshotID: snapshot.id });
   };
 
   if (service == null || snapshotsQuery.isLoading) {
-    return <div className="p-4">Loading...</div>;
+    return <div className="p-4">Cargando...</div>;
   }
   if (snapshotsQuery.isError) {
     return (
@@ -157,8 +150,8 @@ export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
     <div className="space-y-4 min-w-0">
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div className="text-sm text-base-content/70 max-w-prose">
-          Snapshots are local point-in-time ZIP copies. Creating a snapshot requires
-          the service to be stopped. Restoring creates a new instance.
+          Los snapshots son copias ZIP locales en un punto del tiempo. Crear un snapshot
+          requiere que el servicio esté detenido. Restaurar crea una nueva instancia.
         </div>
         <div className="flex flex-wrap gap-2 items-center justify-end shrink-0">
           {/* Botones de Control de Servicio */}
@@ -194,11 +187,7 @@ export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
           </button>
 
           <div
-            title={
-              canCreate
-                ? undefined
-                : "Detén el servicio antes de crear un snapshot"
-            }
+            title={canCreate ? undefined : "Detén el servicio antes de crear un snapshot"}
           >
             <button
               className="btn btn-sm btn-primary gap-2"
@@ -206,7 +195,7 @@ export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
               onClick={createSnapshot}
             >
               <Camera className="w-4 h-4" />
-              Create snapshot
+              Crear snapshot
             </button>
           </div>
         </div>
@@ -214,7 +203,7 @@ export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
 
       {!canCreate && (
         <div className="alert alert-info py-2 text-sm flex justify-between items-center gap-3">
-          <span>Stop this instance before creating a snapshot.</span>
+          <span>Detén la instancia antes de crear un snapshot.</span>
           <button
             type="button"
             onClick={handleStopService}
@@ -228,18 +217,18 @@ export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
 
       {snapshots.length === 0 ? (
         <div className="rounded-lg border border-dashed border-base-300 p-6 text-center">
-          <p className="text-sm text-base-content/60">No snapshots yet. Stop the service and create your first snapshot.</p>
+          <p className="text-sm text-base-content/60">Sin snapshots. Detén el servicio y crea tu primer snapshot.</p>
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg">
           <table className="table table-sm w-full">
             <thead>
               <tr>
-                <th>Name</th>
-                <th className="hidden sm:table-cell">Version</th>
-                <th className="hidden md:table-cell">Created</th>
-                <th className="hidden sm:table-cell">Size</th>
-                <th className="text-right">Actions</th>
+                <th>Nombre</th>
+                <th className="hidden sm:table-cell">Versión</th>
+                <th className="hidden md:table-cell">Creado</th>
+                <th className="hidden sm:table-cell">Tamaño</th>
+                <th className="text-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -273,17 +262,17 @@ export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
                           }
                         >
                           <Download className="w-4 h-4" />
-                          <span className="hidden sm:inline">Download</span>
+                          <span className="hidden sm:inline">Descargar</span>
                         </button>
                       </div>
-                      <div title="Restaurar como nueva instancia">
+                      <div title="Restaurar como nueva instancia en este punto">
                         <button
                           className="btn btn-xs btn-ghost gap-1"
                           disabled={restoreMutation.isPending}
                           onClick={() => restoreSnapshot(snapshot)}
                         >
                           <RotateCcw className="w-4 h-4" />
-                          <span className="hidden sm:inline">Restore</span>
+                          <span className="hidden sm:inline">Restaurar</span>
                         </button>
                       </div>
                       <div title="Eliminar snapshot">
@@ -293,7 +282,7 @@ export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
                           onClick={() => deleteSnapshot(snapshot)}
                         >
                           <Trash2 className="w-4 h-4" />
-                          <span className="hidden sm:inline">Delete</span>
+                          <span className="hidden sm:inline">Eliminar</span>
                         </button>
                       </div>
                     </div>
