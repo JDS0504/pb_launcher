@@ -16,7 +16,6 @@ import (
 	"pb_launcher/internal/launcher/domain/models"
 	"pb_launcher/internal/launcher/domain/repositories"
 	"pb_launcher/internal/operationlog"
-	"pb_launcher/utils/domainutil"
 	"strings"
 	"time"
 
@@ -765,6 +764,8 @@ func (m *Manager) Clone(ctx context.Context, sourceServiceID string, name string
 	record.Set("status", string(models.Restoring))
 	record.Set("boot_user_email", source.BootUserEmail)
 	record.Set("boot_user_password", source.BootUserPassword)
+	record.Set("cpu_quota", source.CpuQuota)
+	record.Set("memory_limit", source.MemoryLimit)
 
 	if err := m.app.Save(record); err != nil {
 		return "", err
@@ -878,51 +879,7 @@ func copyFile(source, destination string, mode os.FileMode) error {
 }
 
 func (m *Manager) createFriendlyDomain(serviceRecord *core.Record) error {
-	friendlyDomain, err := domainutil.GenerateFriendlyDomain(serviceRecord.GetString("name"), m.domainBase)
-	if err != nil {
-		return nil
-	}
-
-	domainCollection, err := m.app.FindCachedCollectionByNameOrId(collections.ServicesDomains)
-	if err != nil {
-		return err
-	}
-
-	existing, err := m.app.FindFirstRecordByFilter(
-		collections.ServicesDomains,
-		"domain = {:domain}",
-		map[string]any{"domain": friendlyDomain},
-	)
-	if err == nil && existing != nil {
-		serviceId := existing.GetString("service")
-		isOrphanOrDeleted := false
-		if serviceId != "" {
-			serviceRecord, err := m.app.FindRecordById(collections.Services, serviceId)
-			if err != nil || serviceRecord == nil {
-				isOrphanOrDeleted = true
-			} else {
-				serviceDeleted := serviceRecord.GetDateTime("deleted")
-				if !serviceDeleted.IsZero() {
-					isOrphanOrDeleted = true
-				}
-			}
-		} else {
-			isOrphanOrDeleted = true
-		}
-
-		if isOrphanOrDeleted {
-			_ = m.app.Delete(existing)
-		} else {
-			return fmt.Errorf("el nombre '%s' no está disponible porque el dominio '%s' ya está en uso", serviceRecord.GetString("name"), friendlyDomain)
-		}
-	}
-
-	domainRecord := core.NewRecord(domainCollection)
-	domainRecord.Set("domain", friendlyDomain)
-	domainRecord.Set("service", serviceRecord.Id)
-	domainRecord.Set("use_https", "yes")
-
-	return m.app.Save(domainRecord)
+	return CreateFriendlyDomain(m.app, serviceRecord, m.domainBase)
 }
 
 // logWarn es un helper para loguear advertencias sin afectar el flujo.

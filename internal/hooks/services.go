@@ -11,6 +11,7 @@ import (
 	launcherdomain "pb_launcher/internal/launcher/domain"
 	"pb_launcher/internal/proxy/domain"
 	"pb_launcher/utils/domainutil"
+	"pb_launcher/internal/backup"
 	"slices"
 	"strings"
 
@@ -191,23 +192,7 @@ func AddServiceHooks(app *pocketbase.PocketBase,
 		if e.Record.GetString("status") == "restoring" {
 			return e.Next()
 		}
-		name := e.Record.GetString("name")
-		friendlyDomain, err := domainutil.GenerateFriendlyDomain(name, cnf.GetDomain())
-		if err != nil {
-			return fmt.Errorf("invalid service name: %w", err)
-		}
-
-		domainCollection, err := e.App.FindCachedCollectionByNameOrId(collections.ServicesDomains)
-		if err != nil {
-			return err
-		}
-		domainRecord := core.NewRecord(domainCollection)
-		domainRecord.Set("domain", friendlyDomain)
-		domainRecord.Set("service", []string{e.Record.Id})
-		domainRecord.Set("use_https", "yes")
-		domainRecord.Set("cert_status", "pending")
-
-		if err := e.App.Save(domainRecord); err != nil {
+		if err := backup.CreateFriendlyDomain(e.App, e.Record, cnf.GetDomain()); err != nil {
 			return err
 		}
 
