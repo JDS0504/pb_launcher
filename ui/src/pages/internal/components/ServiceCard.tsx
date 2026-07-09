@@ -67,6 +67,20 @@ export const ServiceCard: FC<Props> = ({
               {statusLabel}
             </span>
 
+            {/* Clonar (Antes del control de arranque) */}
+            <button
+              id={`btn-clone-${service.id}`}
+              className={classNames("btn btn-xs", {
+                "btn-ghost text-base-content/30 cursor-not-allowed": !isStopped,
+                "btn-neutral": isStopped,
+              })}
+              onClick={isStopped ? onClone : undefined}
+              disabled={!isStopped}
+              title={!isStopped ? "Detén el servicio para clonarlo" : "Clonar instancia"}
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+
             {/* Start / Stop al lado del badge */}
             {isStopped && (
               <button
@@ -91,20 +105,6 @@ export const ServiceCard: FC<Props> = ({
             {isPending && (
               <span className="loading loading-spinner loading-xs text-warning" />
             )}
-
-            {/* Clonar */}
-            <button
-              id={`btn-clone-${service.id}`}
-              className={classNames("btn btn-xs", {
-                "btn-ghost text-base-content/30 cursor-not-allowed": !isStopped,
-                "btn-neutral": isStopped,
-              })}
-              onClick={isStopped ? onClone : undefined}
-              disabled={!isStopped}
-              title={!isStopped ? "Detén el servicio para clonarlo" : "Clonar instancia"}
-            >
-              <Copy className="w-3 h-3" />
-            </button>
           </div>
         </div>
 
