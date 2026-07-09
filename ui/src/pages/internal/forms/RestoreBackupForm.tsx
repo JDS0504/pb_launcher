@@ -18,7 +18,7 @@ export const RestoreBackupForm = ({ onRestore }: Props) => {
   const restoreMutation = useMutation({
     mutationFn: backupService.restoreBackup,
     onSuccess: () => {
-      toast.success("Backup restored successfully");
+      toast.success("Snapshot importado exitosamente");
       closeModal();
       onRestore?.();
     },
@@ -32,12 +32,12 @@ export const RestoreBackupForm = ({ onRestore }: Props) => {
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (file == null) {
-      toast.error("Select a backup file");
+      toast.error("Selecciona un archivo de snapshot (.zip)");
       return;
     }
     const trimmedName = name.trim();
     if (trimmedName === "") {
-      toast.error("Enter an instance name");
+      toast.error("Ingresa un nombre para la instancia");
       return;
     }
     restoreMutation.mutate({ file, name: trimmedName });
@@ -46,17 +46,23 @@ export const RestoreBackupForm = ({ onRestore }: Props) => {
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <div className="text-sm text-base-content/80">
-        Restore creates a new instance, downloads the matching PocketBase binary
-        if needed, and starts the restored service.
+        Crea una nueva instancia PocketBase importando un archivo ZIP de snapshot previamente exportado.
       </div>
       <div className="form-control w-full">
         <label className="label">
-          <span className="label-text mb-1">Instance Name</span>
+          <span className="label-text mb-1">Nombre de la nueva instancia</span>
         </label>
         <input
           className="input input-md input-bordered w-full focus:outline-none focus:ring-1 focus:ring-primary"
           value={name}
-          onChange={event => setName(event.target.value)}
+          onChange={event => {
+            const sanitized = event.target.value
+              .toLowerCase()
+              .replace(/[^a-z0-9-]/g, "-")
+              .replace(/-+/g, "-");
+            setName(sanitized);
+          }}
+          placeholder="ej. mi-app-migrada"
           autoComplete="off"
         />
       </div>
@@ -68,7 +74,7 @@ export const RestoreBackupForm = ({ onRestore }: Props) => {
       />
       <Button
         type="submit"
-        label="Import Backup"
+        label="Importar Snapshot"
         loading={restoreMutation.isPending}
         disabled={file == null || name.trim() === ""}
       />

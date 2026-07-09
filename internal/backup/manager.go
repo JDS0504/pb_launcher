@@ -616,6 +616,22 @@ func (m *Manager) Restore(ctx context.Context, backupPath string, name string) (
 		return "", fmt.Errorf("instance name is required")
 	}
 
+	// Validar que el nombre no esté duplicado en la base de datos
+	existing, err := m.app.FindFirstRecordByFilter(
+		collections.Services,
+		"name = {:name}",
+		dbx.Params{"name": name},
+	)
+	if err == nil && existing != nil {
+		return "", fmt.Errorf("ya existe una instancia con el nombre '%s'", name)
+	}
+
+	// Validar que la carpeta de datos física no exista en disco
+	checkDir := filepath.Join(m.dataDir, name)
+	if _, statErr := os.Stat(checkDir); statErr == nil {
+		return "", fmt.Errorf("ya existe un directorio de datos para '%s', elige un nombre diferente", name)
+	}
+
 	tempDir, err := os.MkdirTemp("", "pblauncher-restore-*")
 	if err != nil {
 		return "", err
@@ -704,6 +720,22 @@ func (m *Manager) Clone(ctx context.Context, sourceServiceID string, name string
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", fmt.Errorf("instance name is required")
+	}
+
+	// Validar que el nombre no esté duplicado en la base de datos
+	existing, err := m.app.FindFirstRecordByFilter(
+		collections.Services,
+		"name = {:name}",
+		dbx.Params{"name": name},
+	)
+	if err == nil && existing != nil {
+		return "", fmt.Errorf("ya existe una instancia con el nombre '%s'", name)
+	}
+
+	// Validar que la carpeta de datos física no exista en disco
+	checkDir := filepath.Join(m.dataDir, name)
+	if _, statErr := os.Stat(checkDir); statErr == nil {
+		return "", fmt.Errorf("ya existe un directorio de datos para '%s', elige un nombre diferente", name)
 	}
 
 	source, err := m.serviceRepo.FindService(ctx, sourceServiceID)

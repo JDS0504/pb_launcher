@@ -1,6 +1,6 @@
 import { type FC } from "react";
 import type { ServiceDto } from "../../../services/services";
-import { Eye, ExternalLink, Play, Square } from "lucide-react";
+import { Eye, ExternalLink, Play, Square, Copy } from "lucide-react";
 import classNames from "classnames";
 import type { ProxyConfigsResponse } from "../../../services/config";
 import { useServiceUrls } from "../../../hooks/useServiceUrls";
@@ -11,6 +11,7 @@ type Props = {
   onDetails: () => void;
   onStart: () => void;
   onStop: () => void;
+  onClone: () => void;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -29,6 +30,7 @@ export const ServiceCard: FC<Props> = ({
   onDetails,
   onStart,
   onStop,
+  onClone,
 }) => {
   const serviceUrls = useServiceUrls(service, proxyInfo);
   const adminUrl = serviceUrls.length > 0 ? serviceUrls[0] : null;
@@ -107,6 +109,17 @@ export const ServiceCard: FC<Props> = ({
           >
             <Eye className="w-3 h-3" />
             Details
+          </button>
+
+          <button
+            id={`btn-clone-${service.id}`}
+            className="btn btn-xs btn-ghost gap-1 flex-1"
+            onClick={onClone}
+            disabled={!isStopped}
+            title={!isStopped ? "Detén el servicio para clonarlo" : "Clonar instancia"}
+          >
+            <Copy className="w-3 h-3" />
+            Clone
           </button>
 
           {adminUrl && (

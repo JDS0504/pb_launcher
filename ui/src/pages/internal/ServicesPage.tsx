@@ -51,16 +51,16 @@ export const ServicesPage = () => {
       });
   }, [servicesQuery.data, query, statusFilter]);
 
-  const { handleStart, handleStop } = useServiceActions(() =>
+  const { handleStart, handleStop, handleClone } = useServiceActions(() =>
     setTimeout(() => servicesQuery.refetch()),
   );
 
-  const openRestoreBackupModal = () => {
+  const openImportSnapshotModal = () => {
     openModal(
       <RestoreBackupForm
         onRestore={() => setTimeout(() => servicesQuery.refetch())}
       />,
-      { title: "Import Backup", width: 420 },
+      { title: "Importar Snapshot", width: 420 },
     );
   };
 
@@ -108,10 +108,10 @@ export const ServicesPage = () => {
         <div className="flex flex-row gap-2 w-full md:w-auto shrink-0 md:justify-end">
           <button
             className="btn btn-sm btn-secondary gap-2 flex-1 md:flex-none"
-            onClick={openRestoreBackupModal}
+            onClick={openImportSnapshotModal}
           >
             <Upload className="w-4 h-4" />
-            Import backup
+            Importar snapshot
           </button>
           <button
             className="btn btn-sm btn-primary gap-2 flex-1 md:flex-none"
@@ -132,6 +132,7 @@ export const ServicesPage = () => {
             onDetails={() => navigate(`/services/${service.name}`)}
             onStart={() => handleStart(service.id)}
             onStop={() => handleStop(service.id)}
+            onClone={() => handleClone(service)}
           />
         ))}
       </div>
