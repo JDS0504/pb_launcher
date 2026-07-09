@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Camera, Download, RotateCcw, Trash2, Play, Square, RefreshCw } from "lucide-react";
+import { Camera, Download, RotateCcw, Trash2, Play, Square, RefreshCw, Check } from "lucide-react";
 import type { FC } from "react";
 import toast from "react-hot-toast";
 import { ErrorFallback } from "../../../components/helpers/ErrorFallback";
@@ -252,7 +252,14 @@ Si el estado actual no tiene snapshot, se creará un auto-backup "pre-restore" p
               {snapshots.map(snapshot => (
                 <tr key={snapshot.id}>
                   <td className="min-w-0">
-                    <div className="font-medium truncate max-w-[160px]">{snapshot.name}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium truncate max-w-[160px]">{snapshot.name}</span>
+                      {snapshot.id === service?.current_snapshot_id && (
+                        <span className="badge badge-success gap-0.5 badge-xs py-2 px-1.5 font-mono text-[10px]">
+                          <Check className="w-3 h-3" /> HEAD
+                        </span>
+                      )}
+                    </div>
                     {snapshot.comment && (
                       <div className="text-xs text-base-content/50 truncate max-w-[200px]" title={snapshot.comment}>
                         {snapshot.comment}

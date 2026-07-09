@@ -33,6 +33,9 @@ interface _Service {
   cpu_quota?: string;
   memory_limit?: string;
 
+  current_snapshot_id?: string;
+  current_snapshot_applied_at?: string;
+
   created: string;
 
   // expand
