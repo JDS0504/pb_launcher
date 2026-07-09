@@ -91,6 +91,20 @@ export const ServiceCard: FC<Props> = ({
             {isPending && (
               <span className="loading loading-spinner loading-xs text-warning" />
             )}
+
+            {/* Clonar */}
+            <button
+              id={`btn-clone-${service.id}`}
+              className={classNames("btn btn-xs", {
+                "btn-ghost text-base-content/30 cursor-not-allowed": !isStopped,
+                "btn-neutral": isStopped,
+              })}
+              onClick={isStopped ? onClone : undefined}
+              disabled={!isStopped}
+              title={!isStopped ? "Detén el servicio para clonarlo" : "Clonar instancia"}
+            >
+              <Copy className="w-3 h-3" />
+            </button>
           </div>
         </div>
 
@@ -109,17 +123,6 @@ export const ServiceCard: FC<Props> = ({
           >
             <Eye className="w-3 h-3" />
             Details
-          </button>
-
-          <button
-            id={`btn-clone-${service.id}`}
-            className="btn btn-xs btn-ghost gap-1 flex-1"
-            onClick={onClone}
-            disabled={!isStopped}
-            title={!isStopped ? "Detén el servicio para clonarlo" : "Clonar instancia"}
-          >
-            <Copy className="w-3 h-3" />
-            Clone
           </button>
 
           {adminUrl && (
