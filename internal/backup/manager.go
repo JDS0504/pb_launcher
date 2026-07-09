@@ -252,27 +252,30 @@ func (m *Manager) RestoreSnapshotInPlace(ctx context.Context, serviceID string, 
 		return nil, fmt.Errorf("snapshot does not belong to this service")
 	}
 
-	// Auto-backup: solo si el estado actual está modificado (sucio)
+	// Auto-backup: solo si el estado actual está modificado (sucio) y el snapshot destino NO es un pre-restore
 	isDirty := false
-	currentSnapshotID := m.getCurrentSnapshotID(serviceID)
-	if currentSnapshotID == "" {
-		isDirty = true
-	} else {
-		// Si tiene un snapshot asociado, comprobamos si la BD fue modificada después de crear el snapshot
-		currentSnapshot, err := m.app.FindRecordById(collections.ServiceSnapshots, currentSnapshotID)
+	if snapshotRecord.GetString("type") != "pre-restore" {
+		serviceRecord, err := m.app.FindRecordById(collections.Services, serviceID)
 		if err != nil {
-			isDirty = true // Si el snapshot no existe, asumimos sucio
+			isDirty = true
 		} else {
-			dbPath := filepath.Join(m.dataDir, service.Name, "pb_data", "data.db")
-			if fi, err := os.Stat(dbPath); err == nil {
-				dbModTime := fi.ModTime().UTC()
-				snapshotTime := currentSnapshot.GetDateTime("created").Time().UTC()
-				// Margen de tolerancia de 2 segundos
-				if dbModTime.After(snapshotTime.Add(2 * time.Second)) {
+			currentSnapshotID := serviceRecord.GetString("current_snapshot_id")
+			appliedTime := serviceRecord.GetDateTime("current_snapshot_applied_at").Time().UTC()
+
+			if currentSnapshotID == "" || appliedTime.IsZero() {
+				isDirty = true
+			} else {
+				dbPath := filepath.Join(m.dataDir, service.Name, "pb_data", "data.db")
+				if fi, err := os.Stat(dbPath); err == nil {
+					dbModTime := fi.ModTime().UTC()
+					// Si el archivo de base de datos se modificó al menos 2 segundos después
+					// de aplicar el último snapshot/restore, se considera sucio.
+					if dbModTime.After(appliedTime.Add(2 * time.Second)) {
+						isDirty = true
+					}
+				} else {
 					isDirty = true
 				}
-			} else {
-				isDirty = true
 			}
 		}
 	}
@@ -519,13 +522,18 @@ func (m *Manager) getCurrentSnapshotID(serviceID string) string {
 	return record.GetString("current_snapshot_id")
 }
 
-// setCurrentSnapshotID actualiza el current_snapshot_id del servicio.
+// setCurrentSnapshotID actualiza el current_snapshot_id del servicio y su timestamp de aplicación.
 func (m *Manager) setCurrentSnapshotID(serviceID, snapshotID string) error {
 	record, err := m.app.FindRecordById(collections.Services, serviceID)
 	if err != nil {
 		return err
 	}
 	record.Set("current_snapshot_id", snapshotID)
+	if snapshotID == "" {
+		record.Set("current_snapshot_applied_at", nil)
+	} else {
+		record.Set("current_snapshot_applied_at", time.Now().UTC())
+	}
 	return m.app.Save(record)
 }
 
