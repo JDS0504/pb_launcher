@@ -127,8 +127,10 @@ export const serviceService = {
     "release",
     "cpu_quota",
     "memory_limit",
-        "expand.release.id",
-        "expand.release.version",
+    "current_snapshot_id",
+    "current_snapshot_applied_at",
+    "expand.release.id",
+    "expand.release.version",
   ].join(","),
 
   fetchServiceByName: async (name: string): Promise<ServiceDto> => {
@@ -170,6 +172,8 @@ export const serviceService = {
       domains: domains,
       cpu_quota: service.cpu_quota,
       memory_limit: service.memory_limit,
+      current_snapshot_id: service.current_snapshot_id,
+      current_snapshot_applied_at: service.current_snapshot_applied_at,
     };
   },
 
@@ -213,6 +217,8 @@ export const serviceService = {
         ),
         cpu_quota: s.cpu_quota,
         memory_limit: s.memory_limit,
+        current_snapshot_id: s.current_snapshot_id,
+        current_snapshot_applied_at: s.current_snapshot_applied_at,
       }),
     );
   },
