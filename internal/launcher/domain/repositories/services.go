@@ -19,4 +19,5 @@ type ServiceRepository interface {
 	SetServiceInstallToken(ctx context.Context, serviceID string, _pb_install string) error
 	CleanServiceInstallToken(ctx context.Context, _pb_install string) error
 	UpdateSuperuser(ctx context.Context, serviceID, email, password string) error
+	ClearCurrentSnapshot(ctx context.Context, serviceID string) error
 }

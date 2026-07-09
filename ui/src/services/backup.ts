@@ -65,9 +65,10 @@ export const backupService = {
     return Array.isArray(json) ? (json as SnapshotInfo[]) : [];
   },
 
-  createSnapshot: async (data: { serviceID: string; name: string }) => {
+  createSnapshot: async (data: { serviceID: string; name: string; comment?: string }) => {
     const form = new FormData();
     form.append("name", data.name);
+    if (data.comment) form.append("comment", data.comment);
     const url = joinUrls(pb.baseURL, `/x-api/services/${data.serviceID}/snapshots`);
     const response = await fetch(url, {
       method: "POST",
@@ -85,13 +86,9 @@ export const backupService = {
     return json as SnapshotInfo;
   },
 
-  restoreSnapshot: async (data: {
-    serviceID: string;
-    snapshotID: string;
-    name: string;
-  }) => {
-    const form = new FormData();
-    form.append("name", data.name);
+  // Restaura in-place: reemplaza los datos del servicio actual con el snapshot.
+  // Crea un auto-backup previo si el estado actual no está snapshotado.
+  restoreSnapshot: async (data: { serviceID: string; snapshotID: string }) => {
     const url = joinUrls(
       pb.baseURL,
       `/x-api/services/${data.serviceID}/snapshots/${data.snapshotID}/restore`,
@@ -99,7 +96,6 @@ export const backupService = {
     const response = await fetch(url, {
       method: "POST",
       headers: { Authorization: pb.authStore.token },
-      body: form,
     });
     const json = await response.json().catch(() => null);
     if (!response.ok) {
@@ -109,7 +105,7 @@ export const backupService = {
         json,
       );
     }
-    return json as { service_id: string };
+    return json as { pre_restore_snapshot_id: string | null; pre_restore_snapshot_name: string | null };
   },
 
   downloadSnapshot: async (serviceID: string, snapshotID: string) => {
@@ -162,9 +158,11 @@ export const backupService = {
 export type SnapshotInfo = {
   id: string;
   name: string;
+  comment: string;
   service_id: string;
-  source_service: string;
+  type: "manual" | "pre-restore";
   version: string;
   created_at: string;
   size: number;
+  file: string;
 };

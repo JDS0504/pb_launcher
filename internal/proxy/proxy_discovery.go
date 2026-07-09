@@ -178,7 +178,7 @@ func gzDiskPath(dataDir, serviceName, urlPath string) (diskPath string, gzUrlPat
 	if len(urlPath) > 200 {
 		return "", "", "", false
 	}
-	if strings.HasPrefix(urlPath, "/api/") || strings.HasPrefix(urlPath, "/_/") {
+	if strings.HasPrefix(urlPath, "/api/") || strings.HasPrefix(urlPath, "/_") {
 		return "", "", "", false
 	}
 
@@ -187,8 +187,14 @@ func gzDiskPath(dataDir, serviceName, urlPath string) (diskPath string, gzUrlPat
 
 	fi, err := os.Stat(originalFile)
 	resolvedUrlPath := urlPath
-	// Si el archivo no existe o es un directorio, asumimos fallback a index.html (SPA)
+	// Si el archivo no existe o es un directorio, asumimos fallback a index.html (SPA).
 	if os.IsNotExist(err) || (err == nil && fi.IsDir()) {
+		// Si la URL tenía una extensión específica no-HTML (ej: /_next/data/index.json),
+		// es ruido de crawlers pidiendo archivos que no existen. No cachear nada.
+		urlExt := strings.ToLower(path.Ext(urlPath))
+		if urlExt != "" && urlExt != ".html" {
+			return "", "", "", false
+		}
 		originalFile = filepath.Join(dataDir, serviceName, "pb_public", "index.html")
 		if _, err := os.Stat(originalFile); err != nil {
 			return "", "", "", false

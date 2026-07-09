@@ -9,7 +9,7 @@ type Props = {
   label: string;
   submitLabel: string;
   emptyMessage: string;
-  onSubmit: (name: string) => Promise<void> | void;
+  onSubmit: (name: string, comment: string) => Promise<void> | void;
 };
 
 export const SnapshotNameForm = ({
@@ -22,6 +22,7 @@ export const SnapshotNameForm = ({
 }: Props) => {
   const { closeModal } = useModal();
   const [name, setName] = useState(defaultName);
+  const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -34,7 +35,7 @@ export const SnapshotNameForm = ({
 
     setIsSubmitting(true);
     try {
-      await onSubmit(trimmedName);
+      await onSubmit(trimmedName, comment.trim());
       closeModal();
     } catch {
       setIsSubmitting(false);
@@ -54,6 +55,18 @@ export const SnapshotNameForm = ({
           onChange={event => setName(event.target.value)}
           autoComplete="off"
           autoFocus
+        />
+      </div>
+      <div className="form-control w-full">
+        <label className="label">
+          <span className="label-text mb-1">Comentario <span className="text-base-content/40">(opcional)</span></span>
+        </label>
+        <textarea
+          className="textarea textarea-bordered w-full focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+          rows={2}
+          placeholder="¿Qué cambios incluye este snapshot?"
+          value={comment}
+          onChange={event => setComment(event.target.value)}
         />
       </div>
       <Button

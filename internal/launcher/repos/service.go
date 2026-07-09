@@ -249,3 +249,13 @@ func (s *ServiceRepository) UpdateSuperuser(ctx context.Context, serviceID, emai
 
 	return execErr
 }
+
+// ClearCurrentSnapshot implements repositories.ServiceRepository.
+// Limpia el current_snapshot_id del servicio, indicando que el estado en disco
+// ya no corresponde a ningún snapshot registrado (fue modificado).
+func (s *ServiceRepository) ClearCurrentSnapshot(ctx context.Context, serviceID string) error {
+	return s.updateRecord(serviceID, func(record *core.Record) {
+		record.Set("current_snapshot_id", "")
+	})
+}
+

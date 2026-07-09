@@ -21,6 +21,17 @@ const formatSize = (size: number) => {
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 };
 
+const SnapshotTypeBadge: FC<{ type: SnapshotInfo["type"] }> = ({ type }) => {
+  if (type === "pre-restore") {
+    return (
+      <span className="badge badge-warning badge-xs font-mono">pre-restore</span>
+    );
+  }
+  return (
+    <span className="badge badge-neutral badge-xs font-mono">manual</span>
+  );
+};
+
 export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
   const { openModal } = useModal();
   const confirm = useConfirmModal();
@@ -63,9 +74,16 @@ export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
 
   const restoreMutation = useMutation({
     mutationFn: backupService.restoreSnapshot,
-    onSuccess: () => {
-      toast.success("Snapshot restaurado como nueva instancia");
-      queryClient.invalidateQueries({ queryKey: ["services"] });
+    onSuccess: result => {
+      if (result.pre_restore_snapshot_name) {
+        toast.success(
+          `Restaurado. Auto-backup guardado como "${result.pre_restore_snapshot_name}"`,
+          { duration: 5000 },
+        );
+      } else {
+        toast.success("Snapshot restaurado en sitio");
+      }
+      snapshotsQuery.refetch();
     },
     onError: error => toast.error(getErrorMessage(error)),
   });
@@ -99,27 +117,24 @@ export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
         label="Nombre del snapshot"
         submitLabel="Crear snapshot"
         emptyMessage="Ingresa un nombre para el snapshot"
-        onSubmit={async name => {
-          await createMutation.mutateAsync({ serviceID: service_id, name });
+        onSubmit={async (name, comment) => {
+          await createMutation.mutateAsync({ serviceID: service_id, name, comment });
         }}
       />,
-      { title: "Crear Snapshot", width: 420 },
+      { title: "Crear Snapshot", width: 440 },
     );
   };
 
   const restoreSnapshot = async (snapshot: SnapshotInfo) => {
     const ok = await confirm(
       "¿Restaurar este snapshot?",
-      `Se creará una nueva instancia a partir de "${snapshot.name}" (${snapshot.version}, ${new Date(snapshot.created_at).toLocaleString()}). La instancia actual no se modifica.`,
+      `Los datos actuales de "${service?.name}" serán reemplazados por el snapshot "${snapshot.name}" (${snapshot.version}, ${new Date(snapshot.created_at).toLocaleString()}).
+
+Si el estado actual no tiene snapshot, se creará un auto-backup "pre-restore" previo para que puedas revertir.`,
     );
     if (!ok) return;
 
-    const d = new Date();
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-    const name = service ? `${service.name}-restored-${dateStr}` : `restored-${dateStr}`;
-
-    restoreMutation.mutate({ serviceID: service_id, snapshotID: snapshot.id, name });
+    restoreMutation.mutate({ serviceID: service_id, snapshotID: snapshot.id });
   };
 
   const deleteSnapshot = async (snapshot: SnapshotInfo) => {
@@ -151,7 +166,8 @@ export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div className="text-sm text-base-content/70 max-w-prose">
           Los snapshots son copias ZIP locales en un punto del tiempo. Crear un snapshot
-          requiere que el servicio esté detenido. Restaurar crea una nueva instancia.
+          requiere que el servicio esté detenido. Restaurar reemplaza los datos en sitio
+          (guardando auto-backup si el estado actual no está snapshotado).
         </div>
         <div className="flex flex-wrap gap-2 items-center justify-end shrink-0">
           {/* Botones de Control de Servicio */}
@@ -225,6 +241,7 @@ export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
             <thead>
               <tr>
                 <th>Nombre</th>
+                <th className="hidden lg:table-cell">Tipo</th>
                 <th className="hidden sm:table-cell">Versión</th>
                 <th className="hidden md:table-cell">Creado</th>
                 <th className="hidden sm:table-cell">Tamaño</th>
@@ -236,12 +253,20 @@ export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
                 <tr key={snapshot.id}>
                   <td className="min-w-0">
                     <div className="font-medium truncate max-w-[160px]">{snapshot.name}</div>
+                    {snapshot.comment && (
+                      <div className="text-xs text-base-content/50 truncate max-w-[200px]" title={snapshot.comment}>
+                        {snapshot.comment}
+                      </div>
+                    )}
                     <div className="text-xs text-base-content/60 sm:hidden">
                       {snapshot.version} · {formatSize(snapshot.size)}
                     </div>
                     <div className="text-xs text-base-content/40 md:hidden hidden sm:block">
                       {new Date(snapshot.created_at).toLocaleDateString()}
                     </div>
+                  </td>
+                  <td className="hidden lg:table-cell">
+                    <SnapshotTypeBadge type={snapshot.type} />
                   </td>
                   <td className="hidden sm:table-cell whitespace-nowrap">{snapshot.version}</td>
                   <td className="hidden md:table-cell whitespace-nowrap">
@@ -265,10 +290,10 @@ export const SnapshotsSection: FC<Props> = ({ service_id, service }) => {
                           <span className="hidden sm:inline">Descargar</span>
                         </button>
                       </div>
-                      <div title="Restaurar como nueva instancia en este punto">
+                      <div title="Restaurar in-place (los datos actuales serán reemplazados)">
                         <button
                           className="btn btn-xs btn-ghost gap-1"
-                          disabled={restoreMutation.isPending}
+                          disabled={restoreMutation.isPending || !canCreate}
                           onClick={() => restoreSnapshot(snapshot)}
                         >
                           <RotateCcw className="w-4 h-4" />

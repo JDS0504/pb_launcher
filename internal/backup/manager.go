@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"pb_launcher/collections"
@@ -16,12 +17,13 @@ import (
 	"pb_launcher/internal/launcher/domain/repositories"
 	"pb_launcher/internal/operationlog"
 	"pb_launcher/utils/domainutil"
-	"sort"
 	"strings"
 	"time"
 
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tools/filesystem"
 )
 
 const manifestFormat = "pblauncher-backup/v1"
@@ -43,20 +45,21 @@ type ManifestService struct {
 }
 
 type BackupFile struct {
-	Path     string
+	Reader   io.ReadCloser
 	Filename string
 }
 
+// SnapshotInfo representa un snapshot almacenado en la colección service_snapshots.
 type SnapshotInfo struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	ServiceID     string    `json:"service_id"`
-	SourceService string    `json:"source_service"`
-	Version       string    `json:"version"`
-	CreatedAt     time.Time `json:"created_at"`
-	Size          int64     `json:"size"`
-	Path          string    `json:"-"`
-	MetadataPath  string    `json:"-"`
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Comment   string    `json:"comment"`
+	ServiceID string    `json:"service_id"`
+	Type      string    `json:"type"` // "manual" | "pre-restore"
+	Version   string    `json:"version"`
+	CreatedAt time.Time `json:"created_at"`
+	Size      int64     `json:"size"`
+	File      string    `json:"file"` // Nombre del archivo asignado por PocketBase
 }
 
 type Manager struct {
@@ -94,52 +97,53 @@ func NewManager(
 	}
 }
 
-
 func (m *Manager) snapshotsDir(serviceID string) string {
 	return filepath.Join(m.dataDir, "_snapshots", serviceID)
 }
 
+// zipRelPath devuelve la ruta relativa al dataDir del ZIP para un snapshot.
+func (m *Manager) zipRelPath(serviceID, snapshotID string) string {
+	return filepath.Join("_snapshots", serviceID, snapshotID+".zip")
+}
+
+// zipFullPath devuelve la ruta absoluta del ZIP dado su rel path.
+func (m *Manager) zipFullPath(relPath string) string {
+	return filepath.Join(m.dataDir, relPath)
+}
+
+// ListSnapshots lista todos los snapshots del servicio desde la BD, ordenados por fecha desc.
 func (m *Manager) ListSnapshots(ctx context.Context, serviceID string) ([]SnapshotInfo, error) {
 	if _, err := m.serviceRepo.FindService(ctx, serviceID); err != nil {
 		return nil, err
 	}
-	dir := m.snapshotsDir(serviceID)
-	entries, err := os.ReadDir(dir)
+
+	records, err := m.app.FindAllRecords(
+		collections.ServiceSnapshots,
+		dbx.NewExp("service = {:id}", dbx.Params{"id": serviceID}),
+	)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return []SnapshotInfo{}, nil
-		}
 		return nil, err
 	}
 
-	snapshots := []SnapshotInfo{}
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
-		}
-		metadataPath := filepath.Join(dir, entry.Name())
-		data, err := os.ReadFile(metadataPath)
-		if err != nil {
-			return nil, err
-		}
-		var snapshot SnapshotInfo
-		if err := json.Unmarshal(data, &snapshot); err != nil {
-			return nil, err
-		}
-		snapshot.MetadataPath = metadataPath
-		snapshot.Path = filepath.Join(dir, snapshot.ID+".zip")
-		if info, err := os.Stat(snapshot.Path); err == nil {
-			snapshot.Size = info.Size()
-		}
-		snapshots = append(snapshots, snapshot)
+	snapshots := make([]SnapshotInfo, 0, len(records))
+	for _, r := range records {
+		snapshots = append(snapshots, m.recordToInfo(r))
 	}
-	sort.Slice(snapshots, func(i, j int) bool {
-		return snapshots[i].CreatedAt.After(snapshots[j].CreatedAt)
-	})
+
+	// Ordenar por fecha descendente (más reciente primero)
+	for i := 0; i < len(snapshots)-1; i++ {
+		for j := i + 1; j < len(snapshots); j++ {
+			if snapshots[j].CreatedAt.After(snapshots[i].CreatedAt) {
+				snapshots[i], snapshots[j] = snapshots[j], snapshots[i]
+			}
+		}
+	}
+
 	return snapshots, nil
 }
 
-func (m *Manager) CreateSnapshot(ctx context.Context, serviceID string, name string) (*SnapshotInfo, error) {
+// CreateSnapshot crea un ZIP de la instancia y registra el snapshot en BD.
+func (m *Manager) CreateSnapshot(ctx context.Context, serviceID string, name string, comment string) (*SnapshotInfo, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, fmt.Errorf("snapshot name is required")
@@ -157,19 +161,12 @@ func (m *Manager) CreateSnapshot(ctx context.Context, serviceID string, name str
 		return nil, fmt.Errorf("service data directory not found")
 	}
 
-	snapshotID := fmt.Sprintf("%d", time.Now().UnixNano())
-	snapshotDir := m.snapshotsDir(service.ID)
-	if err := os.MkdirAll(snapshotDir, 0755); err != nil {
-		return nil, err
-	}
-
 	manifest := Manifest{
 		Format:    manifestFormat,
 		CreatedAt: time.Now().UTC(),
 		Service: ManifestService{
 			Name:             service.Name,
 			ReleaseID:        service.ReleaseID,
-			
 			Version:          service.Version,
 			RestartPolicy:    string(service.RestartPolicy),
 			BootUserEmail:    service.BootUserEmail,
@@ -181,96 +178,406 @@ func (m *Manager) CreateSnapshot(ctx context.Context, serviceID string, name str
 		return nil, err
 	}
 
-	snapshotPath := filepath.Join(snapshotDir, snapshotID+".zip")
-	if err := m.zipper.CreateFromDir(serviceDir, snapshotPath, "data", map[string][]byte{"manifest.json": manifestBytes}); err != nil {
+	// Crear ZIP temporal
+	tempFile, err := os.CreateTemp("", "pblauncher-snapshot-*.zip")
+	if err != nil {
+		return nil, err
+	}
+	tempPath := tempFile.Name()
+	tempFile.Close()
+	defer os.Remove(tempPath)
+
+	if err := m.zipper.CreateFromDir(serviceDir, tempPath, "data", map[string][]byte{"manifest.json": manifestBytes}); err != nil {
 		m.logger.Error(ctx, service.ID, "snapshot_create", err.Error(), nil)
 		return nil, err
 	}
-	info, _ := os.Stat(snapshotPath)
-	snapshot := SnapshotInfo{
-		ID:            snapshotID,
-		Name:          name,
-		ServiceID:     service.ID,
-		SourceService: service.Name,
-		Version:       service.Version,
-		CreatedAt:     time.Now().UTC(),
-		Path:          snapshotPath,
-		MetadataPath:  filepath.Join(snapshotDir, snapshotID+".json"),
+
+	fileInfo, _ := os.Stat(tempPath)
+	var size int64
+	if fileInfo != nil {
+		size = fileInfo.Size()
 	}
-	if info != nil {
-		snapshot.Size = info.Size()
-	}
-	metadataBytes, err := json.MarshalIndent(snapshot, "", "  ")
+
+	fileObj, err := filesystem.NewFileFromPath(tempPath)
 	if err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(snapshot.MetadataPath, metadataBytes, 0644); err != nil {
-		return nil, err
-	}
-	m.logger.Success(ctx, service.ID, "snapshot_create", "snapshot created successfully", map[string]any{"snapshot_id": snapshot.ID, "name": snapshot.Name})
-	return &snapshot, nil
-}
+	fileObj.Name = fmt.Sprintf("snapshot-%s-%d.zip", serviceID, time.Now().Unix())
 
-func (m *Manager) RestoreSnapshot(ctx context.Context, serviceID string, snapshotID string, name string) (string, error) {
-	snapshot, err := m.findSnapshot(ctx, serviceID, snapshotID)
-	if err != nil {
-		return "", err
-	}
-	restoredID, err := m.Restore(ctx, snapshot.Path, name)
-	if err != nil {
-		return "", err
-	}
-	m.logger.Success(ctx, restoredID, "snapshot_restore", "snapshot restored successfully", map[string]any{"snapshot_id": snapshot.ID, "source_service_id": serviceID})
-	return restoredID, nil
-}
-
-func (m *Manager) DeleteSnapshot(ctx context.Context, serviceID string, snapshotID string) error {
-	snapshot, err := m.findSnapshot(ctx, serviceID, snapshotID)
-	if err != nil {
-		return err
-	}
-	if err := os.Remove(snapshot.Path); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	if err := os.Remove(snapshot.MetadataPath); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	m.logger.Success(ctx, serviceID, "snapshot_delete", "snapshot deleted successfully", map[string]any{"snapshot_id": snapshot.ID})
-	return nil
-}
-
-func (m *Manager) GetSnapshotFile(ctx context.Context, serviceID string, snapshotID string) (*BackupFile, error) {
-	snapshot, err := m.findSnapshot(ctx, serviceID, snapshotID)
+	collection, err := m.app.FindCachedCollectionByNameOrId(collections.ServiceSnapshots)
 	if err != nil {
 		return nil, err
 	}
+	record := core.NewRecord(collection)
+	record.Set("service", serviceID)
+	record.Set("name", name)
+	record.Set("comment", strings.TrimSpace(comment))
+	record.Set("type", "manual")
+	record.Set("version", service.Version)
+	record.Set("file", fileObj)
+	record.Set("size", size)
+
+	if err := m.app.Save(record); err != nil {
+		m.logger.Error(ctx, service.ID, "snapshot_create", err.Error(), nil)
+		return nil, err
+	}
+
+	// Marcar que el estado actual del servicio coincide con este snapshot
+	_ = m.setCurrentSnapshotID(service.ID, record.Id)
+
+	info := m.recordToInfo(record)
+	m.logger.Success(ctx, service.ID, "snapshot_create", "snapshot created successfully", map[string]any{"snapshot_id": record.Id, "name": name})
+	return &info, nil
+}
+
+// RestoreSnapshotInPlace restaura un snapshot en el sitio, reemplazando los datos
+// del servicio actual sin crear una nueva instancia.
+// Antes de restaurar, crea un auto-snapshot "pre-restore" solo si el estado actual
+// no tiene ya un snapshot asociado (evita duplicados innecesarios).
+// Retorna el SnapshotInfo del auto-backup creado (o nil si se omitió).
+func (m *Manager) RestoreSnapshotInPlace(ctx context.Context, serviceID string, snapshotID string) (*SnapshotInfo, error) {
 	service, err := m.serviceRepo.FindService(ctx, serviceID)
 	if err != nil {
 		return nil, err
 	}
+	if service.Status != models.Stopped {
+		return nil, fmt.Errorf("el servicio debe estar detenido para restaurar")
+	}
+
+	snapshotRecord, err := m.app.FindRecordById(collections.ServiceSnapshots, snapshotID)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot not found")
+	}
+	if snapshotRecord.GetString("service") != serviceID {
+		return nil, fmt.Errorf("snapshot does not belong to this service")
+	}
+
+	// Auto-backup: solo si el estado actual NO está ya snapshotado
+	var autoBackup *SnapshotInfo
+	if m.getCurrentSnapshotID(serviceID) == "" {
+		d := time.Now().UTC()
+		autoName := "pre-restore-" + d.Format("2006-01-02-15-04")
+
+		// Crear auto-backup marcado como "pre-restore"
+		if ab, err := m.createSnapshotWithType(ctx, service, autoName, "Estado previo a restauración", "pre-restore"); err != nil {
+			return nil, fmt.Errorf("no se pudo crear el auto-backup previo a la restauración: %w", err)
+		} else {
+			autoBackup = ab
+		}
+	}
+
+	// Descargar el archivo ZIP de PocketBase (S3 o Local)
+	tempZip, err := os.CreateTemp("", "pblauncher-restore-*.zip")
+	if err != nil {
+		return autoBackup, err
+	}
+	tempZipPath := tempZip.Name()
+	defer os.Remove(tempZipPath)
+
+	fs, err := m.app.NewFilesystem()
+	if err != nil {
+		tempZip.Close()
+		return autoBackup, err
+	}
+	defer fs.Close()
+
+	fileKey := snapshotRecord.BaseFilesPath() + "/" + snapshotRecord.GetString("file")
+	reader, err := fs.GetFile(fileKey)
+	if err != nil {
+		tempZip.Close()
+		return autoBackup, fmt.Errorf("no se pudo leer el archivo de snapshot desde el storage: %w", err)
+	}
+	defer reader.Close()
+
+	if _, err := io.Copy(tempZip, reader); err != nil {
+		tempZip.Close()
+		return autoBackup, fmt.Errorf("error escribiendo el zip temporal: %w", err)
+	}
+	tempZip.Close()
+
+	// Extraer el snapshot en un directorio temporal
+	tempDir, err := os.MkdirTemp("", "pblauncher-inplace-restore-*")
+	if err != nil {
+		return autoBackup, err
+	}
+	defer os.RemoveAll(tempDir)
+
+	if _, err := m.unzipper.Extract(tempZipPath, tempDir); err != nil {
+		return autoBackup, fmt.Errorf("error extrayendo snapshot: %w", err)
+	}
+
+	manifest, err := readManifest(filepath.Join(tempDir, "manifest.json"))
+	if err != nil {
+		return autoBackup, err
+	}
+	if manifest.Format != manifestFormat {
+		return autoBackup, fmt.Errorf("formato de backup no soportado: %q", manifest.Format)
+	}
+
+	// Reemplazar directorio del servicio
+	serviceDir := filepath.Join(m.dataDir, service.Name)
+	if err := os.RemoveAll(serviceDir); err != nil {
+		return autoBackup, fmt.Errorf("no se pudo limpiar el directorio del servicio: %w", err)
+	}
+	if err := copyDir(filepath.Join(tempDir, "data"), serviceDir); err != nil {
+		return autoBackup, fmt.Errorf("error restaurando datos (auto-backup disponible): %w", err)
+	}
+
+	// Marcar que el estado actual coincide con el snapshot restaurado
+	_ = m.setCurrentSnapshotID(serviceID, snapshotID)
+
+	m.logger.Success(ctx, serviceID, "snapshot_restore_inplace", "snapshot restaurado en sitio", map[string]any{
+		"snapshot_id": snapshotID,
+		"auto_backup": autoBackup != nil,
+	})
+	return autoBackup, nil
+}
+
+// RestoreSnapshot restaura un ZIP externo creando una nueva instancia (usado por upload de backup externo).
+func (m *Manager) RestoreSnapshot(ctx context.Context, serviceID string, snapshotID string, name string) (string, error) {
+	snapshotRecord, err := m.app.FindRecordById(collections.ServiceSnapshots, snapshotID)
+	if err != nil {
+		return "", fmt.Errorf("snapshot not found")
+	}
+
+	// Descargar el archivo ZIP de PocketBase (S3 o Local)
+	tempZip, err := os.CreateTemp("", "pblauncher-restore-*.zip")
+	if err != nil {
+		return "", err
+	}
+	tempZipPath := tempZip.Name()
+	defer os.Remove(tempZipPath)
+
+	fs, err := m.app.NewFilesystem()
+	if err != nil {
+		tempZip.Close()
+		return "", err
+	}
+	defer fs.Close()
+
+	fileKey := snapshotRecord.BaseFilesPath() + "/" + snapshotRecord.GetString("file")
+	reader, err := fs.GetFile(fileKey)
+	if err != nil {
+		tempZip.Close()
+		return "", fmt.Errorf("no se pudo leer el archivo de snapshot desde el storage: %w", err)
+	}
+	defer reader.Close()
+
+	if _, err := io.Copy(tempZip, reader); err != nil {
+		tempZip.Close()
+		return "", err
+	}
+	tempZip.Close()
+
+	restoredID, err := m.Restore(ctx, tempZipPath, name)
+	if err != nil {
+		return "", err
+	}
+	m.logger.Success(ctx, restoredID, "snapshot_restore", "snapshot restored as new instance", map[string]any{"snapshot_id": snapshotID, "source_service_id": serviceID})
+	return restoredID, nil
+}
+
+// DeleteSnapshot elimina un snapshot de la BD y automáticamente PocketBase borra el archivo de S3/Local.
+func (m *Manager) DeleteSnapshot(ctx context.Context, serviceID string, snapshotID string) error {
+	record, err := m.app.FindRecordById(collections.ServiceSnapshots, snapshotID)
+	if err != nil {
+		return fmt.Errorf("snapshot not found")
+	}
+	if record.GetString("service") != serviceID {
+		return fmt.Errorf("snapshot does not belong to this service")
+	}
+
+	// Al eliminar el registro, PocketBase elimina automáticamente los archivos asociados de S3 o Local.
+	if err := m.app.Delete(record); err != nil {
+		return err
+	}
+
+	// Si este era el snapshot actual del servicio, limpiar la referencia
+	if m.getCurrentSnapshotID(serviceID) == snapshotID {
+		_ = m.setCurrentSnapshotID(serviceID, "")
+	}
+
+	m.logger.Success(ctx, serviceID, "snapshot_delete", "snapshot deleted", map[string]any{"snapshot_id": snapshotID})
+	return nil
+}
+
+type wrappedCloser struct {
+	reader io.Closer
+	fs     io.Closer
+}
+
+func (w wrappedCloser) Close() error {
+	_ = w.reader.Close()
+	return w.fs.Close()
+}
+
+// GetSnapshotFile retorna la info del archivo ZIP para descarga.
+func (m *Manager) GetSnapshotFile(ctx context.Context, serviceID string, snapshotID string) (*BackupFile, error) {
+	record, err := m.app.FindRecordById(collections.ServiceSnapshots, snapshotID)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot not found")
+	}
+	if record.GetString("service") != serviceID {
+		return nil, fmt.Errorf("snapshot does not belong to this service")
+	}
+
+	service, err := m.serviceRepo.FindService(ctx, serviceID)
+	if err != nil {
+		return nil, err
+	}
+
+	fs, err := m.app.NewFilesystem()
+	if err != nil {
+		return nil, err
+	}
+
+	fileKey := record.BaseFilesPath() + "/" + record.GetString("file")
+	reader, err := fs.GetFile(fileKey)
+	if err != nil {
+		fs.Close()
+		return nil, fmt.Errorf("no se pudo leer el archivo desde el storage: %w", err)
+	}
+
+	wrappedReader := &struct {
+		io.Reader
+		io.Closer
+	}{
+		Reader: reader,
+		Closer: wrappedCloser{reader, fs},
+	}
+
 	return &BackupFile{
-		Path:     snapshot.Path,
-		Filename: fmt.Sprintf("%s-%s-snapshot.zip", sanitizeFilename(service.Name), snapshot.ID),
+		Reader:   wrappedReader,
+		Filename: fmt.Sprintf("%s-%s-snapshot.zip", sanitizeFilename(service.Name), snapshotID),
 	}, nil
 }
 
-func (m *Manager) findSnapshot(ctx context.Context, serviceID string, snapshotID string) (*SnapshotInfo, error) {
+// findSnapshotRecord busca un snapshot en BD validando que pertenezca al servicio indicado.
+func (m *Manager) findSnapshotRecord(ctx context.Context, serviceID string, snapshotID string) (*SnapshotInfo, error) {
 	snapshotID = strings.TrimSpace(snapshotID)
 	if snapshotID == "" || strings.Contains(snapshotID, "/") || strings.Contains(snapshotID, "..") {
 		return nil, fmt.Errorf("invalid snapshot id")
 	}
-	snapshots, err := m.ListSnapshots(ctx, serviceID)
+
+	record, err := m.app.FindRecordById(collections.ServiceSnapshots, snapshotID)
+	if err != nil {
+		return nil, fmt.Errorf("snapshot not found")
+	}
+	if record.GetString("service") != serviceID {
+		return nil, fmt.Errorf("snapshot does not belong to this service")
+	}
+
+	info := m.recordToInfo(record)
+	return &info, nil
+}
+
+// recordToInfo convierte un registro PB a SnapshotInfo.
+func (m *Manager) recordToInfo(r *core.Record) SnapshotInfo {
+	return SnapshotInfo{
+		ID:        r.Id,
+		Name:      r.GetString("name"),
+		Comment:   r.GetString("comment"),
+		ServiceID: r.GetString("service"),
+		Type:      r.GetString("type"),
+		Version:   r.GetString("version"),
+		CreatedAt: r.GetDateTime("created").Time(),
+		Size:      int64(r.GetInt("size")),
+		File:      r.GetString("file"),
+	}
+}
+
+// getCurrentSnapshotID obtiene el current_snapshot_id del servicio desde la BD.
+func (m *Manager) getCurrentSnapshotID(serviceID string) string {
+	record, err := m.app.FindRecordById(collections.Services, serviceID)
+	if err != nil {
+		return ""
+	}
+	return record.GetString("current_snapshot_id")
+}
+
+// setCurrentSnapshotID actualiza el current_snapshot_id del servicio.
+func (m *Manager) setCurrentSnapshotID(serviceID, snapshotID string) error {
+	record, err := m.app.FindRecordById(collections.Services, serviceID)
+	if err != nil {
+		return err
+	}
+	record.Set("current_snapshot_id", snapshotID)
+	return m.app.Save(record)
+}
+
+// createSnapshotWithType es un helper interno para crear snapshots con tipo específico.
+func (m *Manager) createSnapshotWithType(ctx context.Context, service *models.Service, name, comment, snapshotType string) (*SnapshotInfo, error) {
+	serviceDir := filepath.Join(m.dataDir, service.Name)
+	if info, err := os.Stat(serviceDir); err != nil || !info.IsDir() {
+		return nil, fmt.Errorf("service data directory not found")
+	}
+
+	manifest := Manifest{
+		Format:    manifestFormat,
+		CreatedAt: time.Now().UTC(),
+		Service: ManifestService{
+			Name:             service.Name,
+			ReleaseID:        service.ReleaseID,
+			Version:          service.Version,
+			RestartPolicy:    string(service.RestartPolicy),
+			BootUserEmail:    service.BootUserEmail,
+			BootUserPassword: service.BootUserPassword,
+		},
+	}
+	manifestBytes, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		return nil, err
 	}
-	for _, snapshot := range snapshots {
-		if snapshot.ID == snapshotID {
-			return &snapshot, nil
-		}
+
+	// Crear ZIP temporal
+	tempFile, err := os.CreateTemp("", "pblauncher-snapshot-*.zip")
+	if err != nil {
+		return nil, err
 	}
-	return nil, fmt.Errorf("snapshot not found")
+	tempPath := tempFile.Name()
+	tempFile.Close()
+	defer os.Remove(tempPath)
+
+	if err := m.zipper.CreateFromDir(serviceDir, tempPath, "data", map[string][]byte{"manifest.json": manifestBytes}); err != nil {
+		return nil, err
+	}
+
+	fileInfo, _ := os.Stat(tempPath)
+	var size int64
+	if fileInfo != nil {
+		size = fileInfo.Size()
+	}
+
+	fileObj, err := filesystem.NewFileFromPath(tempPath)
+	if err != nil {
+		return nil, err
+	}
+	fileObj.Name = fmt.Sprintf("snapshot-%s-%d.zip", service.ID, time.Now().Unix())
+
+	collection, err := m.app.FindCachedCollectionByNameOrId(collections.ServiceSnapshots)
+	if err != nil {
+		return nil, err
+	}
+	record := core.NewRecord(collection)
+	record.Set("service", service.ID)
+	record.Set("name", name)
+	record.Set("comment", comment)
+	record.Set("type", snapshotType)
+	record.Set("version", service.Version)
+	record.Set("file", fileObj)
+	record.Set("size", size)
+
+	if err := m.app.Save(record); err != nil {
+		return nil, err
+	}
+
+	_ = m.setCurrentSnapshotID(service.ID, record.Id)
+	info := m.recordToInfo(record)
+	return &info, nil
 }
 
+
+// Restore restaura un ZIP externo creando una nueva instancia PocketBase.
 func (m *Manager) Restore(ctx context.Context, backupPath string, name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -298,8 +605,6 @@ func (m *Manager) Restore(ctx context.Context, backupPath string, name string) (
 	releaseID := manifest.Service.ReleaseID
 	release, err := m.serviceRepo.FindRelease(ctx, releaseID)
 	if err != nil {
-		// El ID del release puede no existir si el snapshot proviene de otra instancia.
-		// Intentamos buscar por versión como fallback.
 		fallback, ferr := m.app.FindFirstRecordByFilter(
 			collections.Releases,
 			"version = {:version}",
@@ -362,6 +667,7 @@ func (m *Manager) Restore(ctx context.Context, backupPath string, name string) (
 	return record.Id, nil
 }
 
+// Clone clona una instancia en una nueva.
 func (m *Manager) Clone(ctx context.Context, sourceServiceID string, name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -555,4 +861,7 @@ func (m *Manager) createFriendlyDomain(serviceRecord *core.Record) error {
 	return m.app.Save(domainRecord)
 }
 
-
+// logWarn es un helper para loguear advertencias sin afectar el flujo.
+func logWarn(msg string, args ...any) {
+	slog.Warn(msg, args...)
+}

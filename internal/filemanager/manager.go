@@ -229,6 +229,8 @@ func (m *Manager) SaveFileBytes(ctx context.Context, serviceID string, targetPat
 		}
 	}
 
+	// Invalidar snapshot actual: el disco fue modificado, ya no coincide con ningún snapshot
+	_ = m.serviceRepo.ClearCurrentSnapshot(ctx, service.ID)
 	m.logger.Success(ctx, service.ID, "file_save", "Archivo guardado exitosamente", map[string]any{"path": filepath.ToSlash(relPath)})
 	return nil
 }
@@ -278,6 +280,8 @@ func (m *Manager) SaveFileStream(ctx context.Context, serviceID string, targetPa
 		}
 	}
 
+	// Invalidar snapshot actual: el disco fue modificado, ya no coincide con ningún snapshot
+	_ = m.serviceRepo.ClearCurrentSnapshot(ctx, service.ID)
 	m.logger.Success(ctx, service.ID, "file_save", "Archivo guardado exitosamente", map[string]any{"path": filepath.ToSlash(relPath)})
 	return nil
 }
@@ -310,6 +314,8 @@ func (m *Manager) DeleteFile(ctx context.Context, serviceID string, targetPath s
 	// Eliminar el .gz generado automáticamente si existe.
 	_ = os.Remove(fullPath + ".gz")
 	cleanEmptyParents(m.serviceDir(service), filepath.Dir(fullPath))
+	// Invalidar snapshot actual: el disco fue modificado, ya no coincide con ningún snapshot
+	_ = m.serviceRepo.ClearCurrentSnapshot(ctx, service.ID)
 	m.logger.Success(ctx, service.ID, "file_delete", "Archivo eliminado exitosamente", map[string]any{"path": filepath.ToSlash(relPath)})
 	return nil
 }
