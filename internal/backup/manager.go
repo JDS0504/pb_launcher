@@ -252,9 +252,33 @@ func (m *Manager) RestoreSnapshotInPlace(ctx context.Context, serviceID string, 
 		return nil, fmt.Errorf("snapshot does not belong to this service")
 	}
 
-	// Auto-backup: solo si el estado actual NO está ya snapshotado
+	// Auto-backup: solo si el estado actual está modificado (sucio)
+	isDirty := false
+	currentSnapshotID := m.getCurrentSnapshotID(serviceID)
+	if currentSnapshotID == "" {
+		isDirty = true
+	} else {
+		// Si tiene un snapshot asociado, comprobamos si la BD fue modificada después de crear el snapshot
+		currentSnapshot, err := m.app.FindRecordById(collections.ServiceSnapshots, currentSnapshotID)
+		if err != nil {
+			isDirty = true // Si el snapshot no existe, asumimos sucio
+		} else {
+			dbPath := filepath.Join(m.dataDir, service.Name, "pb_data", "data.db")
+			if fi, err := os.Stat(dbPath); err == nil {
+				dbModTime := fi.ModTime().UTC()
+				snapshotTime := currentSnapshot.GetDateTime("created").Time().UTC()
+				// Margen de tolerancia de 2 segundos
+				if dbModTime.After(snapshotTime.Add(2 * time.Second)) {
+					isDirty = true
+				}
+			} else {
+				isDirty = true
+			}
+		}
+	}
+
 	var autoBackup *SnapshotInfo
-	if m.getCurrentSnapshotID(serviceID) == "" {
+	if isDirty {
 		d := time.Now().UTC()
 		autoName := "pre-restore-" + d.Format("2006-01-02-15-04")
 
