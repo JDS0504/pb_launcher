@@ -1,4 +1,4 @@
-import { type FC } from "react";
+import { type FC, useMemo } from "react";
 import type { ServiceDto } from "../../../services/services";
 import { Eye, ExternalLink, Play, Square, Copy } from "lucide-react";
 import classNames from "classnames";
@@ -35,10 +35,18 @@ export const ServiceCard: FC<Props> = ({
   const serviceUrls = useServiceUrls(service, proxyInfo);
   const adminUrl = serviceUrls.length > 0 ? serviceUrls[0] : null;
 
-  const isRunning = service.status === "running" || service.status === "sleeping";
-  const isPending = service.status === "pending";
+  const hasPendingCert = useMemo(() => {
+    return (service.domains ?? []).some(
+      d => d.use_https === "yes" && (d.cert_status === "pending" || d.x_cert_request_state === "pending")
+    );
+  }, [service.domains]);
+
+  const isRunning = (service.status === "running" || service.status === "sleeping") && !hasPendingCert;
+  const isPending = service.status === "pending" || ((service.status === "running" || service.status === "sleeping") && hasPendingCert);
   const isStopped = service.status === "stopped" || service.status === "idle";
-  const statusLabel = STATUS_LABELS[service.status] ?? service.status;
+  const statusLabel = hasPendingCert && (service.status === "running" || service.status === "sleeping")
+    ? "Pending SSL"
+    : (STATUS_LABELS[service.status] ?? service.status);
 
   return (
     <div className="card bg-base-100 shadow border border-base-300">
@@ -57,11 +65,11 @@ export const ServiceCard: FC<Props> = ({
             {/* Badge de estado */}
             <span
               className={classNames("badge badge-sm", {
-                "badge-success": service.status === "running",
-                "badge-info":    service.status === "sleeping",
-                "badge-warning": service.status === "pending" || service.status === "idle",
+                "badge-success": service.status === "running" && !hasPendingCert,
+                "badge-info":    service.status === "sleeping" && !hasPendingCert,
+                "badge-warning": service.status === "pending" || service.status === "idle" || hasPendingCert,
                 "badge-error":   service.status === "failure",
-                "badge-neutral": !["running", "pending", "idle", "failure", "sleeping"].includes(service.status),
+                "badge-neutral": !["running", "pending", "idle", "failure", "sleeping"].includes(service.status) && !hasPendingCert,
               })}
             >
               {statusLabel}
@@ -125,7 +133,7 @@ export const ServiceCard: FC<Props> = ({
             Details
           </button>
 
-          {adminUrl && (
+          {adminUrl && isRunning && (
             <a
               id={`btn-open-admin-${service.id}`}
               href={adminUrl}

@@ -212,9 +212,12 @@ export const serviceService = {
         repository_id: "pocketbase",
         release_id: s.expand.release.id,
         release_version: s.expand.release.version,
-        domains: domains.filter(
-          d => d.service === s.id,
-        ),
+        domains: domains.filter(d => {
+          if (Array.isArray(d.service)) {
+            return d.service.includes(s.id);
+          }
+          return (d.service as unknown) === s.id;
+        }),
         cpu_quota: s.cpu_quota,
         memory_limit: s.memory_limit,
         current_snapshot_id: s.current_snapshot_id,
